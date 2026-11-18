@@ -4,7 +4,7 @@ Global reference data: no tenant, loaded by the `migrate` step, never through a 
 """
 
 import csv
-from dataclasses import dataclass
+from dataclasses import astuple, dataclass
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -82,22 +82,6 @@ def load_calendar(conn: psycopg.Connection, path: Path) -> int:
               is_holiday = EXCLUDED.is_holiday, is_monsoon = EXCLUDED.is_monsoon,
               is_operating = EXCLUDED.is_operating
             """,
-            [
-                (
-                    REGION_CODE,
-                    d.date,
-                    d.dow,
-                    d.is_weekend,
-                    d.iso_year,
-                    d.iso_week,
-                    d.is_payday,
-                    d.festival,
-                    d.festival_ramp,
-                    d.is_holiday,
-                    d.is_monsoon,
-                    d.is_operating,
-                )
-                for d in days
-            ],
+            [(REGION_CODE, *astuple(d)) for d in days],
         )
     return len(days)

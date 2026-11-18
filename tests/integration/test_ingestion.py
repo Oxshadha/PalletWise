@@ -24,11 +24,9 @@ CLOCK_START = datetime(2026, 4, 1, 6, 0, tzinfo=ZoneInfo("Asia/Colombo"))
 HISTORY_DAYS = 14
 
 
-def load_site(connect_as: Connect, tenant: UUID, seed: int = 42) -> tuple[UUID, UUID, UUID]:
-    site, connector, run = uuid4(), uuid4(), uuid4()
-    admin = connect_as("pw_sim_admin")
+def bootstrap_run(connect_as: Connect, tenant: UUID, site: UUID, connector: UUID, run: UUID) -> None:
     site_repo.bootstrap_site(
-        admin,
+        connect_as("pw_sim_admin"),
         site_repo.SiteBootstrap(
             tenant_id=tenant,
             tenant_code=f"t-{tenant.hex[:8]}",
@@ -43,25 +41,30 @@ def load_site(connect_as: Connect, tenant: UUID, seed: int = 42) -> tuple[UUID, 
             depth_m=50.0,
             connector_id=connector,
             run_id=run,
-            seed=seed,
+            seed=42,
             dataset_version="test",
             history_start=CLOCK_START - timedelta(days=HISTORY_DAYS),
             clock_start=CLOCK_START,
             started_by="test",
         ),
     )
-    params = RunParams(str(run), seed, "test", CLOCK_START, history_days=HISTORY_DAYS)
+
+
+def ingest_run(connect_as: Connect, tenant: UUID, site: UUID, connector: UUID, run: UUID) -> None:
+    """Generate the run's outbox and ingest it through the real connector path."""
+    params = RunParams(str(run), 42, "test", CLOCK_START, history_days=HISTORY_DAYS)
     sim = connect_as("sim_owner")
     store.ensure_schema(sim)
     store.write_run(sim, params, generate(params))
-
     source, dest = connect_as("sim_outbox_reader"), connect_as("pw_ingest")
-    while True:
-        cursor = ingest_repo.read_cursor(dest, tenant, connector)
-        batch = sim_source.pull(source, run, cursor, 5000)
-        if not batch:
-            break
+    while batch := sim_source.pull(source, run, ingest_repo.read_cursor(dest, tenant, connector, run), 5000):
         ingest_repo.apply_batch(dest, tenant, site, connector, batch)
+
+
+def load_site(connect_as: Connect, tenant: UUID) -> tuple[UUID, UUID, UUID]:
+    site, connector, run = uuid4(), uuid4(), uuid4()
+    bootstrap_run(connect_as, tenant, site, connector, run)
+    ingest_run(connect_as, tenant, site, connector, run)
     return site, connector, run
 
 
@@ -198,47 +201,19 @@ def test_records_of_an_ended_run_are_skipped(connect_as: Connect, loaded: tuple[
 
 
 def test_new_run_after_a_failed_run_loads_from_the_start(connect_as: Connect) -> None:
-    """Review finding 1: the cursor restarts with each run, so a retry run is not skipped."""
+    """Review finding 1: the cursor belongs to its run, so a retry run is not skipped."""
     tenant = uuid4()
     site, connector, first_run = load_site(connect_as, tenant)
     admin = connect_as("pw_sim_admin")
     site_repo.fail_load(admin, tenant, site, first_run, "simulated failure")
 
     second_run = uuid4()
-    site_repo.bootstrap_site(
-        admin,
-        site_repo.SiteBootstrap(
-            tenant_id=tenant,
-            tenant_code=f"t-{tenant.hex[:8]}",
-            tenant_name="Test",
-            site_id=site,
-            site_code="PLG",
-            site_name="Test site",
-            region_code="LK",
-            time_zone="Asia/Colombo",
-            width_m=80.0,
-            depth_m=50.0,
-            connector_id=connector,
-            run_id=second_run,
-            seed=42,
-            dataset_version="test",
-            history_start=CLOCK_START - timedelta(days=HISTORY_DAYS),
-            clock_start=CLOCK_START,
-            started_by="test",
-        ),
-    )
+    bootstrap_run(connect_as, tenant, site, connector, second_run)
     status = status_repo.site_status(admin, tenant, site)
     assert status is not None and status.data_status == "LOADING"
-    dest = connect_as("pw_ingest")
-    assert ingest_repo.read_cursor(dest, tenant, connector) == 0
+    assert ingest_repo.read_cursor(connect_as("pw_ingest"), tenant, connector, second_run) == 0
 
-    params = RunParams(str(second_run), 42, "test", CLOCK_START, history_days=HISTORY_DAYS)
-    store.write_run(connect_as("sim_owner"), params, generate(params))
-    source = connect_as("sim_outbox_reader")
-    while batch := sim_source.pull(
-        source, second_run, ingest_repo.read_cursor(dest, tenant, connector), 5000
-    ):
-        ingest_repo.apply_batch(dest, tenant, site, connector, batch)
+    ingest_run(connect_as, tenant, site, connector, second_run)
     state = site_repo.latest_run(admin, tenant, site)
     assert state is not None and state.run_id == second_run and state.history_loaded
 

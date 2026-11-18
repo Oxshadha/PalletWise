@@ -136,6 +136,11 @@ class Simulation:
         self._arrivals: dict[date, list[tuple[str, int]]] = defaultdict(list)
         self.receiving_bins = sorted(b.code for b in self.layout.bins if b.bin_role == "RECEIVING")
         self._now = self.history_start
+        # Reserve and bulk bins per temperature class, in layout order (putaway candidates).
+        self.storage_bins: dict[str, list[str]] = defaultdict(list)
+        for b in self.layout.bins:
+            if b.bin_role in ("RESERVE", "BULK"):
+                self.storage_bins[b.temperature_class].append(b.code)
 
     # ------------------------------------------------------------------ emission
 

@@ -58,6 +58,8 @@ contracts:
 	pnpm --filter @palletwise/contracts generate
 	pnpm exec prettier --write packages/contracts/src/api.ts >/dev/null 2>&1 || true
 
-# Records the dataset hash of the running stack's completed load as the golden hash for its seed.
+# Records the running stack's completed load as the golden hash for its seed, then copies the
+# file into the repository (review and commit it).
 golden: check-env
-	$(COMPOSE) exec -T simadmin python -c "import json; from palletwise.db import dataset_hash, site_repo; from palletwise.db.connection import connect; from palletwise.settings import *; c=role_credentials('PW_SIM_ADMIN'); conn=connect(DatabaseSettings().dsn(c.user,c.password)); r=site_repo.latest_run(conn, DEMO_TENANT_ID, DEMO_SITE_ID); print(json.dumps({'dataset_hash': r.dataset_hash, 'seed': r.seed, 'dataset_version': r.dataset_version}))"
+	$(COMPOSE) exec -T simadmin palletwise-simadmin record-golden
+	docker cp $$($(COMPOSE) ps -q simadmin):/app/services/simulator/golden/. services/simulator/golden/

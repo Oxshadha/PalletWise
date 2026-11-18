@@ -451,9 +451,9 @@ BEGIN
   VALUES (p_run, p_tenant, p_site, p_seed, p_dataset, p_history_start, p_clock_start, 'BUILDING',
           clock_timestamp(), p_started_by);
 
-  -- A new run's outbox restarts at sequence 1, so the cursor and freshness restart with it,
-  -- and the site is LOADING until this run completes (CWM 5.2, simulator spec 2.1).
-  UPDATE pw.sync_state SET cursor = NULL, data_as_of = NULL
+  -- The connector cursor names its run, so it needs no reset here. Freshness restarts with the
+  -- run, and the site is LOADING until this run completes (CWM 5.2, simulator spec 2.1).
+  UPDATE pw.sync_state SET data_as_of = NULL
    WHERE connector_id = p_connector AND tenant_id = p_tenant;
   UPDATE pw.site SET data_status = 'LOADING', data_status_detail = NULL
    WHERE id = p_site AND tenant_id = p_tenant AND data_status <> 'LOADING';

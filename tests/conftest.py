@@ -7,21 +7,10 @@ from typing import Any
 import psycopg
 import pytest
 
+from palletwise.db.bootstrap import LOGIN_ROLES
 from palletwise.db.connection import dsn
 
-ROLE_PASSWORDS = {
-    "pw_migrator": "test-migrator",
-    "pw_app": "test-app",
-    "pw_ingest": "test-ingest",
-    "pw_evaluator": "test-evaluator",
-    "pw_proposal_writer": "test-proposal-writer",
-    "pw_workflow": "test-workflow",
-    "pw_sim_admin": "test-sim-admin",
-    "pw_agent_read": "test-agent-read",
-    "pw_memory": "test-memory",
-    "sim_owner": "test-sim-owner",
-    "sim_outbox_reader": "test-outbox-reader",
-}
+ROLE_PASSWORDS = {role: f"test-{role}" for role in LOGIN_ROLES}
 
 POSTGRES_IMAGE = os.environ.get("PW_TEST_POSTGRES_IMAGE", "postgres:17-alpine")
 

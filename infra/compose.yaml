@@ -15,6 +15,7 @@ x-python: &python
     PW_DB_NAME: palletwise
 
 x-health-python: &health-python
+  test: ["CMD", "palletwise-healthcheck"]
   interval: 5s
   timeout: 3s
   retries: 30
@@ -76,7 +77,6 @@ services:
       SIM_DATA_DIR: /app/data/reference
     healthcheck:
       <<: *health-python
-      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
     depends_on:
       migrate: { condition: service_completed_successfully }
 
@@ -92,7 +92,6 @@ services:
       PW_HEALTH_PORT: "8081"
     healthcheck:
       <<: *health-python
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=2)"]
     depends_on:
       migrate: { condition: service_completed_successfully }
       simulator: { condition: service_healthy }
@@ -110,7 +109,6 @@ services:
     healthcheck:
       <<: *health-python
       # Healthy only once the initial load has finished and the site is READY.
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8082/health', timeout=2)"]
       retries: 120
       start_period: 60s
     depends_on:
@@ -128,7 +126,6 @@ services:
       PW_HEALTH_PORT: "8083"
     healthcheck:
       <<: *health-python
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=2)"]
     depends_on:
       migrate: { condition: service_completed_successfully }
 
@@ -142,7 +139,6 @@ services:
       PW_HEALTH_PORT: "8084"
     healthcheck:
       <<: *health-python
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8084/health', timeout=2)"]
     depends_on:
       migrate: { condition: service_completed_successfully }
 
@@ -153,9 +149,9 @@ services:
       <<: *db-env
       PW_APP_USER: pw_app
       PW_APP_PASSWORD: ${PW_APP_PASSWORD}
+      PW_HEALTH_PATH: /api/health
     healthcheck:
       <<: *health-python
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)"]
     depends_on:
       migrate: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }

@@ -1,6 +1,6 @@
 """Simulated site lifecycle, used by the simulation admin service as pw_sim_admin."""
 
-from dataclasses import dataclass
+from dataclasses import astuple, dataclass
 from datetime import datetime
 from uuid import UUID
 
@@ -46,25 +46,7 @@ def bootstrap_site(conn: psycopg.Connection, b: SiteBootstrap) -> None:
             "SELECT pw.bootstrap_simulated_site(%s::uuid, %s::text, %s::text, %s::uuid, %s::text, %s::text, "
             "%s::text, %s::text, %s::numeric, %s::numeric, %s::uuid, %s::uuid, %s::bigint, %s::text, "
             "%s::timestamptz, %s::timestamptz, %s::text)",
-            (
-                b.tenant_id,
-                b.tenant_code,
-                b.tenant_name,
-                b.site_id,
-                b.site_code,
-                b.site_name,
-                b.region_code,
-                b.time_zone,
-                b.width_m,
-                b.depth_m,
-                b.connector_id,
-                b.run_id,
-                b.seed,
-                b.dataset_version,
-                b.history_start,
-                b.clock_start,
-                b.started_by,
-            ),
+            astuple(b),
         )
 
 

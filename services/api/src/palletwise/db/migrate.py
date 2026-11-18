@@ -18,6 +18,7 @@ from palletwise.db.bootstrap import LOGIN_ROLES, bootstrap
 from palletwise.db.calendar import load_calendar
 from palletwise.db.connection import dsn
 from palletwise.settings import DatabaseSettings, role_credentials
+from palletwise.telemetry.health import configure_logging
 
 log = logging.getLogger("palletwise.migrate")
 
@@ -49,20 +50,23 @@ def run_bootstrap(db: DatabaseSettings) -> None:
     log.info("roles and schemas bootstrapped")
 
 
-def upgrade(db: DatabaseSettings, revision: str = "head") -> None:
+def _migrator_config(db: DatabaseSettings) -> Config:
     creds = role_credentials("PW_MIGRATOR")
-    command.upgrade(_alembic_config(_sqlalchemy_url(db, creds.user, creds.password)), revision)
+    return _alembic_config(_sqlalchemy_url(db, creds.user, creds.password))
+
+
+def upgrade(db: DatabaseSettings, revision: str = "head") -> None:
+    command.upgrade(_migrator_config(db), revision)
 
 
 def downgrade(db: DatabaseSettings, revision: str) -> None:
-    creds = role_credentials("PW_MIGRATOR")
-    command.downgrade(_alembic_config(_sqlalchemy_url(db, creds.user, creds.password)), revision)
+    command.downgrade(_migrator_config(db), revision)
 
 
 def run_calendar(db: DatabaseSettings) -> int:
     path = Path(os.environ.get("PW_CALENDAR_PATH", REPO_ROOT / "data" / "reference" / "calendar.csv"))
     creds = role_credentials("PW_MIGRATOR")
-    with psycopg.connect(dsn(db, creds.user, creds.password)) as conn:
+    with psycopg.connect(dsn(db, creds.user, creds.password), autocommit=False) as conn:
         conn.execute("SET ROLE pw_owner")
         loaded = load_calendar(conn, path)
     log.info("calendar loaded: %d days", loaded)
@@ -70,7 +74,7 @@ def run_calendar(db: DatabaseSettings) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    configure_logging()
     parser = argparse.ArgumentParser(prog="palletwise-migrate")
     parser.add_argument(
         "action", nargs="?", default="all", choices=["all", "bootstrap", "upgrade", "downgrade", "calendar"]

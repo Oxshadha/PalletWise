@@ -46,6 +46,11 @@ export function setThemeChoice(choice: ThemeChoice): void {
   } catch {
     /* storage unavailable: the choice applies to this page only */
   }
+  applyTheme(choice);
+}
+
+/** The one rule mapping a choice to the rendered theme (public/theme-init.js mirrors it). */
+export function applyTheme(choice: ThemeChoice): void {
   const dark =
     choice === "dark" ||
     (choice === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -57,7 +62,7 @@ export function followSystemTheme(choice: ThemeChoice): () => void {
   if (choice !== "system") return () => undefined;
   const query = window.matchMedia("(prefers-color-scheme: dark)");
   const apply = () => {
-    document.documentElement.dataset["theme"] = query.matches ? "dark" : "light";
+    applyTheme("system");
   };
   query.addEventListener("change", apply);
   return () => {

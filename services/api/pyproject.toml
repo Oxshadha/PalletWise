@@ -19,6 +19,7 @@ palletwise-connector = "palletwise.ingest.connector:main"
 palletwise-simadmin = "palletwise.simadmin.main:main"
 palletwise-evaluator = "palletwise.evaluator.main:main"
 palletwise-workflow = "palletwise.workflow.main:main"
+palletwise-healthcheck = "palletwise.telemetry.health:main"
 
 [build-system]
 requires = ["hatchling"]

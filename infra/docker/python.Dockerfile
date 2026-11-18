@@ -24,5 +24,6 @@ COPY db db
 COPY data/reference data/reference
 COPY services/simulator/golden services/simulator/golden
 
-RUN useradd --system --uid 10001 palletwise
+RUN useradd --system --uid 10001 palletwise \
+ && chown palletwise services/simulator/golden
 USER palletwise
