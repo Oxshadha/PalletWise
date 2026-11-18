@@ -3,7 +3,12 @@ import "./app.css";
 import { useEffect, useState } from "react";
 
 import { fetchSiteStatus, type SiteStatus } from "../shared/api/client";
-import { setThemeChoice, storedThemeChoice, type ThemeChoice } from "../shared/theme/theme";
+import {
+  followSystemTheme,
+  setThemeChoice,
+  storedThemeChoice,
+  type ThemeChoice,
+} from "../shared/theme/theme";
 
 const STATUS_TEXT: Record<string, string> = {
   LOADING: "Data is loading. The workspace opens when the first load is complete.",
@@ -43,6 +48,8 @@ export function App() {
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => followSystemTheme(theme), [theme]);
 
   const chooseTheme = (choice: ThemeChoice) => {
     setThemeChoice(choice);

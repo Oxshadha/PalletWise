@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import psycopg
+from psycopg.conninfo import make_conninfo
 
 from pw_simulator.catalogue import CATEGORIES, true_uplift
 from pw_simulator.history import OutRecord, RunParams
@@ -40,12 +41,14 @@ GRANT SELECT ON sim.outbox TO sim_outbox_reader;
 
 
 def dsn() -> str:
-    return (
-        f"host={os.environ.get('PW_DB_HOST', 'localhost')} "
-        f"port={os.environ.get('PW_DB_PORT', '5432')} "
-        f"dbname={os.environ.get('PW_DB_NAME', 'palletwise')} "
-        f"user={os.environ.get('SIM_OWNER_USER', 'sim_owner')} "
-        f"password={os.environ['SIM_OWNER_PASSWORD']} application_name=pw-simulator"
+    """libpq connection string with every value escaped."""
+    return make_conninfo(
+        host=os.environ.get("PW_DB_HOST", "localhost"),
+        port=os.environ.get("PW_DB_PORT", "5432"),
+        dbname=os.environ.get("PW_DB_NAME", "palletwise"),
+        user=os.environ.get("SIM_OWNER_USER", "sim_owner"),
+        password=os.environ["SIM_OWNER_PASSWORD"],
+        application_name="pw-simulator",
     )
 
 

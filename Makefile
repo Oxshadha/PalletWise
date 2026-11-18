@@ -10,9 +10,11 @@ check-env:
 
 up: check-env
 	$(COMPOSE) up -d --build --wait
-	@echo ""
-	@echo "PalletWise is up:  http://localhost:$$(grep -E '^PW_EDGE_HOST_PORT=' .env | cut -d= -f2 || echo 8080)"
-	@echo "Keycloak (dev):    http://localhost:$$(grep -E '^PW_KEYCLOAK_HOST_PORT=' .env | cut -d= -f2 || echo 8180)  users: manager, admin"
+	@edge=$$(grep -E '^PW_EDGE_HOST_PORT=' .env | cut -d= -f2); \
+	kc=$$(grep -E '^PW_KEYCLOAK_HOST_PORT=' .env | cut -d= -f2); \
+	echo ""; \
+	echo "PalletWise is up:  http://localhost:$${edge:-8080}"; \
+	echo "Keycloak (dev):    http://localhost:$${kc:-8180}  users: manager, admin"
 
 down:
 	$(COMPOSE) down

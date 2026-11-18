@@ -99,11 +99,3 @@ def complete_load(
 def fail_load(conn: psycopg.Connection, tenant_id: UUID, site_id: UUID, run_id: UUID, detail: str) -> None:
     with tenant_transaction(conn, tenant_id):
         conn.execute("SELECT pw.fail_load(%s, %s, %s, %s)", (tenant_id, site_id, run_id, detail))
-
-
-def site_status(conn: psycopg.Connection, tenant_id: UUID, site_id: UUID) -> tuple[str, str | None] | None:
-    with tenant_transaction(conn, tenant_id):
-        row = conn.execute(
-            "SELECT data_status, data_status_detail FROM pw.site WHERE id = %s", (site_id,)
-        ).fetchone()
-    return (row[0], row[1]) if row else None

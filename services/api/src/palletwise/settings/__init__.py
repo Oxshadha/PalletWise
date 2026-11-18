@@ -19,12 +19,6 @@ class DatabaseSettings(BaseSettings):
     port: int = 5432
     name: str = "palletwise"
 
-    def dsn(self, user: str, password: str) -> str:
-        return (
-            f"host={self.host} port={self.port} dbname={self.name} "
-            f"user={user} password={password} application_name=palletwise"
-        )
-
 
 class RoleCredentials(BaseSettings):
     """Credentials for one database role, read from PW_<ROLE>_USER / _PASSWORD."""

@@ -7,6 +7,8 @@ from typing import Any
 import psycopg
 import pytest
 
+from palletwise.db.connection import dsn
+
 ROLE_PASSWORDS = {
     "pw_migrator": "test-migrator",
     "pw_app": "test-app",
@@ -57,7 +59,7 @@ def connect_as(database: dict[str, Any]) -> Generator[Callable[[str], psycopg.Co
 
     def _connect(role: str) -> psycopg.Connection:
         password = "postgres" if role == "postgres" else ROLE_PASSWORDS[role]
-        conn = psycopg.connect(database["settings"].dsn(role, password))
+        conn = psycopg.connect(dsn(database["settings"], role, password))
         opened.append(conn)
         return conn
 

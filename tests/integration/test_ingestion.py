@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 import psycopg
 import pytest
 
-from palletwise.db import dataset_hash, ingest_repo, sim_source, site_repo
+from palletwise.db import dataset_hash, ingest_repo, sim_source, site_repo, status_repo
 from palletwise.db.connection import tenant_transaction
 from pw_simulator import store
 from pw_simulator.history import RunParams, generate
@@ -80,7 +80,8 @@ def test_load_completes_and_site_becomes_ready(connect_as: Connect, loaded: tupl
     digest, counts = dataset_hash.compute(admin, tenant, site)
     assert counts["bin"] == 676 and counts["product"] == 300 and counts["movement"] > 0
     site_repo.complete_load(admin, tenant, site, run, digest)
-    assert site_repo.site_status(admin, tenant, site) == ("READY", None)
+    status = status_repo.site_status(admin, tenant, site)
+    assert status is not None and status.data_status == "READY" and status.data_status_detail is None
 
 
 def test_clock_equals_last_tick_and_never_leads(connect_as: Connect, loaded: tuple[UUID, ...]) -> None:
@@ -194,3 +195,71 @@ def test_records_of_an_ended_run_are_skipped(connect_as: Connect, loaded: tuple[
     )
     skipped = ingest_repo.apply_batch(connect_as("pw_ingest"), tenant, site, connector, [stale])
     assert skipped == 1
+
+
+def test_new_run_after_a_failed_run_loads_from_the_start(connect_as: Connect) -> None:
+    """Review finding 1: the cursor restarts with each run, so a retry run is not skipped."""
+    tenant = uuid4()
+    site, connector, first_run = load_site(connect_as, tenant)
+    admin = connect_as("pw_sim_admin")
+    site_repo.fail_load(admin, tenant, site, first_run, "simulated failure")
+
+    second_run = uuid4()
+    site_repo.bootstrap_site(
+        admin,
+        site_repo.SiteBootstrap(
+            tenant_id=tenant,
+            tenant_code=f"t-{tenant.hex[:8]}",
+            tenant_name="Test",
+            site_id=site,
+            site_code="PLG",
+            site_name="Test site",
+            region_code="LK",
+            time_zone="Asia/Colombo",
+            width_m=80.0,
+            depth_m=50.0,
+            connector_id=connector,
+            run_id=second_run,
+            seed=42,
+            dataset_version="test",
+            history_start=CLOCK_START - timedelta(days=HISTORY_DAYS),
+            clock_start=CLOCK_START,
+            started_by="test",
+        ),
+    )
+    status = status_repo.site_status(admin, tenant, site)
+    assert status is not None and status.data_status == "LOADING"
+    dest = connect_as("pw_ingest")
+    assert ingest_repo.read_cursor(dest, tenant, connector) == 0
+
+    params = RunParams(str(second_run), 42, "test", CLOCK_START, history_days=HISTORY_DAYS)
+    store.write_run(connect_as("sim_owner"), params, generate(params))
+    source = connect_as("sim_outbox_reader")
+    while batch := sim_source.pull(
+        source, second_run, ingest_repo.read_cursor(dest, tenant, connector), 5000
+    ):
+        ingest_repo.apply_batch(dest, tenant, site, connector, batch)
+    state = site_repo.latest_run(admin, tenant, site)
+    assert state is not None and state.run_id == second_run and state.history_loaded
+
+
+def test_order_line_without_its_order_is_rejected(connect_as: Connect, loaded: tuple[UUID, ...]) -> None:
+    """Review finding 5: an orphan line fails loudly instead of being dropped."""
+    tenant, site, connector, run = loaded
+    orphan = ingest_repo.SourceRecord(
+        sequence=10_000_002,
+        run_id=run,
+        record_type="ORDER_LINE",
+        occurred_at=CLOCK_START,
+        dataset_version="test",
+        is_synthetic=True,
+        payload={
+            "external_id": "SO-MISSING-01",
+            "order_no": "SO-MISSING",
+            "line_no": 1,
+            "sku": "SKU-102",
+            "qty_ordered": 1,
+        },
+    )
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        ingest_repo.apply_batch(connect_as("pw_ingest"), tenant, site, connector, [orphan])

@@ -19,17 +19,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from palletwise import clock
-from palletwise.db import dataset_hash, site_repo
-from palletwise.db.connection import connect
+from palletwise.db import dataset_hash, site_repo, status_repo
+from palletwise.db.connection import Reconnecting, dsn_for_role
 from palletwise.db.ids import uuid7
 from palletwise.settings import (
     DEMO_CONNECTOR_ID,
     DEMO_SITE_ID,
     DEMO_TENANT_ID,
-    DatabaseSettings,
     SimulationSettings,
     SiteSettings,
-    role_credentials,
 )
 from palletwise.telemetry.health import serve_health
 
@@ -37,6 +35,7 @@ log = logging.getLogger("palletwise.simadmin")
 
 SITE_WIDTH_M = 80.0
 SITE_DEPTH_M = 50.0
+LOAD_TIMEOUT_SECONDS = float(os.environ.get("PW_SIM_LOAD_TIMEOUT_SECONDS", "1800"))
 
 
 def golden_path(sim: SimulationSettings) -> Path:
@@ -56,10 +55,20 @@ def request_run(sim: SimulationSettings, payload: dict[str, object]) -> None:
             raise RuntimeError(f"simulator refused the run: HTTP {resp.status}")
 
 
+def simulator_error(sim: SimulationSettings) -> str | None:
+    """The simulator's last generation error, if it reported one."""
+    try:
+        with urllib.request.urlopen(f"{sim.control_url}/health", timeout=5) as resp:  # noqa: S310
+            body = json.loads(resp.read())
+    except OSError:
+        return None  # unreachable is not a generation error; the timeout covers a dead simulator
+    error = body.get("last_error")
+    return str(error) if error else None
+
+
 class SimAdmin:
     def __init__(self) -> None:
-        creds = role_credentials("PW_SIM_ADMIN")
-        self._conn = connect(DatabaseSettings().dsn(creds.user, creds.password))
+        self._db = Reconnecting(dsn_for_role("PW_SIM_ADMIN"))
         self._sim = SimulationSettings()
         self._site = SiteSettings()
         self._lock = threading.Lock()
@@ -74,14 +83,14 @@ class SimAdmin:
             self._status.update(values)
 
     def ensure_run(self) -> site_repo.RunState:
-        existing = site_repo.latest_run(self._conn, DEMO_TENANT_ID, DEMO_SITE_ID)
+        existing = site_repo.latest_run(self._db.get(), DEMO_TENANT_ID, DEMO_SITE_ID)
         if existing and existing.status in ("BUILDING", "ACTIVE"):
             return existing
         clock_start = datetime.fromisoformat(self._sim.clock_start)
         history_start = clock_start - timedelta(days=self._sim.history_days)
         run_id = uuid7()
         site_repo.bootstrap_site(
-            self._conn,
+            self._db.get(),
             site_repo.SiteBootstrap(
                 tenant_id=DEMO_TENANT_ID,
                 tenant_code=self._site.tenant_code,
@@ -103,7 +112,7 @@ class SimAdmin:
             ),
         )
         log.info("run %s created (seed %d)", run_id, self._sim.seed)
-        state = site_repo.latest_run(self._conn, DEMO_TENANT_ID, DEMO_SITE_ID)
+        state = site_repo.latest_run(self._db.get(), DEMO_TENANT_ID, DEMO_SITE_ID)
         assert state is not None
         return state
 
@@ -122,37 +131,55 @@ class SimAdmin:
         )
 
     def finalize(self, run: site_repo.RunState) -> None:
-        digest, counts = dataset_hash.compute(self._conn, DEMO_TENANT_ID, DEMO_SITE_ID)
+        digest, counts = dataset_hash.compute(self._db.get(), DEMO_TENANT_ID, DEMO_SITE_ID)
         log.info("dataset hash %s, rows %s", digest, counts)
         path = golden_path(self._sim)
         if path.exists():
             expected = json.loads(path.read_text(encoding="utf-8"))["dataset_hash"]
             if expected != digest:
-                detail = f"dataset hash {digest} does not match golden {expected}"
-                site_repo.fail_load(self._conn, DEMO_TENANT_ID, DEMO_SITE_ID, run.run_id, detail)
-                raise RuntimeError(detail)
+                raise RuntimeError(f"dataset hash {digest} does not match golden {expected}")
         else:
             log.warning("no golden hash at %s; recording this run's hash is a manual step", path)
-        site_repo.complete_load(self._conn, DEMO_TENANT_ID, DEMO_SITE_ID, run.run_id, digest)
+        site_repo.complete_load(self._db.get(), DEMO_TENANT_ID, DEMO_SITE_ID, run.run_id, digest)
         log.info("site READY")
+
+    def wait_for_load(self, run: site_repo.RunState) -> site_repo.RunState:
+        """Wait until the run's history is ingested, the simulator fails, or the timeout passes."""
+        deadline = clock.monotonic() + LOAD_TIMEOUT_SECONDS
+        while True:
+            try:
+                current = site_repo.latest_run(self._db.get(), DEMO_TENANT_ID, DEMO_SITE_ID) or run
+            except Exception:
+                log.exception("status read failed; reconnecting")
+                self._db.reset()
+                current = run
+            if current.history_loaded:
+                return current
+            error = simulator_error(self._sim)
+            if error:
+                raise RuntimeError(f"simulator generation failed: {error}")
+            if clock.monotonic() > deadline:
+                raise TimeoutError(f"initial load did not finish within {LOAD_TIMEOUT_SECONDS:.0f} seconds")
+            clock.sleep(2)
 
     def run(self) -> None:
         run = self.ensure_run()
         if run.status == "BUILDING":
-            self.start_generation(run)
-            while True:
-                run = site_repo.latest_run(self._conn, DEMO_TENANT_ID, DEMO_SITE_ID) or run
-                if run.history_loaded:
-                    break
-                clock.sleep(2)
             try:
+                self.start_generation(run)
+                run = self.wait_for_load(run)
                 self.finalize(run)
             except Exception as exc:
                 log.exception("initial load failed")
+                self._db.reset()
+                site_repo.fail_load(self._db.get(), DEMO_TENANT_ID, DEMO_SITE_ID, run.run_id, str(exc))
                 self._set(ready=False, data_status="FAILED", detail=str(exc))
                 return
-        status = site_repo.site_status(self._conn, DEMO_TENANT_ID, DEMO_SITE_ID)
-        self._set(ready=bool(status and status[0] == "READY"), data_status=status[0] if status else "UNKNOWN")
+        site = status_repo.site_status(self._db.get(), DEMO_TENANT_ID, DEMO_SITE_ID)
+        self._set(
+            ready=bool(site and site.data_status == "READY"),
+            data_status=site.data_status if site else "UNKNOWN",
+        )
 
 
 def main() -> int:

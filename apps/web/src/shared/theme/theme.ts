@@ -51,3 +51,16 @@ export function setThemeChoice(choice: ThemeChoice): void {
     (choice === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.dataset["theme"] = dark ? "dark" : "light";
 }
+
+/** While the choice is "system", follow the operating system when it switches light/dark. */
+export function followSystemTheme(choice: ThemeChoice): () => void {
+  if (choice !== "system") return () => undefined;
+  const query = window.matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    document.documentElement.dataset["theme"] = query.matches ? "dark" : "light";
+  };
+  query.addEventListener("change", apply);
+  return () => {
+    query.removeEventListener("change", apply);
+  };
+}

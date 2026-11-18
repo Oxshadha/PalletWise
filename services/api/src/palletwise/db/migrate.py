@@ -16,6 +16,7 @@ from alembic.config import Config
 
 from palletwise.db.bootstrap import LOGIN_ROLES, bootstrap
 from palletwise.db.calendar import load_calendar
+from palletwise.db.connection import dsn
 from palletwise.settings import DatabaseSettings, role_credentials
 
 log = logging.getLogger("palletwise.migrate")
@@ -43,7 +44,7 @@ def run_bootstrap(db: DatabaseSettings) -> None:
         log.info("no bootstrap credentials: assuming roles are managed by infrastructure")
         return
     passwords = {role: os.environ[f"{role.upper()}_PASSWORD"] for role in LOGIN_ROLES}
-    with psycopg.connect(db.dsn(superuser, superuser_password)) as conn:
+    with psycopg.connect(dsn(db, superuser, superuser_password)) as conn:
         bootstrap(conn, db.name, passwords)
     log.info("roles and schemas bootstrapped")
 
@@ -61,7 +62,7 @@ def downgrade(db: DatabaseSettings, revision: str) -> None:
 def run_calendar(db: DatabaseSettings) -> int:
     path = Path(os.environ.get("PW_CALENDAR_PATH", REPO_ROOT / "data" / "reference" / "calendar.csv"))
     creds = role_credentials("PW_MIGRATOR")
-    with psycopg.connect(db.dsn(creds.user, creds.password)) as conn:
+    with psycopg.connect(dsn(db, creds.user, creds.password)) as conn:
         conn.execute("SET ROLE pw_owner")
         loaded = load_calendar(conn, path)
     log.info("calendar loaded: %d days", loaded)

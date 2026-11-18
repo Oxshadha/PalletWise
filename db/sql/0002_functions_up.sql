@@ -226,6 +226,7 @@ AS $$
 DECLARE
   v_source   text;
   v_category uuid;
+  v_order    uuid;
 BEGIN
   PERFORM pw.assert_tenant(p_tenant);
   SELECT connector_type INTO v_source FROM pw.connector
@@ -356,14 +357,19 @@ BEGIN
     END IF;
 
   WHEN 'ORDER_LINE' THEN
+    -- A line without its order is an ordering defect in the source: fail loudly.
+    SELECT id INTO v_order FROM pw.outbound_order
+     WHERE tenant_id = p_tenant AND site_id = p_site
+       AND source_system = v_source AND external_id = r->>'order_no';
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'order line % references unknown order %', r->>'external_id', r->>'order_no'
+        USING ERRCODE = 'foreign_key_violation';
+    END IF;
     INSERT INTO pw.order_line (id, tenant_id, site_id, order_id, line_no, product_id, qty_ordered,
                                source_system, external_id, dataset_version, is_synthetic)
-    SELECT pw.uuidv7(), p_tenant, p_site, o.id, (r->>'line_no')::int,
-           pw.master_id(p_tenant, NULL, v_source, 'PRODUCT', r->>'sku'),
-           (r->>'qty_ordered')::int, v_source, r->>'external_id', p_dataset, p_synthetic
-      FROM pw.outbound_order o
-     WHERE o.tenant_id = p_tenant AND o.site_id = p_site
-       AND o.source_system = v_source AND o.external_id = r->>'order_no'
+    VALUES (pw.uuidv7(), p_tenant, p_site, v_order, (r->>'line_no')::int,
+            pw.master_id(p_tenant, NULL, v_source, 'PRODUCT', r->>'sku'),
+            (r->>'qty_ordered')::int, v_source, r->>'external_id', p_dataset, p_synthetic)
     ON CONFLICT (tenant_id, site_id, source_system, external_id) DO NOTHING;
 
   WHEN 'ALLOCATION' THEN
@@ -444,6 +450,13 @@ BEGIN
                                  clock_start, status, started_at, started_by)
   VALUES (p_run, p_tenant, p_site, p_seed, p_dataset, p_history_start, p_clock_start, 'BUILDING',
           clock_timestamp(), p_started_by);
+
+  -- A new run's outbox restarts at sequence 1, so the cursor and freshness restart with it,
+  -- and the site is LOADING until this run completes (CWM 5.2, simulator spec 2.1).
+  UPDATE pw.sync_state SET cursor = NULL, data_as_of = NULL
+   WHERE connector_id = p_connector AND tenant_id = p_tenant;
+  UPDATE pw.site SET data_status = 'LOADING', data_status_detail = NULL
+   WHERE id = p_site AND tenant_id = p_tenant AND data_status <> 'LOADING';
 END $$;
 
 -- Completes a load: run ACTIVE and site READY in one transaction (CWM 7.4 step 3).

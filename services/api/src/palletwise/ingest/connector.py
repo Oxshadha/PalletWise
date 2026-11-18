@@ -15,14 +15,8 @@ import threading
 
 from palletwise import clock
 from palletwise.db import ingest_repo, sim_source
-from palletwise.db.connection import connect
-from palletwise.settings import (
-    DEMO_CONNECTOR_ID,
-    DEMO_SITE_ID,
-    DEMO_TENANT_ID,
-    DatabaseSettings,
-    role_credentials,
-)
+from palletwise.db.connection import Reconnecting, dsn_for_role
+from palletwise.settings import DEMO_CONNECTOR_ID, DEMO_SITE_ID, DEMO_TENANT_ID
 from palletwise.telemetry.health import serve_health
 
 log = logging.getLogger("palletwise.connector")
@@ -33,11 +27,8 @@ IDLE_SECONDS = float(os.environ.get("PW_CONNECTOR_IDLE_SECONDS", "1.0"))
 
 class ConnectorWorker:
     def __init__(self) -> None:
-        db = DatabaseSettings()
-        source_creds = role_credentials("SIM_OUTBOX_READER")
-        dest_creds = role_credentials("PW_INGEST")
-        self._source = connect(db.dsn(source_creds.user, source_creds.password))
-        self._dest = connect(db.dsn(dest_creds.user, dest_creds.password))
+        self._source = Reconnecting(dsn_for_role("SIM_OUTBOX_READER"))
+        self._dest = Reconnecting(dsn_for_role("PW_INGEST"))
         self._lock = threading.Lock()
         self._state: dict[str, object] = {"ready": True, "applied": 0, "cursor": 0}
 
@@ -47,16 +38,15 @@ class ConnectorWorker:
 
     def run_once(self) -> int:
         """Apply at most one batch. Returns the number of records applied."""
-        run_id = ingest_repo.current_run(self._dest, DEMO_TENANT_ID, DEMO_SITE_ID)
+        dest = self._dest.get()
+        run_id = ingest_repo.current_run(dest, DEMO_TENANT_ID, DEMO_SITE_ID)
         if run_id is None:
             return 0
-        cursor = ingest_repo.read_cursor(self._dest, DEMO_TENANT_ID, DEMO_CONNECTOR_ID)
-        records = sim_source.pull(self._source, run_id, cursor, BATCH_SIZE)
+        cursor = ingest_repo.read_cursor(dest, DEMO_TENANT_ID, DEMO_CONNECTOR_ID)
+        records = sim_source.pull(self._source.get(), run_id, cursor, BATCH_SIZE)
         if not records:
             return 0
-        skipped = ingest_repo.apply_batch(
-            self._dest, DEMO_TENANT_ID, DEMO_SITE_ID, DEMO_CONNECTOR_ID, records
-        )
+        skipped = ingest_repo.apply_batch(dest, DEMO_TENANT_ID, DEMO_SITE_ID, DEMO_CONNECTOR_ID, records)
         if skipped:
             log.warning("skipped %d records of an ended run", skipped)
         with self._lock:
@@ -67,15 +57,20 @@ class ConnectorWorker:
     def run_forever(self) -> None:
         while True:
             try:
-                if self.run_once() == 0:
-                    clock.sleep(IDLE_SECONDS)
-            except Exception:
-                log.exception("batch failed; retrying after a pause")
-                with self._lock:
-                    self._state["ready"] = False
-                clock.sleep(5)
+                applied = self.run_once()
                 with self._lock:
                     self._state["ready"] = True
+                if applied == 0:
+                    clock.sleep(IDLE_SECONDS)
+            except Exception:
+                # Not ready until a batch succeeds again; connections are replaced, since a
+                # database restart leaves them closed (the batch transaction rolled back).
+                log.exception("batch failed; reconnecting and retrying after a pause")
+                with self._lock:
+                    self._state["ready"] = False
+                self._source.reset()
+                self._dest.reset()
+                clock.sleep(5)
 
 
 def main() -> int:
