@@ -1,0 +1,76 @@
+/* App shell layout, following docs/design/mockup-*.png. Tokens only. */
+
+.pw-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--pw-space-4) var(--pw-space-8);
+}
+
+.pw-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--pw-space-3);
+  font-size: var(--pw-font-size-xl);
+  font-weight: var(--pw-font-weight-heading);
+}
+
+.pw-brand-logo {
+  width: 2.5rem;
+  height: 2.5rem;
+  background: var(--pw-logo) center / contain no-repeat;
+}
+
+.pw-theme-toggle {
+  display: flex;
+  gap: var(--pw-space-1);
+  padding: var(--pw-space-1);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-surface);
+}
+
+.pw-theme-toggle button {
+  border: 0;
+  border-radius: var(--pw-radius-pill);
+  padding: var(--pw-space-1) var(--pw-space-3);
+  background: transparent;
+  color: var(--pw-color-text-muted);
+  font: inherit;
+  font-size: var(--pw-font-size-sm);
+  font-weight: var(--pw-font-weight-navigation);
+  cursor: pointer;
+}
+
+.pw-theme-toggle button[aria-pressed="true"] {
+  background: var(--pw-color-accent);
+  color: var(--pw-color-text-on-accent);
+}
+
+.pw-main {
+  padding: 0 var(--pw-space-8) var(--pw-space-8);
+}
+
+.pw-card {
+  max-width: 48rem;
+  padding: var(--pw-space-8);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-lg);
+  background: var(--pw-color-surface);
+  box-shadow: var(--pw-shadow-card);
+}
+
+.pw-card p {
+  margin: var(--pw-space-2) 0 0;
+  color: var(--pw-color-text-muted);
+}
+
+.pw-status {
+  display: inline-block;
+  margin-top: var(--pw-space-4);
+  padding: var(--pw-space-1) var(--pw-space-3);
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-accent-soft);
+  color: var(--pw-color-text-primary);
+  font-weight: var(--pw-font-weight-navigation);
+}

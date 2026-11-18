@@ -39,3 +39,6 @@ test-results/
 # --- Local data ---
 *.db
 *.sqlite
+
+# Original design files; the repository keeps copies in docs/design and apps/web/public/brand.
+UI/

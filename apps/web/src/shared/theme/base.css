@@ -1,0 +1,44 @@
+/* Base element styles. Uses tokens only; no literal colors, fonts or sizes. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--pw-color-background);
+  color: var(--pw-color-text-primary);
+  font-family: var(--pw-font-family);
+  font-weight: var(--pw-font-weight-body);
+  font-size: var(--pw-font-size-md);
+  line-height: var(--pw-line-height-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: var(--pw-font-weight-heading);
+  line-height: var(--pw-line-height-heading);
+}
+
+h1 {
+  font-size: var(--pw-font-size-2xl);
+}
+
+h2 {
+  font-size: var(--pw-font-size-xl);
+}
+
+h3 {
+  font-size: var(--pw-font-size-lg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--pw-color-focus-ring);
+  outline-offset: 2px;
+}
