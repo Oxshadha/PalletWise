@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Early feedback only; CI is authoritative (engineering baseline 5.1).
+set -euo pipefail
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+if echo "$staged" | grep -E '(^|/)\.env(\.[^/]*)?$|service-account[^/]*\.json$|\.pem$|\.key$' \
+   | grep -vqE '(^|/)\.env\.example$'; then
+  echo "Refusing to commit a credentials file." >&2
+  exit 1
+fi
+if echo "$staged" | grep -q '\.py$'; then
+  uv run ruff check --quiet $(echo "$staged" | grep '\.py$')
+fi

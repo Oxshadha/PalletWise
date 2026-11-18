@@ -1,0 +1,62 @@
+{
+  "realm": "palletwise",
+  "enabled": true,
+  "displayName": "PalletWise (development)",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "warehouse_manager", "description": "Warehouse Manager (personas 3)" },
+      { "name": "admin", "description": "Admin (personas 4)" }
+    ]
+  },
+  "users": [
+    {
+      "username": "manager",
+      "enabled": true,
+      "email": "manager@palletwise.local",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Manager",
+      "credentials": [{ "type": "password", "value": "${env.KC_DEV_MANAGER_PASSWORD}", "temporary": false }],
+      "realmRoles": ["warehouse_manager"]
+    },
+    {
+      "username": "admin",
+      "enabled": true,
+      "email": "admin@palletwise.local",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Admin",
+      "credentials": [{ "type": "password", "value": "${env.KC_DEV_ADMIN_PASSWORD}", "temporary": false }],
+      "realmRoles": ["admin"]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "palletwise-bff",
+      "name": "PalletWise BFF",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${env.KC_BFF_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:8080/api/auth/callback"],
+      "webOrigins": ["http://localhost:8080"],
+      "attributes": { "pkce.code.challenge.method": "S256" }
+    },
+    {
+      "clientId": "palletwise-copilot",
+      "name": "PalletWise Copilot (agent identity)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${env.KC_COPILOT_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "attributes": { "standard.token.exchange.enabled": "true" }
+    }
+  ]
+}

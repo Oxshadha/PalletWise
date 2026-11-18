@@ -1,0 +1,105 @@
+[project]
+name = "palletwise-workspace"
+version = "0.0.0"
+requires-python = ">=3.13,<3.14"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["services/api", "services/simulator"]
+
+[dependency-groups]
+dev = [
+  "ruff",
+  "pyright",
+  "pytest",
+  "pytest-cov",
+  "testcontainers[postgres]",
+  "import-linter",
+  "pip-audit",
+  "httpx",
+]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 110
+target-version = "py313"
+src = ["services/api/src", "services/simulator/src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "T20", "SIM", "RUF", "DTZ", "TID"]
+ignore = ["S101"]  # assert is used in tests
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "DTZ"]
+"db/migrations/**" = ["TID251"]  # database code: executable SQL is allowed here (baseline 5.1)
+
+# Business time rule (engineering baseline 4.1): domain packages never read the wall clock.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"sqlalchemy.text".msg = "Executable SQL text lives only in palletwise.db (engineering baseline 5.1)."
+
+# ---------------------------------------------------------------- pyright
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.13"
+include = ["services/api/src", "services/simulator/src"]
+reportMissingTypeStubs = false
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: needs Docker (Testcontainers PostgreSQL)"]
+addopts = "-ra"
+
+# ---------------------------------------------------------------- import-linter
+[tool.importlinter]
+root_packages = ["palletwise", "pw_simulator"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "The simulator and PalletWise never import each other"
+type = "independence"
+modules = ["palletwise", "pw_simulator"]
+
+[[tool.importlinter.contracts]]
+name = "The agent reaches data only through tools"
+type = "forbidden"
+allow_indirect_imports = "True"  # arrows are direct imports, not transitive (baseline 4.1)
+source_modules = ["palletwise.agent"]
+forbidden_modules = ["palletwise.db", "palletwise.semantic", "palletwise.workflow", "palletwise.ingest"]
+
+[[tool.importlinter.contracts]]
+name = "Tools draft proposals, never approve or submit"
+type = "forbidden"
+source_modules = ["palletwise.tools"]
+forbidden_modules = ["palletwise.workflow", "palletwise.api"]
+
+[[tool.importlinter.contracts]]
+name = "Nothing imports the API layer"
+type = "forbidden"
+source_modules = [
+  "palletwise.agent", "palletwise.llm", "palletwise.tools", "palletwise.semantic",
+  "palletwise.db", "palletwise.workflow", "palletwise.ingest", "palletwise.evaluator",
+  "palletwise.simadmin", "palletwise.contracts", "palletwise.policy",
+  "palletwise.telemetry", "palletwise.clock", "palletwise.settings",
+]
+forbidden_modules = ["palletwise.api"]
+
+[[tool.importlinter.contracts]]
+name = "No model in data paths"
+type = "forbidden"
+source_modules = ["palletwise.ingest", "palletwise.evaluator", "palletwise.simadmin", "palletwise.db"]
+forbidden_modules = ["palletwise.agent", "palletwise.llm"]
+
+[[tool.importlinter.contracts]]
+name = "Only palletwise.db (and the semantic DSL compiler) touch database drivers"
+type = "forbidden"
+allow_indirect_imports = "True"  # callers use palletwise.db; they never import a driver
+source_modules = [
+  "palletwise.api", "palletwise.agent", "palletwise.llm", "palletwise.tools",
+  "palletwise.workflow", "palletwise.ingest", "palletwise.evaluator", "palletwise.simadmin",
+  "palletwise.contracts", "palletwise.policy", "palletwise.telemetry", "palletwise.clock",
+  "palletwise.settings",
+]
+forbidden_modules = ["sqlalchemy", "psycopg", "psycopg_pool"]

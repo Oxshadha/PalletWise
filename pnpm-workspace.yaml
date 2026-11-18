@@ -1,0 +1,7 @@
+packages:
+  - apps/*
+  - packages/*
+
+# typescript-eslint and dependency-cruiser do not support TypeScript 7.0 yet (Slice 0 finding).
+overrides:
+  typescript: ~6.0.0
