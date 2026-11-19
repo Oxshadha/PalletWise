@@ -94,7 +94,12 @@ export function Scene3D(props: Props) {
           scale={[40, 10, 1]}
         />
       </Environment>
-      <Floor layout={props.layout} colors={props.colors} site={site} />
+      <Floor
+        layout={props.layout}
+        colors={props.colors}
+        site={site}
+        marked={new Set(props.zoneHighlights.map((h) => h.target_id))}
+      />
       <Racking layout={props.layout} colors={props.colors} />
       <StatePlates {...props} />
       <Stock {...props} />
@@ -127,7 +132,26 @@ function strip(from: [number, number], to: [number, number], width: number) {
   };
 }
 
-function Floor({ layout, colors, site }: { layout: Layout; colors: SceneColors; site: Bounds }) {
+/** The centre of a zone's outline, where its name sits (corners crowd where zones meet). */
+function zoneCentre(outline: readonly (readonly number[])[]): [number, number] {
+  const n = outline.length || 1;
+  return [
+    outline.reduce((sum, p) => sum + (p[0] ?? 0), 0) / n,
+    outline.reduce((sum, p) => sum + (p[1] ?? 0), 0) / n,
+  ];
+}
+
+function Floor({
+  layout,
+  colors,
+  site,
+  marked,
+}: {
+  layout: Layout;
+  colors: SceneColors;
+  site: Bounds;
+  marked: Set<string>;
+}) {
   const cx = site.maxX / 2;
   const cz = site.maxY / 2;
   const walls: [number, number, number, number][] = [
@@ -175,12 +199,17 @@ function Floor({ layout, colors, site }: { layout: Layout; colors: SceneColors; 
                 </mesh>
               );
             })}
+            {/* Always mounted (mounting drei Html while the scene updates races React's DOM
+                removal); hidden when the zone's highlight tag (ZoneOutlines) names it instead. */}
             <Html
-              position={[first[0] + 0.6, 0.05, first[1] + 0.6]}
+              position={[zoneCentre(corners)[0], 0.05, zoneCentre(corners)[1]]}
+              center
               zIndexRange={[10, 0]}
               pointerEvents="none"
             >
-              <span className="pw-zone-tag">{zone.name}</span>
+              <span className="pw-zone-tag" hidden={marked.has(zone.id)}>
+                {zone.name}
+              </span>
             </Html>
           </group>
         );
@@ -580,8 +609,7 @@ function ZoneOutlines({ layout, zoneHighlights, colors }: Props) {
         const points = [...zone.outline, first].map(
           ([x, y]) => [x, 0.06, y] as [number, number, number],
         );
-        const cx = zone.outline.reduce((sum, [x]) => sum + x, 0) / zone.outline.length;
-        const cy = zone.outline.reduce((sum, [, y]) => sum + y, 0) / zone.outline.length;
+        const [cx, cy] = zoneCentre(zone.outline);
         return (
           <group key={highlight.target_id}>
             <Line
@@ -590,7 +618,9 @@ function ZoneOutlines({ layout, zoneHighlights, colors }: Props) {
               lineWidth={highlight.severity === "critical" ? 6 : 4}
             />
             <Html position={[cx, 0.4, cy]} center zIndexRange={[20, 10]} pointerEvents="none">
-              <span className={`pw-pin-tag is-${highlight.severity}`}>Zone {zone.code}</span>
+              <span className={`pw-pin-tag is-${highlight.severity}`}>
+                Zone {zone.code} · {zone.name}
+              </span>
             </Html>
           </group>
         );

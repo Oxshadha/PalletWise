@@ -42,12 +42,17 @@ export function LocationsList({
     .filter((item) => item.zone !== undefined)
     .sort((a, b) => (a.zone?.code ?? "").localeCompare(b.zone?.code ?? ""));
   const count = items.length + zoneItems.length;
+  // Said once: when every highlight has the same reason, it heads the list instead of every row.
+  const reasons = new Set([...zoneItems, ...items].map((item) => item.highlight.reason));
+  const shared = reasons.size === 1 ? [...reasons][0] : undefined;
+  const reasonText = (reason: string) => REASON_TEXT[reason] ?? reason;
 
   return (
     <details className="pw-locations" open>
       <summary>
         Highlighted locations <span className="pw-count">{count}</span>
       </summary>
+      {shared && <p className="pw-locations-reason">{reasonText(shared)}</p>}
       {count === 0 ? (
         <p className="pw-muted">
           No locations are highlighted. Ask the copilot or select a location on the map.
@@ -58,9 +63,7 @@ export function LocationsList({
             <li key={highlight.target_id}>
               <span className={`pw-location is-${highlight.severity}`}>
                 <span className="pw-location-code">Zone {zone?.code}</span>
-                <span className="pw-muted">
-                  {REASON_TEXT[highlight.reason] ?? highlight.reason}
-                </span>
+                {!shared && <span className="pw-muted">{reasonText(highlight.reason)}</span>}
               </span>
             </li>
           ))}
@@ -75,9 +78,7 @@ export function LocationsList({
                 }}
               >
                 <span className="pw-location-code">{bin.code}</span>
-                <span className="pw-muted">
-                  {REASON_TEXT[highlight.reason] ?? highlight.reason}
-                </span>
+                {!shared && <span className="pw-muted">{reasonText(highlight.reason)}</span>}
               </button>
             </li>
           ))}

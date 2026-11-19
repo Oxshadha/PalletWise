@@ -135,7 +135,7 @@ export function MapPanel() {
       <header className="pw-panel-header">
         <div>
           <h2 id="pw-warehouse-title" tabIndex={-1}>
-            Warehouse map
+            Warehouse
           </h2>
           <p className="pw-muted">
             {site ? `${site.name} (${site.code})` : ""}
@@ -170,7 +170,7 @@ export function MapPanel() {
       <div className="pw-map-body">
         <aside className="pw-map-side">
           {ready && (
-            <div className="pw-card-soft">
+            <div className="pw-side-section">
               <p className="pw-eyebrow">Zones</p>
               <ul className="pw-zone-list">
                 {ready.zones.map((zone) => {
@@ -190,7 +190,7 @@ export function MapPanel() {
               </ul>
             </div>
           )}
-          <div className="pw-card-soft">
+          <div className="pw-side-section">
             <LocationsList
               highlights={highlights}
               zoneHighlights={zoneHighlights}
@@ -211,7 +211,7 @@ export function MapPanel() {
               </button>
             )}
           </div>
-          <div className="pw-card-soft">
+          <div className="pw-side-section">
             <Legend />
           </div>
         </aside>

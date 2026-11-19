@@ -63,8 +63,8 @@ export function CopilotPanel({ notReadyText }: { notReadyText: string | null }) 
       <header className="pw-panel-header">
         <div>
           <h2 id="pw-copilot-title" tabIndex={-1} className="pw-copilot-title">
-            <span className="pw-sparkle">
-              <Icon name="sparkle" size={16} />
+            <span className="pw-copilot-mark" aria-hidden="true">
+              <Icon name="chat" size={16} />
             </span>
             PalletWise Copilot
           </h2>
@@ -75,6 +75,7 @@ export function CopilotPanel({ notReadyText }: { notReadyText: string | null }) 
           <button
             type="button"
             className="pw-button-quiet"
+            aria-label="New conversation"
             onClick={() => {
               void stop();
               dispatch({ type: "new-conversation" });
