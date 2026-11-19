@@ -129,6 +129,10 @@ results:
       face holds. Replenishment fixes it when reserve stock covers the shortfall; otherwise it
       is a true shortage. For replenishment before the first dispatch, the window ends at
       today's next dispatch deadline and only products a replenishment can fix are listed.
+  query_inventory:
+    measures: []
+    how_computed: >-
+      A query of {measures}{by}. Stock as of {as_of}.{period}
 
 # The query language catalogue (semantic spec 7.2 and 7.3). Every measure, dimension and filter
 # the DSL accepts is listed here; anything else is rejected. The compiler maps each name to one

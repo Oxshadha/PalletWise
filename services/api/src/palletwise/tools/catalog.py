@@ -8,7 +8,9 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from palletwise.contracts.results import ResultEnvelope
-from palletwise.semantic import locations, rules
+from palletwise.semantic import locations, query, rules
+from palletwise.semantic.model import semantic_model
+from palletwise.semantic.query_request import QueryRequest, check
 from palletwise.tools.executor import ToolContext, ToolRegistry, ToolSpec
 
 SKU_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$"
@@ -183,9 +185,47 @@ GET_ORDER_STOCKOUT_RISKS = _rule_tool(
     lambda ctx, p: rules.order_stockout_risks(ctx.conn, ctx.site, p.view, p.hours),
 )  # fmt: skip
 
+
+class QueryInventoryInput(QueryRequest):
+    """The query language request (semantic spec 7.1), checked against the catalogue on input."""
+
+    @model_validator(mode="after")
+    def in_catalogue(self) -> Self:
+        check(self)
+        return self
+
+
+def _query_description() -> str:
+    """The catalogue as the model reads it, generated from model.yaml so it cannot drift."""
+    cat = semantic_model().query
+    measures = "; ".join(
+        f"{name} ({m.measure_class}, by {', '.join(m.dimensions)})"
+        for name, m in cat.measures.items()
+        if m.available_from is None
+    )
+    return (
+        "Answers questions no other tool covers by combining approved measures and dimensions; use a "
+        "fixed tool when one fits. Request: measures (1 to 3), dimensions (0 to 2), filters (0 to 5, "
+        "each {field, op, value}; field is a dimension or a measure), time_range ({last_days: n} or "
+        "{from, to} dates; required with flow measures, not allowed otherwise), sort {by, direction}, "
+        "limit (1 to 100), scope {working_set: true} to narrow the previous result. Text operators: "
+        "=, !=, in; product also name_contains; numbers: =, !=, <, <=, >, >=, between [low, high]; "
+        "day, week, month: within_last_days, older_than_days. Measures: " + measures + ". A refusal "
+        "explains what to change."
+    )
+
+
+QUERY_INVENTORY = _rule_tool(
+    "query_inventory",
+    _query_description(),
+    QueryInventoryInput,
+    query.SCOPE,
+    lambda ctx, p: query.run(ctx.conn, ctx.site, p),
+)
+
 SLICE_2_TOOLS = (
     GET_LOW_STOCK, GET_TOP_MOVERS, GET_DEAD_STOCK, GET_SLOW_IN_PRIME, GET_ZONE_SUMMARY,
-    GET_CAPACITY_HOTSPOTS, GET_DELAYED_ORDERS, GET_ORDER_STOCKOUT_RISKS,
+    GET_CAPACITY_HOTSPOTS, GET_DELAYED_ORDERS, GET_ORDER_STOCKOUT_RISKS, QUERY_INVENTORY,
 )  # fmt: skip
 
 

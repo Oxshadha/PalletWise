@@ -247,3 +247,41 @@ def test_a_site_that_never_synced_is_unavailable_not_empty(run: Any, connect_as:
     risks = ok(run(f, "get_order_stockout_risks"))
     assert risks.status is ResultStatus.UNAVAILABLE and risks.rows == ()
     assert ok(run(f, "get_low_stock")).status is ResultStatus.NO_RESULTS  # low stock does not read orders
+
+
+# ---------------------------------------------------------------- query_inventory through the executor
+
+
+def test_query_inventory_answers_through_the_executor(run: Any, connect_as: Connect) -> None:
+    f = FixtureSite(connect_as)
+    zone = f.zone("A")
+    f.stock(f.bin(zone, "A-01"), f.product("COLA", category="Beverages"), 12)
+    envelope = ok(run(f, "query_inventory", measures=["on_hand"], dimensions=["category"]))
+    assert [(r["category"], r["on_hand"]) for r in envelope.rows] == [("Beverages", 12)]
+    assert envelope.evidence.settings_version_id == f.settings()
+
+
+def test_query_refusals_return_a_reason_and_are_audited(run: Any, connect_as: Connect) -> None:
+    f = FixtureSite(connect_as)
+    run_id = uuid4()
+    catalogue = run(f, "query_inventory", run_id, measures=["days_of_cover"], dimensions=["zone"])
+    assert catalogue.outcome is Outcome.VALIDATION_FAILED
+    assert "days_of_cover cannot be grouped by zone; allowed: product, category, brand" in catalogue.message
+    narrowing = run(f, "query_inventory", run_id, measures=["on_hand"], scope={"working_set": True})
+    assert narrowing.outcome is Outcome.VALIDATION_FAILED  # refused at run time, not a tool failure
+    assert narrowing.message == "there is no previous result to narrow down"
+    hostile = run(f, "query_inventory", run_id, measures=["on_hand; DROP TABLE pw.bin"])
+    assert hostile.outcome is Outcome.VALIDATION_FAILED and "unknown measure" in hostile.message
+    audited = f.db.execute(
+        "SELECT count(*) FROM pw.audit_event WHERE run_id = %s AND tool = 'query_inventory'"
+        " AND outcome = 'VALIDATION_FAILED'",
+        (run_id,),
+    ).fetchone()
+    assert audited == (3,)
+
+
+def test_the_tool_description_lists_the_catalogue(connect_as: Connect) -> None:
+    spec = v1_tools().get("query_inventory")
+    assert spec is not None and spec.scope == "inventory.read"
+    assert "days_of_cover (snapshot, by product, category, brand)" in spec.description
+    assert "projected_days_of_cover" not in spec.description  # not available until Slice 5

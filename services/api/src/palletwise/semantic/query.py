@@ -680,13 +680,16 @@ def _how(moment: Moment, request: QueryRequest, window: str) -> tuple[str, ...]:
         if request.dimensions
         else ""
     )
-    parts = [f"A query of {names}{by}. Stock as of {moment.local_time}."]
     tr = request.time_range
+    period = ""
     if tr is not None:
         span = f"the last {tr.last_days} days" if tr.last_days else f"{tr.from_date} to {tr.to_date}"
-        parts.append(f"Demand and movements over {span}, up to {moment.local_time}.")
+        period = f" Demand and movements over {span}, up to {moment.local_time}."
+    summary = model.results[TOOL].how_computed.format(
+        measures=names, by=by, as_of=moment.local_time, period=period
+    )
     texts = [model.measures[m].how_computed.replace("{window}", window) for m in request.measures]
-    return (" ".join(parts), *texts)
+    return (summary, *texts)
 
 
 def _envelope(

@@ -47,6 +47,11 @@ DEFAULT_SEVERITY: dict[HighlightReason, Severity] = {
 }
 
 
+class RequestRejected(ValueError):
+    """A tool request refused for a reason the agent can act on (semantic spec 7.4): reported as a
+    validation failure with this message, and counted toward the step limit (NFR-REL-03)."""
+
+
 class Frozen(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 

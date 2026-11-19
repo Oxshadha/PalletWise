@@ -22,7 +22,7 @@ from uuid import UUID
 from pydantic import BaseModel, ValidationError
 
 from palletwise import clock
-from palletwise.contracts.results import ResultEnvelope
+from palletwise.contracts.results import RequestRejected, ResultEnvelope
 from palletwise.db.agent_repo import AgentRecord, AgentRegistry
 from palletwise.db.audit_repo import AuditEntry, AuditLog
 from palletwise.db.connection import Connection, Pool, tenant_session
@@ -258,6 +258,9 @@ class ToolExecutor:
         try:
             with tenant_session(self._read_pool, run.tenant, read_snapshot=True) as conn:
                 output = spec.handler(ToolContext(conn, run.tenant, run.site), params)
+        except RequestRejected as exc:  # a reason the agent can act on, not a failure
+            return finish(Outcome.VALIDATION_FAILED, agent=agent, parameters=normalized, decision=decision,
+                          message=str(exc))  # fmt: skip
         except Exception:
             log.exception("tool %s failed", name)
             return finish(Outcome.ERROR, agent=agent, parameters=normalized, decision=decision)

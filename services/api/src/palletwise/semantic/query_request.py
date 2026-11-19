@@ -11,6 +11,7 @@ from typing import Any, Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from palletwise.contracts.results import RequestRejected
 from palletwise.semantic.model import QueryCatalogue, semantic_model
 
 TEXT_OPS = ("=", "!=", "in")
@@ -67,7 +68,7 @@ class QueryRequest(Strict):
     scope: Scope = Field(default_factory=Scope)
 
 
-class QueryRejected(ValueError):
+class QueryRejected(RequestRejected):
     """A request the catalogue refuses; the message is the structured reason (semantic spec 7.4)."""
 
 
