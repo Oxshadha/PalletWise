@@ -52,7 +52,7 @@ test-unit:
 	uv run pytest tests/unit -q
 
 test-integration:
-	uv run pytest tests/integration -q
+	uv run pytest tests/integration -q --durations=15
 
 # Deterministic eval gate (evals spec 5): no model, no credentials; blocks every merge.
 evals:

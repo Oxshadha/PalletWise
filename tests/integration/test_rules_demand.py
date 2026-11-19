@@ -216,3 +216,24 @@ def test_days_of_cover_agrees_with_the_reference_on_random_demand(connect_as: Co
         got = {r["sku"]: r for r in f.rows("days_of_cover", settings)}
         if storable or demand:
             assert got[f"R{n}"]["days_of_cover"] == expected, (n, demand, storable)
+
+
+def test_the_cover_window_uses_site_local_dates_at_midnight(connect_as: Connect) -> None:
+    """Picks are dated in site time (Asia/Colombo, UTC+5:30), not UTC: one minute before local
+    midnight belongs to the last window day; one minute after it, to today (outside)."""
+    floor = Floor(connect_as)
+    f = floor.f
+    zone = ZoneInfo("Asia/Colombo")
+    settings = f.new_settings(trailing_window_operating_days=5)
+    edge = f.product("EDGE")
+    f.stock(floor.bin(prime=False, role="RESERVE"), edge, 100)
+    first, last, _ = reference_cover(f.db, f.site, floor.now, 5, {}, 0)
+    today = floor.now.astimezone(zone).date()
+    midnight_after_last = datetime.combine(last + DAY, time(0), zone)
+    floor.pick(edge, 7, floor.now - (midnight_after_last - timedelta(minutes=1)))  # last day, 23:59 local
+    floor.pick(edge, 50, floor.now - datetime.combine(first, time(0, 1), zone))  # first day, 00:01 local
+    floor.pick(edge, 900, floor.now - datetime.combine(first - DAY, time(23, 59), zone))  # day before: out
+    if last + DAY == today:
+        floor.pick(edge, 900, floor.now - datetime.combine(today, time(0, 1), zone))  # today: out
+    row = next(r for r in f.rows("days_of_cover", settings) if r["sku"] == "EDGE")
+    assert row["window_demand"] == 57  # 7 + 50 only
