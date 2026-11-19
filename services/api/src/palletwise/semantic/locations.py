@@ -70,6 +70,7 @@ class Moment:
     time_zone: str
     freshness: tuple[StreamFreshness, ...]
     settings_version_id: UUID  # the version in effect when the request started (semantic spec 2)
+    settings_version_no: int
 
     def evidence(self, streams: tuple[str, ...], how_computed: tuple[str, ...]) -> Evidence:
         used = tuple(f for f in self.freshness if f.stream in streams)
@@ -79,6 +80,7 @@ class Moment:
             as_of=self.as_of,
             time_zone=self.time_zone,
             settings_version_id=self.settings_version_id,
+            settings_version_no=self.settings_version_no,
             data_as_of=oldest,
             freshness=used,
             how_computed=how_computed,
@@ -109,12 +111,12 @@ def read_moment(conn: Connection, site: UUID) -> Moment:
     settings = query(
         conn,
         "current_settings",
-        "SELECT settings_version_id FROM sem.current_settings WHERE site_id = %s",
+        "SELECT settings_version_id, version_no FROM sem.current_settings WHERE site_id = %s",
         (site,),
     ).fetchone()
     if settings is None:
         raise SiteNotReady(str(site))  # every site has settings from creation (CWM 9.1)
-    return Moment(site, row[0], row[1], freshness, settings[0])
+    return Moment(site, row[0], row[1], freshness, settings[0], settings[1])
 
 
 def _envelope(

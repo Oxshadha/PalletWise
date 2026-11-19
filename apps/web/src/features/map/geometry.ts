@@ -14,7 +14,56 @@ export interface Bounds {
   maxY: number;
 }
 
-export type BinState = "NORMAL" | "EMPTY";
+/** One base state per location (UX spec 5), from the semantic layer: the browser never derives it. */
+export type BinState = "NORMAL" | "EMPTY" | "LOW_STOCK" | "OVER_CAPACITY";
+
+type Zone = Layout["zones"][number];
+
+/** What the map draws for an answer: marks on locations, and outlines on zones. */
+export interface Marks {
+  bins: Highlight[];
+  zones: Highlight[];
+}
+
+const SEVERITY_RANK = { info: 1, warning: 2, critical: 3 } as const;
+
+/**
+ * Splits an answer's highlights for drawing (semantic spec 7.6). A rack target marks every bin
+ * of the rack; a zone target stays a zone and is drawn as an outline on the floor. A location
+ * named twice keeps its most severe highlight.
+ */
+export function splitHighlights(highlights: Highlight[], layout: Layout): Marks {
+  const rackBins = new Map<string, LayoutBin[]>();
+  for (const bin of layout.bins) {
+    if (bin.rack_id) rackBins.set(bin.rack_id, [...(rackBins.get(bin.rack_id) ?? []), bin]);
+  }
+  const bins = new Map<string, Highlight>();
+  const zones: Highlight[] = [];
+  const mark = (h: Highlight) => {
+    const known = bins.get(h.target_id);
+    if (!known || SEVERITY_RANK[h.severity] > SEVERITY_RANK[known.severity])
+      bins.set(h.target_id, h);
+  };
+  for (const h of highlights) {
+    if (h.target_type === "bin") mark(h);
+    else if (h.target_type === "rack") {
+      for (const bin of rackBins.get(h.target_id) ?? [])
+        mark({ ...h, target_type: "bin", target_id: bin.id });
+    } else zones.push(h);
+  }
+  return { bins: [...bins.values()], zones };
+}
+
+export function zoneBounds(zone: Zone): Bounds {
+  const xs = zone.outline.map(([x]) => x);
+  const ys = zone.outline.map(([, y]) => y);
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
+  };
+}
 
 export function scenePosition(bin: LayoutBin): [number, number, number] {
   return [bin.x, bin.z, bin.y];
@@ -32,17 +81,26 @@ export function siteBounds(layout: Layout): Bounds {
 export function highlightBounds(
   highlights: Highlight[],
   bins: Map<string, LayoutBin>,
+  zones: Highlight[] = [],
+  zoneById: Map<string, Zone> = new Map(),
 ): Bounds | null {
   let bounds: Bounds | null = null;
+  const boxes: Bounds[] = [];
   for (const highlight of highlights) {
     const bin = highlight.target_type === "bin" ? bins.get(highlight.target_id) : undefined;
     if (!bin) continue;
-    const box = {
+    boxes.push({
       minX: bin.x - bin.width_m / 2,
       maxX: bin.x + bin.width_m / 2,
       minY: bin.y - bin.depth_m / 2,
       maxY: bin.y + bin.depth_m / 2,
-    };
+    });
+  }
+  for (const highlight of zones) {
+    const zone = zoneById.get(highlight.target_id);
+    if (zone && zone.outline.length > 0) boxes.push(zoneBounds(zone));
+  }
+  for (const box of boxes) {
     bounds = bounds
       ? {
           minX: Math.min(bounds.minX, box.minX),

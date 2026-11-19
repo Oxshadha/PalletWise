@@ -91,4 +91,29 @@ describe("answer card (UX spec 7)", () => {
     );
     expect(screen.getByRole("alert").textContent).toContain("Reference: abc123");
   });
+
+  it("formats numbers with their units and names the settings version", () => {
+    const result = envelope([BIN_A], 1);
+    const priced = {
+      ...result,
+      columns: [
+        ...result.columns,
+        { key: "stock_value", label: "Stock value", type: "number" as const, unit: "LKR" },
+      ],
+      rows: [{ ...result.rows[0], stock_value: "12500.00" }],
+      evidence: { ...result.evidence, settings_version_no: 2 },
+    };
+    const { container } = render(
+      <AnswerCard
+        answer={answer({ results: [priced] })}
+        siteId="s"
+        active={false}
+        onShowOnMap={noop}
+        onSuggestion={noop}
+      />,
+    );
+    expect(screen.getByText("Stock value (LKR)")).toBeTruthy();
+    expect(screen.getByText("12,500")).toBeTruthy();
+    expect(container.textContent).toContain("Settings version 2.");
+  });
 });

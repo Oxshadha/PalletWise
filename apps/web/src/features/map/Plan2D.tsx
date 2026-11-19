@@ -20,6 +20,7 @@ interface Props {
   layout: Layout;
   states: Map<string, BinState>;
   highlights: Highlight[];
+  zoneHighlights: Highlight[];
   selectedBinId: string | null;
   focus: Bounds | null;
   onSelect: (binId: string) => void;
@@ -53,7 +54,16 @@ function zoomed(view: View, factor: number, maxWidth: number): View {
 }
 
 /** Top-down plan in metres. Bins stacked in one rack bay share a footprint: one cell per footprint. */
-export function Plan2D({ layout, states, highlights, selectedBinId, focus, onSelect, ref }: Props) {
+export function Plan2D({
+  layout,
+  states,
+  highlights,
+  zoneHighlights,
+  selectedBinId,
+  focus,
+  onSelect,
+  ref,
+}: Props) {
   const site = siteBounds(layout);
   // The fitted view frames the highlights (or the site). Pan and zoom by the user apply on top of
   // it until the framing changes, for example when a new answer arrives.
@@ -137,6 +147,13 @@ export function Plan2D({ layout, states, highlights, selectedBinId, focus, onSel
         <pattern id="pw-empty-pattern" width="0.6" height="0.6" patternUnits="userSpaceOnUse">
           <path d="M0 0.6 L0.6 0" className="pw-plan-hatch" />
         </pattern>
+        {/* Base states (UX spec 5): low stock hatched, over capacity cross hatched. */}
+        <pattern id="pw-low-pattern" width="0.6" height="0.6" patternUnits="userSpaceOnUse">
+          <path d="M0 0.6 L0.6 0" className="pw-plan-hatch-low" />
+        </pattern>
+        <pattern id="pw-over-pattern" width="0.6" height="0.6" patternUnits="userSpaceOnUse">
+          <path d="M0 0.6 L0.6 0 M0 0 L0.6 0.6" className="pw-plan-hatch-over" />
+        </pattern>
       </defs>
       <rect x={0} y={0} width={site.maxX} height={site.maxY} className="pw-plan-floor" />
       {layout.zones.map((zone) => (
@@ -160,6 +177,8 @@ export function Plan2D({ layout, states, highlights, selectedBinId, focus, onSel
         const base = stack[0];
         if (!base) return null;
         const empty = stack.every((b) => states.get(b.id) === "EMPTY");
+        const over = stack.some((b) => states.get(b.id) === "OVER_CAPACITY");
+        const low = !over && stack.some((b) => states.get(b.id) === "LOW_STOCK");
         const highlight = stack
           .map((b) => highlightOf.get(b.id))
           .filter((h): h is Highlight => h !== undefined)
@@ -167,7 +186,9 @@ export function Plan2D({ layout, states, highlights, selectedBinId, focus, onSel
         const selected = stack.some((b) => b.id === selectedBinId);
         const classes = [
           "pw-plan-bin",
-          empty ? "is-empty" : "",
+          empty && !low ? "is-empty" : "",
+          low ? "is-low-stock" : "",
+          over ? "is-over-capacity" : "",
           highlight ? `is-${highlight.severity}` : "",
           selected ? "is-selected" : "",
         ];
@@ -183,6 +204,24 @@ export function Plan2D({ layout, states, highlights, selectedBinId, focus, onSel
               onSelect((stack.find((b) => highlightOf.has(b.id)) ?? base).id);
             }}
           />
+        );
+      })}
+      {/* Zone highlights: the zone outline in the highlight's severity, with its code. */}
+      {zoneHighlights.map((highlight) => {
+        const zone = layout.zones.find((z) => z.id === highlight.target_id);
+        const first = zone?.outline[0];
+        if (!zone || !first) return null;
+        return (
+          <g
+            key={highlight.target_id}
+            className={`pw-plan-zone-mark is-${highlight.severity}`}
+            pointerEvents="none"
+          >
+            <polygon points={zone.outline.map(([x, y]) => `${String(x)},${String(y)}`).join(" ")} />
+            <text x={first[0]} y={first[1] - 1.8} fontSize={PLAN_LABEL_METRES}>
+              Zone {zone.code}
+            </text>
+          </g>
         );
       })}
       {/* A ring and the code at each highlighted location: visible at any zoom level. */}

@@ -133,3 +133,31 @@ def test_another_tenant_sees_none_of_the_sites_rules(capacity_site: FixtureSite,
     other.site = capacity_site.site  # ask about a site of another tenant
     with pytest.raises(psycopg.errors.ObjectNotInPrerequisiteState):
         other.rows("zone_summary", other.settings(), as_of=capacity_site.as_of())
+
+
+# ---------------------------------------------------------------- map states (ux-screens 5)
+
+
+def test_map_states_come_from_the_same_rules_as_the_tools(connect_as: Connect) -> None:
+    """One definition everywhere (semantic spec 10): the map's low stock and over capacity bins
+    are exactly the bins the rule functions return; over capacity wins over low stock."""
+    f = FixtureSite(connect_as)
+    pick = f.zone("P", zone_type="FAST_PICK", prime=True)
+    bulky = f.product("BULKY", volume_m3=0.05, weight_kg=0.5)
+    light = f.product("LIGHT")
+    low_bin, over_bin, both_bin, empty_bin, normal_bin = (f.bin(pick, f"P-0{i}") for i in range(1, 6))
+    f.stock(low_bin, light, 3)
+    f.policy(light, low_bin, 10, 50)  # 3 <= 10: low stock
+    f.stock(over_bin, bulky, 25)  # 125 percent: over capacity
+    f.stock(both_bin, bulky, 30)
+    f.policy(bulky, both_bin, 40, 80)  # over capacity and low stock: over capacity wins
+    f.stock(normal_bin, light, 20)
+    states = {r["bin_id"]: r["state"] for r in f.rows("bin_states")}
+    assert states == {
+        low_bin: "LOW_STOCK", over_bin: "OVER_CAPACITY", both_bin: "OVER_CAPACITY",
+        empty_bin: "EMPTY", normal_bin: "NORMAL",
+    }  # fmt: skip
+    low = {r["bin_id"] for r in f.rows("low_stock")}
+    over = {r["bin_id"] for r in f.rows("bin_utilization") if r["over_capacity"]}
+    assert {b for b, s in states.items() if s == "OVER_CAPACITY"} == over
+    assert {b for b, s in states.items() if s == "LOW_STOCK"} == low - over

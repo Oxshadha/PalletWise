@@ -283,6 +283,54 @@
   stroke-width: 0.55;
 }
 
+/* Base states (UX spec 5): fill and pattern, under any highlight outline. */
+.pw-plan-hatch-low {
+  stroke: var(--pw-color-status-warning);
+  stroke-width: 0.12;
+}
+
+.pw-plan-hatch-over {
+  stroke: var(--pw-color-status-critical);
+  stroke-width: 0.1;
+}
+
+.pw-plan-bin.is-low-stock {
+  fill: url(#pw-low-pattern);
+  stroke: var(--pw-color-status-warning);
+}
+
+.pw-plan-bin.is-over-capacity {
+  fill: url(#pw-over-pattern);
+  stroke: var(--pw-color-status-critical);
+}
+
+/* Zone highlights: the zone's outline in the highlight's severity. */
+.pw-plan-zone-mark polygon {
+  fill: none;
+  stroke-width: 0.45;
+}
+
+.pw-plan-zone-mark text {
+  font-weight: var(--pw-font-weight-heading);
+  fill: var(--pw-color-text-primary);
+  paint-order: stroke;
+  stroke: var(--pw-color-surface);
+  stroke-width: 0.3;
+}
+
+.pw-plan-zone-mark.is-info polygon {
+  stroke: var(--pw-color-status-info);
+}
+
+.pw-plan-zone-mark.is-warning polygon {
+  stroke: var(--pw-color-status-warning);
+}
+
+.pw-plan-zone-mark.is-critical polygon {
+  stroke: var(--pw-color-status-critical);
+  stroke-width: 0.7;
+}
+
 .pw-plan-bin.is-selected {
   stroke: var(--pw-color-focus-ring);
   stroke-width: 0.25;
@@ -383,6 +431,26 @@
     var(--pw-color-text-muted) 3px 4px
   );
   border-style: dashed;
+}
+
+.pw-swatch.is-low-stock {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--pw-color-surface) 0 3px,
+    var(--pw-color-status-warning) 3px 5px
+  );
+  border-color: var(--pw-color-status-warning);
+}
+
+.pw-swatch.is-over-capacity {
+  background:
+    repeating-linear-gradient(45deg, transparent 0 3px, var(--pw-color-status-critical) 3px 4px),
+    repeating-linear-gradient(
+      -45deg,
+      var(--pw-color-surface) 0 3px,
+      var(--pw-color-status-critical) 3px 4px
+    );
+  border-color: var(--pw-color-status-critical);
 }
 
 .pw-swatch.is-info {

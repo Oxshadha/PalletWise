@@ -517,7 +517,9 @@ def test_map_state_comes_from_the_semantic_layer(env: Env) -> None:
              SELECT 1 FROM pw.inventory_balance ib WHERE ib.bin_id = b.id AND ib.on_hand > 0)""",
         (env.site.site,),
     ).fetchall()
-    assert {b["bin_id"] for b in state["bins"] if b["state"] == "EMPTY"} == {str(r[0]) for r in empty}
+    # An empty pick bin below its policy minimum shows as low stock, which takes precedence (ux-screens 5).
+    low = {b["bin_id"] for b in state["bins"] if b["state"] == "LOW_STOCK"}
+    assert {b["bin_id"] for b in state["bins"] if b["state"] == "EMPTY"} == {str(r[0]) for r in empty} - low
     clock = env.db.execute(
         "SELECT sim_time FROM pw.site_clock WHERE site_id = %s", (env.site.site,)
     ).fetchone()

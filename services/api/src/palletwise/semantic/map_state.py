@@ -11,7 +11,7 @@ from palletwise.semantic.locations import read_moment
 @dataclass(frozen=True, slots=True)
 class BinState:
     bin_id: UUID
-    state: str  # NORMAL or EMPTY in Slice 1
+    state: str  # NORMAL, EMPTY, LOW_STOCK or OVER_CAPACITY (ux-screens 5)
     on_hand: int
 
 
@@ -26,7 +26,10 @@ class MapState:
 def map_state(conn: Connection, site: UUID) -> MapState:
     moment = read_moment(conn, site)
     rows = query(
-        conn, "bin_states", "SELECT bin_id, state, on_hand FROM sem.bin_states(%s, %s)", (site, moment.as_of)
+        conn,
+        "bin_states",
+        "SELECT bin_id, state, on_hand FROM sem.bin_states(%s, %s, %s)",
+        (site, moment.as_of, moment.settings_version_id),
     ).fetchall()
     evidence = moment.evidence(("MASTER", "MOVEMENTS"), ())
     return MapState(moment.as_of, moment.time_zone, evidence.data_as_of, [BinState(*r) for r in rows])

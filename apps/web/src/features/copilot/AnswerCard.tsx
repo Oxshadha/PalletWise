@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { type ResultEnvelope, sendFeedback } from "../../shared/api/client";
 import type { Suggestion } from "../../shared/api/runStream";
-import { formatSiteTime } from "../../shared/format";
+import { formatNumber, formatSiteTime } from "../../shared/format";
 import { type Answer, highlightCount } from "../../shared/workspace/workspace";
 
 const TABLE_ROWS = 10;
@@ -18,8 +18,17 @@ function cell(value: unknown, type: string, timeZone: string): string {
   if (value === null || value === undefined) return "";
   if (type === "datetime") return typeof value === "string" ? formatSiteTime(value, timeZone) : "";
   if (type === "boolean") return value === true ? "Yes" : "No";
+  if (type === "integer" || type === "number") return formatNumber(value);
   if (typeof value === "string" || typeof value === "number") return String(value);
   return JSON.stringify(value);
+}
+
+/** Units worth naming in a header; plain counts ("units") need no label. */
+const SHOWN_UNITS = new Set(["LKR", "%", "percent", "hours", "days", "operating days"]);
+
+function header(label: string, unit: string | null | undefined): string {
+  if (!unit || !SHOWN_UNITS.has(unit)) return label;
+  return `${label} (${unit === "percent" ? "%" : unit})`;
 }
 
 function ResultTable({ result }: { result: ResultEnvelope }) {
@@ -40,7 +49,7 @@ function ResultTable({ result }: { result: ResultEnvelope }) {
                 scope="col"
                 className={c.type === "integer" || c.type === "number" ? "pw-num" : ""}
               >
-                {c.label}
+                {header(c.label, c.unit)}
               </th>
             ))}
           </tr>
@@ -205,7 +214,9 @@ export function AnswerCard({
         )}
         {asOf && first && !answer.historical && (
           <p className="pw-muted pw-freshness">
-            Data as of {formatSiteTime(asOf, first.evidence.time_zone)}
+            Data as of {formatSiteTime(asOf, first.evidence.time_zone)}.
+            {first.evidence.settings_version_no != null &&
+              ` Settings version ${String(first.evidence.settings_version_no)}.`}
           </p>
         )}
         {answer.suggestions.length > 0 && !streaming && (

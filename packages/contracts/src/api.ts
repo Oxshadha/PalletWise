@@ -317,7 +317,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "NORMAL" | "EMPTY";
+            state: "NORMAL" | "EMPTY" | "LOW_STOCK" | "OVER_CAPACITY";
         };
         /** Column */
         Column: {
@@ -405,6 +405,8 @@ export interface components {
             how_computed: string[];
             /** Settings Version Id */
             settings_version_id: string | null;
+            /** Settings Version No */
+            settings_version_no?: number | null;
             /** Time Zone */
             time_zone: string;
         };

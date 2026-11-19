@@ -80,6 +80,7 @@ class Evidence(Frozen):
     time_zone: str
     # The settings version in effect for the whole answer (semantic spec 2, Slice 2 acceptance).
     settings_version_id: UUID | None
+    settings_version_no: int | None = None  # the same version as people read it ("settings v2")
     data_as_of: datetime | None  # the oldest data_as_of among the streams used
     freshness: tuple[StreamFreshness, ...]
     how_computed: tuple[str, ...]
