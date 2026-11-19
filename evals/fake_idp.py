@@ -21,7 +21,7 @@ from palletwise.auth.crypto import pkce_challenge
 ISSUER = "http://idp.test/realms/palletwise"
 ORIGIN = "https://testserver"
 CLIENT_ID = "palletwise-bff"
-CLIENT_SECRET = "test-client-secret"
+CLIENT_SECRET = "test-client-secret"  # noqa: S105 - the fake provider's own secret, harness only
 SIGNING_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
 

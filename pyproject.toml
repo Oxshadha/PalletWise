@@ -25,7 +25,7 @@ dev = [
 [tool.ruff]
 line-length = 110
 target-version = "py313"
-src = ["services/api/src", "services/simulator/src", "tests"]
+src = ["services/api/src", "services/simulator/src", "tests", "evals"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "T20", "SIM", "RUF", "DTZ", "TID"]
@@ -33,6 +33,8 @@ ignore = ["S101"]  # assert is used in tests
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S", "DTZ"]
+"evals/__main__.py" = ["T201"]  # a command-line tool reports on stdout
+"evals/environment.py" = ["S106"]  # a throwaway evaluation database with a fixed test password
 "db/migrations/**" = ["TID251"]  # database code: executable SQL is allowed here (baseline 5.1)
 
 # Business time rule (engineering baseline 4.1): domain packages never read the wall clock.
@@ -49,6 +51,7 @@ reportMissingTypeStubs = false
 # ---------------------------------------------------------------- pytest
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = ["integration: needs Docker (Testcontainers PostgreSQL)"]
 addopts = "-ra"
 
@@ -103,3 +106,6 @@ source_modules = [
   "palletwise.settings",
 ]
 forbidden_modules = ["sqlalchemy", "psycopg", "psycopg_pool"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["palletwise", "pw_simulator", "evals"]

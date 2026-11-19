@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+import httpx
 import pytest
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
@@ -145,7 +146,7 @@ def tool_then_say(
     return FunctionModel(fn)
 
 
-def request(question: str, suggestion: Suggestion | None = None) -> RunRequest:
+def request(question: str, suggestion: Suggestion | None = None, fallback: str | None = None) -> RunRequest:
     run = RunContext(
         run_id=uuid4(),
         trace_id="ab" * 16,
@@ -155,7 +156,7 @@ def request(question: str, suggestion: Suggestion | None = None) -> RunRequest:
         sites=(uuid4(),),
         site=uuid4(),
     )
-    agent = AgentProfile("copilot", "1", "gemini-flash", None, "system.v1", 5)
+    agent = AgentProfile("copilot", "1", "gemini-flash", fallback, "system.v1", 5)
     return RunRequest(question=question, run=run, agent=agent, suggestion=suggestion)
 
 
@@ -165,12 +166,13 @@ def run(
     gateway: FakeGateway | None = None,
     meter: FakeMeter | None = None,
     suggestion: Suggestion | None = None,
+    fallback: str | None = None,
 ) -> tuple[list[RunEvent], RunState, FakeGateway, FakeMeter]:
     gateway, meter, state = gateway or FakeGateway(), meter or FakeMeter(), RunState()
     runtime = CopilotRuntime(v1_tools(), gateway, provider, run_timeout=10)
 
     async def collect() -> list[RunEvent]:
-        return [e async for e in runtime.run(request(question, suggestion), meter, state)]
+        return [e async for e in runtime.run(request(question, suggestion, fallback), meter, state)]
 
     return asyncio.run(collect()), state, gateway, meter
 
@@ -380,3 +382,31 @@ def test_reservations_cover_the_whole_output_cap() -> None:
         meter=meter,
     )
     assert seen and all(estimate > 400 for estimate in seen)  # input estimate plus the 400 token cap
+
+
+def test_a_primary_timeout_moves_to_the_registry_fallback_model() -> None:
+    def timed_out(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        raise httpx.ReadTimeout("primary too slow")
+
+    provider = FakeProvider(
+        gemini_flash=FunctionModel(timed_out),
+        gemini_flash_fallback=tool_then_say(
+            "SKU-102 is in A8-01-02 with 7 units and in B1-02-02 with 1 unit."
+        ),
+    )
+    _, state, gateway, meter = run("Which bins hold the mouse?", provider, fallback="gemini-flash-fallback")
+    assert state.outcome == "ANSWER" and state.error_code is None
+    assert gateway.calls == [("find_product_locations", {"sku": "SKU-102"})]
+    used = [(c.model, c.outcome) for c in meter.settled]
+    assert used[0] == ("gemini-flash", "ERROR") and ("gemini-flash-fallback", "OK") in used
+    assert meter.reserved == 0
+
+
+def test_a_bug_is_not_retried_on_the_fallback_model() -> None:
+    def broken(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        raise RuntimeError("not a provider failure")
+
+    provider = FakeProvider(gemini_flash=FunctionModel(broken), gemini_flash_fallback=say("never used"))
+    _, state, _, meter = run("Which bins hold the mouse?", provider, fallback="gemini-flash-fallback")
+    assert state.outcome == "DECLINE" and state.error_code == "MODEL_UNAVAILABLE"
+    assert {c.model for c in meter.settled} == {"gemini-flash"}

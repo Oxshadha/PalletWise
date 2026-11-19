@@ -138,6 +138,8 @@ def test_every_new_tenant_gets_an_active_copilot(gov: Gov) -> None:
     agent = AgentRegistry(role_pool("PW_APP")).load(gov.tenant, "copilot")
     assert agent is not None and agent.active
     assert agent.allowed_scopes == ("inventory.read", "orders.read", "proposal.create")
+    # Flash-Lite words path A answers; the tool-using fallback is the full Flash model.
+    assert (agent.primary_model, agent.fallback_model) == ("gemini-flash", "gemini-flash-fallback")
 
 
 def test_registry_rows_are_tenant_isolated(gov: Gov, connect_as: Connect) -> None:

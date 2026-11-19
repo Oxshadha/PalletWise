@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 COMPOSE := docker compose --env-file infra/images.env --env-file .env -f infra/compose.yaml
 
-.PHONY: up down logs ps reset-data lint lint-py lint-web test test-unit test-integration test-policy contracts golden check-env
+.PHONY: up down logs ps reset-data lint lint-py lint-web test test-unit test-integration test-policy evals evals-model contracts golden check-env
 
 check-env:
 	@test -f .env || { echo "Missing .env. Create it with: cp .env.example .env  (then replace every change-me value)"; exit 1; }
@@ -53,6 +53,17 @@ test-unit:
 
 test-integration:
 	uv run pytest tests/integration -q
+
+# Deterministic eval gate (evals spec 5): no model, no credentials; blocks every merge.
+evals:
+	uv run python -m evals --level deterministic
+
+# Model eval gate: three runs per case on the real model. Reads GCP_SA_FILE and GCP_PROJECT_ID
+# from .env; without them it writes a pending report and exits 3 (never a silent pass).
+evals-model:
+	@sa=$$(grep -E '^GCP_SA_FILE=' .env 2>/dev/null | cut -d= -f2-); \
+	project=$$(grep -E '^GCP_PROJECT_ID=' .env 2>/dev/null | cut -d= -f2-); \
+	PW_LLM_CREDENTIALS_FILE="$$sa" PW_LLM_PROJECT="$$project" uv run python -m evals --level model
 
 # OPA policy tests with the pinned OPA image (CI uses the setup-opa action).
 test-policy:

@@ -1,0 +1,8 @@
+{
+ "ref": "find_product_locations:SKU-233",
+ "dataset_version": "sim-v1-seed42-14d",
+ "locations": [
+  "B1-01-04",
+  "B10-01-01"
+ ]
+}

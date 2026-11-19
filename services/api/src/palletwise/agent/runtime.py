@@ -13,10 +13,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
+import httpx
 from pydantic_ai import Agent, Tool, UsageLimits
-from pydantic_ai.exceptions import UsageLimitExceeded
+from pydantic_ai.exceptions import ModelAPIError, UsageLimitExceeded
 from pydantic_ai.messages import ModelMessage, ModelResponse
-from pydantic_ai.models import ModelRequestParameters
+from pydantic_ai.models import Model, ModelRequestParameters
+from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
 
@@ -368,6 +370,26 @@ class CopilotRuntime:
 
     # ------------------------------------------------------------ path C
 
+    def _agent_model(
+        self, request: RunRequest, primary: ResolvedModel, meter: ModelMeter, state: RunState
+    ) -> Model:
+        """The primary model, then the registry's fallback model when the provider fails.
+
+        Provider errors and transport errors (timeouts, lost connections) move to the fallback.
+        A spent budget or the step limit never does: those stop the run.
+        """
+        model: Model = MeteredModel(primary, meter, "AGENT", state)
+        fallback = (
+            self._provider.model(request.agent.fallback_model) if request.agent.fallback_model else None
+        )
+        if fallback is None:
+            return model
+        return FallbackModel(
+            model,
+            MeteredModel(fallback, meter, "AGENT", state),
+            fallback_on=(ModelAPIError, httpx.TransportError),
+        )
+
     async def _model_path(
         self,
         request: RunRequest,
@@ -391,7 +413,7 @@ class CopilotRuntime:
 
         tools = [make_tool(t.name, t.description, t.input_model.model_json_schema()) for t in self._registry]
         agent = Agent(
-            MeteredModel(primary, meter, "AGENT", state),
+            self._agent_model(request, primary, meter, state),
             instructions=self.system_prompt(request.agent.prompt_version),
             tools=tools,
             model_settings=AGENT_SETTINGS,

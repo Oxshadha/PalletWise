@@ -20,12 +20,12 @@ from uuid import UUID, uuid4
 import httpx
 import psycopg
 import pytest
-from fake_idp import CLIENT_ID, CLIENT_SECRET, ISSUER, SIGNING_KEY, FakeIdp
 from fastapi.testclient import TestClient
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from support import load_site, provision_site
 
+from evals.fake_idp import CLIENT_ID, CLIENT_SECRET, ISSUER, SIGNING_KEY, FakeIdp
 from palletwise.agent.runtime import BUDGET_TEXT, CopilotRuntime
 from palletwise.api import copilot, sites
 from palletwise.api.app import create_app

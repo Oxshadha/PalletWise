@@ -17,10 +17,10 @@ from uuid import UUID, uuid4
 import httpx
 import psycopg
 import pytest
-from fake_idp import CLIENT_ID, CLIENT_SECRET, ISSUER, SIGNING_KEY, FakeIdp
 from fastapi.testclient import TestClient
 from support import provision_site
 
+from evals.fake_idp import CLIENT_ID, CLIENT_SECRET, ISSUER, SIGNING_KEY, FakeIdp
 from palletwise.api.app import create_app
 from palletwise.api.security import LOGIN_COOKIE, SESSION_COOKIE
 from palletwise.auth.crypto import KeyRing, token_hash
