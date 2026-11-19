@@ -150,8 +150,9 @@ class TelemetrySettings(BaseSettings):
     trace_content: bool = Field(default=False, validation_alias="PW_TRACE_CONTENT")
     # Salt for masking personal data in exported telemetry. A secret; required in production.
     mask_salt: str | None = None
-    # Share of non-copilot root traces kept; copilot runs are always kept.
-    sample_ratio: float = Field(default=0.1, ge=0.0, le=1.0)
+    # Share of non-copilot root traces kept; copilot runs are always kept. Every trace in v1
+    # (evals spec 10): a decision at trace start cannot know a request will fail.
+    sample_ratio: float = Field(default=1.0, ge=0.0, le=1.0)
     # Any OTLP/HTTP traces endpoint, for example a collector.
     otlp_endpoint: str | None = None
     # Langfuse via its OTLP endpoint, when both keys are set.

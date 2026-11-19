@@ -145,6 +145,7 @@ SPEC_METRICS = {
     "pw_ingest_records_total": ("record_type",),
     "pw_ingest_lag_seconds": (),
     "pw_db_pool_connections": ("role", "state"),
+    "pw_telemetry_export_failures_total": ("exporter",),
 }
 
 
@@ -183,3 +184,23 @@ def test_worker_health_ports_serve_metrics() -> None:
         assert response.status == 200 and "pw_tool_calls_total" in body
     finally:
         server.shutdown()
+
+
+def test_a_failing_exporter_is_counted_not_raised() -> None:
+    from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+
+    class Down(SpanExporter):
+        def export(self, spans: Any) -> SpanExportResult:
+            raise ConnectionError("collector unreachable")
+
+    before = metrics.export_failures.labels(exporter="Down")._value.get()  # pyright: ignore[reportPrivateUsage]
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(SanitizingExporter(Down(), Masker(b"s"), content=False)))
+    with provider.get_tracer("t").start_as_current_span("tool.execute"):
+        pass
+    after = metrics.export_failures.labels(exporter="Down")._value.get()  # pyright: ignore[reportPrivateUsage]
+    assert after == before + 1
+
+
+def test_every_trace_is_kept_by_default() -> None:
+    assert TelemetrySettings().sample_ratio == 1.0

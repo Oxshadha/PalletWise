@@ -166,7 +166,15 @@ class SanitizingExporter(SpanExporter):
         self._content = content
 
     def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
-        return self._inner.export([sanitize(s, self._masker, content=self._content) for s in spans])
+        from palletwise.telemetry import metrics
+
+        try:
+            result = self._inner.export([sanitize(s, self._masker, content=self._content) for s in spans])
+        except Exception:
+            result = SpanExportResult.FAILURE
+        if result is not SpanExportResult.SUCCESS:
+            metrics.export_failures.labels(exporter=type(self._inner).__name__).inc()
+        return result
 
     def shutdown(self) -> None:
         self._inner.shutdown()

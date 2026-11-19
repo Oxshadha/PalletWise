@@ -44,6 +44,9 @@ policy_denials = Counter("pw_policy_denials", "Policy denials", ["reason"], regi
 guardrail_triggers = Counter("pw_guardrail_triggers", "Guardrail triggers", ["kind"], registry=REGISTRY)
 feedback = Counter("pw_feedback", "Answer feedback", ["rating"], registry=REGISTRY)
 ingest_records = Counter("pw_ingest_records", "Records ingested", ["record_type"], registry=REGISTRY)
+export_failures = Counter(
+    "pw_telemetry_export_failures", "Span export batches that failed", ["exporter"], registry=REGISTRY
+)
 ingest_lag = Gauge(
     "pw_ingest_lag_seconds",
     "Newest source record time minus the site clock; positive means ingestion is behind",
