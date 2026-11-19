@@ -26,7 +26,14 @@ export type RunEvent = Base &
     | { type: "TEXT_MESSAGE_CONTENT"; message_id: string; delta: string }
     | { type: "TEXT_MESSAGE_END"; message_id: string }
     | { type: "pw.suggestions"; suggestions: Suggestion[] }
-    | { type: "RUN_FINISHED"; run_id: string; trace_id: string; path: string; outcome: string }
+    | {
+        type: "RUN_FINISHED";
+        run_id: string;
+        trace_id: string;
+        path: string;
+        outcome: string;
+        text_source?: "model" | "template" | "message" | null;
+      }
     | { type: "RUN_ERROR"; code: string; message: string; trace_id: string }
   );
 

@@ -1,4 +1,7 @@
-"""CLI: python -m evals --set core --set adversarial --level deterministic|model [--write-golden]."""
+"""CLI: python -m evals --set core --set adversarial --level deterministic|model [--write-golden].
+
+Model level: --config NAME runs one configuration; --compare A,B runs several on the same cases,
+interleaved (ADR 0001). --compare baseline,baseline is an A/A run that measures run-to-run noise."""
 
 import argparse
 import logging
@@ -6,8 +9,18 @@ import sys
 from pathlib import Path
 
 from evals.cases import load_set
+from evals.configs import named
 from evals.environment import standalone
-from evals.runner import GATES, REPORTS_DIR, deterministic, model, score, write_golden, write_report
+from evals.runner import (
+    REPORTS_DIR,
+    ConfigRun,
+    compare,
+    config_names,
+    deterministic,
+    write_golden,
+    write_model_report,
+    write_report,
+)
 from palletwise.llm import DisabledProvider, build_provider
 from palletwise.settings import LlmSettings
 
@@ -19,6 +32,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--write-golden", action="store_true")
     parser.add_argument("--report-dir", type=Path, default=REPORTS_DIR)
+    parser.add_argument("--config", default="baseline", help="model level: one named configuration")
+    parser.add_argument("--compare", default=None, help="model level: named configurations, comma separated")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
 
@@ -55,23 +70,23 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0 if not failed else 1
         llm = LlmSettings()
-        results = model(env, cases, provider, runs=args.runs)
-        metrics = score(results)
-        gated = {k: v for k, v in metrics.items() if k in GATES}
-        failing = [k for k, v in gated.items() if v is not None and v < GATES[k]]
-        status = "pass" if not failing else f"fail: {', '.join(failing)}"
-        paths = write_report(
-            "model",
+        configs = named(args.compare.split(",") if args.compare else [args.config])
+        compared = compare(env, cases, provider, configs, runs=args.runs)
+        entries = [
+            ConfigRun(name, config.as_json(), results)
+            for (name, results), config in zip(compared, configs, strict=True)
+        ]
+        paths = write_model_report(
             hashes,
             env,
-            results,
-            status=status,
-            metrics=metrics,
+            entries,
             model_info={"models": llm.models, "location": llm.location, "runs": args.runs},
             directory=args.report_dir,
         )
-        print(f"model gate: {status.upper()}. Report: {paths[1]}")
-        return 0 if not failing else 1
+        for name, entry in zip(config_names(configs), entries, strict=True):
+            print(f"model gate [{name}]: {entry.status.upper()}")
+        print(f"Report: {paths[1]}")
+        return 0 if all(e.status.startswith("pass") for e in entries) else 1
 
 
 if __name__ == "__main__":

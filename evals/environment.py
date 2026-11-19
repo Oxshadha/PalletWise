@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 
 from evals.fake_idp import CLIENT_ID, CLIENT_SECRET, ISSUER, ORIGIN, SIGNING_KEY, FakeIdp
 from evals.reference import create_eval_role
-from palletwise.agent.runtime import CopilotRuntime
+from palletwise.agent.runtime import CopilotRuntime, RuntimeConfig
 from palletwise.api import copilot, sites
 from palletwise.api.app import create_app
 from palletwise.auth.crypto import KeyRing
@@ -76,7 +76,9 @@ class EvalEnv:
         )
 
     @contextmanager
-    def api(self, provider: LLMProvider, run_timeout: float = 45.0) -> Generator["ApiClient"]:
+    def api(
+        self, provider: LLMProvider, run_timeout: float = 45.0, config: RuntimeConfig | None = None
+    ) -> Generator["ApiClient"]:
         idp = FakeIdp()
         oidc = OidcClient(
             OidcSettings(
@@ -94,7 +96,7 @@ class EvalEnv:
         auth = AuthService(oidc, KeyRing(sessions.keys), sessions, SessionStore(app_pool), AuditLog(app_pool))
         executor = self.executor()
         services = copilot.CopilotServices(
-            runtime=CopilotRuntime(v1_tools(), executor, provider, run_timeout=run_timeout),
+            runtime=CopilotRuntime(v1_tools(), executor, provider, run_timeout=run_timeout, config=config),
             agents=AgentRegistry(app_pool),
             conversations=ConversationStore(role_pool("PW_MEMORY")),
             ledger=UsageLedger(app_pool),
@@ -211,8 +213,9 @@ class ApiClient:
                 if not line.startswith("data:"):
                     continue
                 event = json.loads(line[5:])
-                events.append(event)
                 now = time.perf_counter() - started
+                event["_t"] = round(now, 4)  # arrival time from the question being sent (ADR 0001)
+                events.append(event)
                 if event["type"] == "pw.result" and first_result is None:
                     first_result = now
                 if event["type"] == "TEXT_MESSAGE_CONTENT" and first_text is None:

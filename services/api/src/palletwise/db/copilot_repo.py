@@ -287,7 +287,9 @@ class UsageRecord:
     cached_tokens: int
     cost_estimated: Decimal
     latency_ms: int
-    outcome: str
+    outcome: str  # OK, ERROR, CANCELLED
+    stage: str  # TOOL_CHOICE, ANSWER_TEXT, WORDING, CLASSIFIER, UNKNOWN (ADR 0001)
+    usage_estimated: bool
 
     def as_json(self) -> dict[str, Any]:
         return {

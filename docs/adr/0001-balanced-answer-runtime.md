@@ -51,7 +51,7 @@ a regression in another.
 **Progress is not an answer.** The four latency milestones are measured independently: a progress
 event never counts as the headline, and the headline never counts as the complete answer.
 
-Definitions, measured from the moment the API accepts the run:
+Definitions, measured from the moment the client sends the question, so pre-checks (session, rate limit, data status, token exchange) count against every milestone:
 
 | Milestone | Event |
 |---|---|
@@ -137,6 +137,16 @@ Required facts become a hard gate at 100 percent, replacing "reported" in evals 
   the headline deadline (4 s). If the wording is ready first, it is shown directly and there is no
   replacement. A replacement happens at most once, as one short cross-fade (none with reduced
   motion), and only with wording that keeps the same facts, so it can rephrase but never contradict.
+
+### 7. Findings from building the measurement
+
+- **The fallback wrapper retries the primary on every request of a run.** When the primary hangs,
+  each model request of the answer (tool choice, then the answer text) waits for the primary's
+  timeout before the fallback runs, so one slow provider costs its timeout twice per answer. The
+  hedged calls of change 5 replace this wrapper on the tool-choice call; until then the measurement
+  shows it as estimated, timed-out calls of the primary model.
+- **The baseline sends no progress event**, so the first-progress gate fails on it by definition,
+  and a missing progress or headline counts as infinitely late in the p95.
 
 ## Consequences
 

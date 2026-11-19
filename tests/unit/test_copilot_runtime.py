@@ -14,12 +14,14 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from palletwise.agent.events import RunEvent
 from palletwise.agent.runtime import (
     BUDGET_TEXT,
+    DEFAULT_MAX_OUTPUT,
     NO_MODEL_TEXT,
     AgentProfile,
     CopilotRuntime,
     ModelCall,
     RunRequest,
     RunState,
+    RuntimeConfig,
 )
 from palletwise.agent.suggestions import Suggestion
 from palletwise.contracts.results import (
@@ -355,7 +357,11 @@ def test_cancelling_the_consumer_stops_the_model_call() -> None:
             await task
 
     asyncio.run(scenario())
-    assert meter.reserved == 0 and meter.settled and meter.settled[0].outcome == "ERROR"
+    assert meter.reserved == 0 and meter.settled
+    # Cancelled after it was sent: the provider may still bill it, so it carries the upper bound.
+    cancelled = meter.settled[0]
+    assert cancelled.outcome == "CANCELLED" and cancelled.usage_estimated
+    assert cancelled.input_tokens > 0 and cancelled.output_tokens == DEFAULT_MAX_OUTPUT
 
 
 def test_an_answer_cut_off_at_the_output_limit_is_never_shown() -> None:
@@ -517,7 +523,7 @@ def test_a_reservation_is_released_even_if_cancelled_twice_and_the_loop_stops(yi
         # Return at once: asyncio.run cancels every task that has not started yet.
 
     asyncio.run(scenario())
-    assert meter.reserved == 0 and [c.outcome for c in meter.settled] == ["ERROR"]
+    assert meter.reserved == 0 and [c.outcome for c in meter.settled] == ["CANCELLED"]
 
 
 def test_the_model_is_told_counts_of_the_previous_result_never_its_identifiers() -> None:
@@ -550,3 +556,89 @@ def test_the_model_is_told_counts_of_the_previous_result_never_its_identifiers()
     text = " ".join(seen)
     assert "The previous answer listed 2 products, 1 location." in text
     assert all(str(i) not in text for i in (*products, bin_id, ws.run_id))
+
+
+# ---------------------------------------------------------------- ADR 0001 measurement
+
+
+def finished(events: list[RunEvent]) -> dict[str, Any]:
+    return next(e.data for e in events if e.type == "RUN_FINISHED")
+
+
+def test_agent_calls_are_recorded_as_tool_choice_then_answer_text() -> None:
+    events, state, _, meter = run(
+        "Which bins hold the wireless mouse?",
+        FakeProvider(gemini_flash=tool_then_say("SKU-102 is in A8-01-02 with 7 units.")),
+    )
+    assert [c.stage for c in meter.settled] == ["TOOL_CHOICE", "ANSWER_TEXT"]
+    assert state.text_source == "model" and finished(events)["text_source"] == "model"
+    assert not any(c.usage_estimated for c in meter.settled)
+
+
+def test_path_a_wording_is_recorded_as_wording() -> None:
+    events, _, _, meter = run(
+        "Where is SKU-102 stored?", FakeProvider(gemini_flash_lite=say("SKU-102 is in A8-01-02."))
+    )
+    assert [c.stage for c in meter.settled] == ["WORDING"]
+    assert finished(events)["text_source"] == "model"
+
+
+def test_a_template_answer_says_so() -> None:
+    events, state, _, meter = run(
+        "Which bins hold the wireless mouse?", FakeProvider(gemini_flash=tool_then_say("It has 99 units."))
+    )
+    assert state.text_source == "template" and finished(events)["text_source"] == "template"
+    # The ungrounded attempts still cost money and are recorded (ADR 0001 section 5).
+    assert [c.stage for c in meter.settled].count("ANSWER_TEXT") == 2
+
+
+def test_a_decline_message_is_not_model_or_template_text() -> None:
+    events, _, _, _ = run("What is the weather like?", FakeProvider())
+    assert finished(events)["text_source"] == "message"
+
+
+def test_a_timed_out_call_is_charged_the_upper_bound() -> None:
+    def timed_out(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        raise httpx.ReadTimeout("primary too slow")
+
+    provider = FakeProvider(
+        gemini_flash=FunctionModel(timed_out),
+        gemini_flash_fallback=tool_then_say("SKU-102 is in A8-01-02 with 7 units."),
+    )
+    _, _, _, meter = run("Which bins hold the mouse?", provider, fallback="gemini-flash-fallback")
+    first = meter.settled[0]
+    assert first.outcome == "ERROR" and first.usage_estimated
+    assert first.input_tokens > 0 and first.output_tokens == DEFAULT_MAX_OUTPUT
+    # The fallback wrapper tries the primary on every request: each timeout is an upper bound,
+    # and the fallback's answered calls carry the provider's own usage.
+    for c in meter.settled:
+        assert c.usage_estimated == (c.model == "gemini-flash")
+
+
+def test_a_rejected_request_records_no_tokens() -> None:
+    def rejected(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        raise RuntimeError("the provider refused the request")
+
+    _, _, _, meter = run("Which bins hold the mouse?", FakeProvider(gemini_flash=FunctionModel(rejected)))
+    refused = meter.settled[0]
+    assert refused.outcome == "ERROR" and not refused.usage_estimated
+    assert (refused.input_tokens, refused.output_tokens) == (0, 0)
+
+
+@pytest.mark.parametrize(
+    "choice",
+    [
+        {"wording_model": "gemini-flash-lite"},
+        {"hedge_after_s": 4.0},
+        {"parallel_tools": True},
+        {"headline_first": True},
+    ],
+)
+def test_a_runtime_choice_that_is_not_built_is_refused(choice: dict[str, Any]) -> None:
+    with pytest.raises(ValueError, match="not built yet"):
+        RuntimeConfig(name="candidate", **choice)
+
+
+def test_the_baseline_configuration_is_the_default() -> None:
+    runtime = CopilotRuntime(v1_tools(), FakeGateway(), FakeProvider(), run_timeout=10)
+    assert runtime.config == RuntimeConfig() and runtime.config.as_json()["name"] == "baseline"

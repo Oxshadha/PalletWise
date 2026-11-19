@@ -98,7 +98,7 @@ Each case in the model gate runs **3 times** (temperature as configured in the a
 | Injection resistance | Adversarial cases with no `gold.forbidden` effect and no followed instruction | 100 percent |
 | Grounding violations | Answers that failed numeric or entity grounding after the one allowed regeneration (agent spec 6.1) | 0 |
 | Facts | Required `gold.facts` present in the answer text, compared after normalizing case, spacing and number formatting; `ANSWER`, `NO_RESULTS` and `DECLINE` cases each against their own facts | 100 percent (ADR 0001) |
-| Latency | p50 and p95 of four independent milestones from run acceptance: first progress (`pw.status`), first map highlights (`pw.result` with highlights; answers without highlights excluded and counted), first headline (first `TEXT_MESSAGE_CONTENT`), complete answer (`RUN_FINISHED`); plus a stage breakdown per run | model path: 1 s, 3 s, 4 s, 8 s at p95; fast path: highlights 1 s, complete 3 s (NFR-PERF-02) |
+| Latency | p50 and p95 of four independent milestones from the client sending the question: first progress (`pw.status`; a run without one counts as infinitely late), first map highlights (`pw.result` with highlights; answers without highlights excluded and counted), first headline (first `TEXT_MESSAGE_CONTENT`), complete answer (`RUN_FINISHED`); plus a stage breakdown per run | model path: 1 s, 3 s, 4 s, 8 s at p95; fast path: highlights 1 s, complete 3 s (NFR-PERF-02) |
 | Cost | Per answer, the sum over every model call (tool choice, wording, regenerations, classifier, hedged, discarded and cancelled calls) of input, output and cached tokens at the price table; a call cancelled before usage is reported is charged an upper bound and marked estimated | p95 at most 0.003 USD (NFR-CST-03) |
 | Path mix | Share of answers on paths A, B, C and declines | reported |
 
@@ -112,6 +112,7 @@ Each case in the model gate runs **3 times** (temperature as configured in the a
 - The runner starts the API in-process against a seeded Testcontainers database (the same seed and dataset version as the golden files) and calls `POST /copilot/runs` as a test user, so the measured path is the real one.
 - Every run writes `docs/quality/eval-reports/<date>-<git sha>-<level>.json` and a Markdown summary, with: set hashes, dataset version, git sha, prompt version, model id and region, agent registry version, per-metric results, unstable cases and every failure with its trace id.
 - The same harness produces the model comparison report of NFR-QLT-03 (Gemini Flash candidates on the chosen Vertex region).
+- Runtime configurations (ADR 0001) are named in `evals/configs.py`; `--config NAME` runs one, `--compare A,B` runs several on the same cases, interleaved, alternating which goes first on each run, into one `<date>-<git sha>-compare-A-vs-B` report. `--compare baseline,baseline` is an A/A run that measures run-to-run noise, so a difference between configurations can be judged against it. Each run records its milestones, stage breakdown and every model call (stage, model, tokens, cost, outcome, disposition, estimated or reported usage) from `pw.model_usage`.
 - When Langfuse keys are present, runs are also sent as a Langfuse dataset run with one score per metric, so failures can be opened as traces.
 
 ## 8. From feedback to cases

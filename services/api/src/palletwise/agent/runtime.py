@@ -19,7 +19,7 @@ from typing import Any, Literal, Protocol
 import httpx
 from pydantic_ai import Agent, Tool, UsageLimits
 from pydantic_ai.exceptions import ModelAPIError, UsageLimitExceeded
-from pydantic_ai.messages import ModelMessage, ModelResponse
+from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.wrapper import WrapperModel
@@ -64,8 +64,13 @@ class BudgetExhausted(Exception):
 # ---------------------------------------------------------------- ports
 
 
+Stage = Literal["TOOL_CHOICE", "ANSWER_TEXT", "WORDING", "CLASSIFIER", "UNKNOWN"]
+
+
 @dataclass(frozen=True, slots=True)
 class ModelCall:
+    """One model request and what it cost (ADR 0001 section 5: every call of an answer counts)."""
+
     model: str
     region: str
     purpose: Literal["WORDING", "AGENT", "CLASSIFIER"]
@@ -73,7 +78,11 @@ class ModelCall:
     output_tokens: int
     cached_tokens: int
     latency_ms: int
-    outcome: Literal["OK", "ERROR"]
+    outcome: Literal["OK", "ERROR", "CANCELLED"]
+    stage: Stage = "UNKNOWN"
+    # True when the provider reported no usage and the tokens are the upper bound: the input
+    # estimate plus the full output cap. Cost is then overstated, never understated.
+    usage_estimated: bool = False
 
 
 class ModelMeter(Protocol):
@@ -106,6 +115,46 @@ class AgentProfile:
 
 
 @dataclass(frozen=True, slots=True)
+class RuntimeConfig:
+    """The runtime choices the evaluation compares (ADR 0001 section 3). The defaults are the
+    baseline: today's runtime. A choice is accepted here only once the runtime implements it, so a
+    comparison can never report a candidate that silently ran as the baseline."""
+
+    name: str = "baseline"
+    wording_model: str | None = None  # path C wording; None: the agent's own answer text
+    agent_thinking: Literal["low"] = "low"
+    hedge_after_s: float | None = None  # hedged tool-choice calls; None: off
+    parallel_tools: bool = False
+    headline_first: bool = False
+
+    def __post_init__(self) -> None:
+        unbuilt = [
+            name
+            for name, value in (
+                ("wording_model", self.wording_model),
+                ("hedge_after_s", self.hedge_after_s),
+                ("parallel_tools", self.parallel_tools or None),
+                ("headline_first", self.headline_first or None),
+            )
+            if value is not None
+        ]
+        if self.agent_thinking != "low":
+            unbuilt.append("agent_thinking")
+        if unbuilt:
+            raise ValueError(f"runtime choices not built yet: {', '.join(unbuilt)}")
+
+    def as_json(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "wording_model": self.wording_model,
+            "agent_thinking": self.agent_thinking,
+            "hedge_after_s": self.hedge_after_s,
+            "parallel_tools": self.parallel_tools,
+            "headline_first": self.headline_first,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class HistoryTurn:
     question: str
     answer: str | None
@@ -128,6 +177,9 @@ class RunState:
     path: Path_ | None = None
     outcome: CardOutcome | None = None
     answer_text: str | None = None
+    # Who wrote the answer text: the model, or a deterministic template (path B, a failed or
+    # ungrounded model answer, a spent budget), or a fixed message (declines, denials).
+    text_source: Literal["model", "template", "message"] | None = None
     results: list[tuple[str, ResultEnvelope]] = field(default_factory=lambda: [])
     suggestions: list[Suggestion] = field(default_factory=lambda: [])
     error_code: str | None = None
@@ -200,17 +252,24 @@ class MeteredModel(WrapperModel):
                 span.add_event("gen_ai.content.prompt", {"gen_ai.prompt": _last_prompt(messages)})
             try:
                 response = await super().request(messages, model_settings, model_request_parameters)
-            except BaseException:
-                span.set_attribute("pw.model.outcome", "ERROR")
+            except BaseException as exc:
+                failed = self._failed_call(exc, estimate - cap, cap, started)
+                span.set_attribute("pw.model.outcome", failed.outcome)
                 # Submitted to a thread at once and shielded: neither a second cancel nor the event
                 # loop shutting down can skip releasing the reservation.
-                failed = self._call(0, 0, 0, started, "ERROR")
                 await asyncio.shield(_in_thread(self._meter.settle, estimate, failed))
                 raise
             usage = response.usage
             self._state.input_tokens += usage.input_tokens
             self._state.output_tokens += usage.output_tokens
-            call = self._call(usage.input_tokens, usage.output_tokens, usage.cache_read_tokens, started, "OK")
+            call = self._call(
+                usage.input_tokens,
+                usage.output_tokens,
+                usage.cache_read_tokens,
+                started,
+                "OK",
+                stage=self._stage(response),
+            )
             cost = await asyncio.shield(_in_thread(self._meter.settle, estimate, call))
             span.set_attribute("pw.model.outcome", "OK")
             span.set_attribute("gen_ai.usage.input_tokens", usage.input_tokens)
@@ -227,9 +286,41 @@ class MeteredModel(WrapperModel):
                 span.add_event("gen_ai.content.completion", {"gen_ai.completion": _response_text(response)})
             return response
 
-    def _call(self, i: int, o: int, c: int, started: float, outcome: Literal["OK", "ERROR"]) -> ModelCall:
+    def _call(
+        self,
+        i: int,
+        o: int,
+        c: int,
+        started: float,
+        outcome: Literal["OK", "ERROR", "CANCELLED"],
+        *,
+        stage: Stage | None = None,
+        estimated: bool = False,
+    ) -> ModelCall:
         latency = round((clock.monotonic() - started) * 1000)
-        return ModelCall(self._resolved.name, self._resolved.region, self._purpose, i, o, c, latency, outcome)
+        return ModelCall(
+            self._resolved.name, self._resolved.region, self._purpose, i, o, c, latency, outcome,
+            stage or ("WORDING" if self._purpose == "WORDING" else "UNKNOWN"), estimated,
+        )  # fmt: skip
+
+    def _stage(self, response: ModelResponse) -> Stage:
+        if self._purpose == "WORDING":
+            return "WORDING"
+        return "TOOL_CHOICE" if any(isinstance(p, ToolCallPart) for p in response.parts) else "ANSWER_TEXT"
+
+    def _failed_call(self, exc: BaseException, input_estimate: int, cap: int, started: float) -> ModelCall:
+        """A call that ended without a usage report (ADR 0001 section 5).
+
+        Cancelled or timed out after it was sent, the provider may still have processed and billed
+        it, so it is charged the upper bound. An error response from the provider (a rejected
+        request) is not billed and records no tokens.
+        """
+        if isinstance(exc, asyncio.CancelledError | TimeoutError | httpx.TimeoutException):
+            outcome: Literal["ERROR", "CANCELLED"] = (
+                "CANCELLED" if isinstance(exc, asyncio.CancelledError) else "ERROR"
+            )
+            return self._call(input_estimate, cap, 0, started, outcome, estimated=True)
+        return self._call(0, 0, 0, started, "ERROR")
 
 
 def _last_prompt(messages: list[ModelMessage]) -> str:
@@ -303,8 +394,14 @@ def card_outcome(result: ResultEnvelope) -> CardOutcome:
 
 class CopilotRuntime:
     def __init__(
-        self, registry: ToolRegistry, gateway: ToolGateway, provider: LLMProvider, run_timeout: float
+        self,
+        registry: ToolRegistry,
+        gateway: ToolGateway,
+        provider: LLMProvider,
+        run_timeout: float,
+        config: RuntimeConfig | None = None,
     ) -> None:
+        self.config = config or RuntimeConfig()
         self._registry = registry
         self._gateway = gateway
         self._provider = provider
@@ -365,7 +462,8 @@ class CopilotRuntime:
                 await asyncio.gather(task, return_exceptions=True)
         if state.outcome != "ERROR":
             yield events.make("RUN_FINISHED", run_id=str(request.run.run_id), trace_id=request.run.trace_id,
-                              path=state.path, outcome=state.outcome)  # fmt: skip
+                              path=state.path, outcome=state.outcome,
+                              text_source=state.text_source)  # fmt: skip
 
     # ------------------------------------------------------------ routing
 
@@ -405,7 +503,8 @@ class CopilotRuntime:
             if text is None or state.budget_exhausted:
                 state.path = "B"
         await self._finish(state, events, queue, text or templates.template_answer(route.tool, result),
-                           card_outcome(result), route.tool, result)  # fmt: skip
+                           card_outcome(result), route.tool, result,
+                           source="model" if text else "template")  # fmt: skip
 
     async def _word(
         self,
@@ -527,17 +626,21 @@ class CopilotRuntime:
 
         last = state.results[-1] if state.results else None
         if text and last is not None:
-            await self._finish(state, events, queue, text, card_outcome(last[1]), last[0], last[1])
+            await self._finish(
+                state, events, queue, text, card_outcome(last[1]), last[0], last[1], source="model"
+            )
         elif last is not None:  # no usable model text: the template of the last result
             fallback = templates.template_answer(last[0], last[1])
             if state.budget_exhausted:
                 fallback = f"{fallback} {BUDGET_TEXT}"
-            await self._finish(state, events, queue, fallback, card_outcome(last[1]), last[0], last[1])
+            await self._finish(
+                state, events, queue, fallback, card_outcome(last[1]), last[0], last[1], source="template"
+            )
         elif failed and all(f.outcome is Outcome.DENIED for f in failed):
             await self._finish(state, events, queue, "You do not have permission for that request.", "DENIED",
                                None, None)  # fmt: skip
         elif text:  # the model answered without data, for example a greeting or a polite decline
-            await self._finish(state, events, queue, text, "DECLINE", None, None)
+            await self._finish(state, events, queue, text, "DECLINE", None, None, source="model")
         else:
             reason = BUDGET_TEXT if state.budget_exhausted else NO_MODEL_TEXT
             await self._finish(state, events, queue, reason, "DECLINE", None, None)
@@ -619,9 +722,11 @@ class CopilotRuntime:
         outcome: CardOutcome,
         tool: str | None,
         result: ResultEnvelope | None,
+        *,
+        source: Literal["model", "template", "message"] = "message",
     ) -> None:
         text = normalize_dashes(text)
-        state.answer_text, state.outcome = text, outcome
+        state.answer_text, state.outcome, state.text_source = text, outcome, source
         message_id = "answer"  # one answer message per run
         await queue.put(events.make("TEXT_MESSAGE_START", message_id=message_id, role="assistant"))
         await queue.put(events.make("TEXT_MESSAGE_CONTENT", message_id=message_id, delta=text))

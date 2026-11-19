@@ -199,6 +199,8 @@ class LedgerMeter:
                 cost_estimated=cost,
                 latency_ms=call.latency_ms,
                 outcome=call.outcome,
+                stage=call.stage,
+                usage_estimated=call.usage_estimated,
             ),
         )
         return cost
