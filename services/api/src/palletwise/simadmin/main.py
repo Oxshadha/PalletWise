@@ -32,7 +32,7 @@ from palletwise.settings import (
     SimulationSettings,
     SiteSettings,
 )
-from palletwise.telemetry.health import configure_logging, health_port, serve_health
+from palletwise.telemetry.health import health_port, serve_health, start_process
 
 log = logging.getLogger("palletwise.simadmin")
 
@@ -211,7 +211,7 @@ class SimAdmin:
 
 
 def main(argv: list[str] | None = None) -> int:
-    configure_logging()
+    start_process("palletwise-simadmin")
     parser = argparse.ArgumentParser(prog="palletwise-simadmin")
     parser.add_argument("command", nargs="?", default="serve", choices=["serve", "record-golden"])
     args = parser.parse_args(argv)

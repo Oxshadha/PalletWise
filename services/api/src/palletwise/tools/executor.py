@@ -22,11 +22,13 @@ from uuid import UUID
 from pydantic import BaseModel, ValidationError
 
 from palletwise import clock
+from palletwise.contracts.results import ResultEnvelope
 from palletwise.db.agent_repo import AgentRecord, AgentRegistry
 from palletwise.db.audit_repo import AuditEntry, AuditLog
 from palletwise.db.connection import Connection, Pool, tenant_session
 from palletwise.policy import Decision, PolicyAgent, PolicyClient, PolicyRequest, PolicyUser
-from palletwise.telemetry.tracing import tracer
+from palletwise.telemetry import metrics
+from palletwise.telemetry.tracing import record_policy_decision, tracer
 
 log = logging.getLogger(__name__)
 
@@ -155,9 +157,19 @@ class ToolExecutor:
 
     def execute(self, run: RunContext, name: str, arguments: Mapping[str, Any]) -> ToolCallResult:
         started = clock.monotonic()
-        with tracer.start_as_current_span("tool.execute", attributes={"pw.tool.name": name}) as span:
+        with tracer.start_as_current_span(
+            "tool.execute", attributes={"pw.tool.name": name, "pw.tool.layer": "semantic"}
+        ) as span:
             result, entry = self._execute(run, name, arguments, started)
             span.set_attribute("pw.tool.outcome", result.outcome.value)
+            output = result.output
+            if isinstance(output, ResultEnvelope):
+                span.set_attribute("pw.tool.row_count", output.row_count)
+                span.set_attribute("pw.tool.highlight_count", len(output.highlights))
+                if output.evidence.data_as_of is not None:
+                    span.set_attribute("pw.data_as_of", output.evidence.data_as_of.isoformat())
+        known = name if self._registry.get(name) is not None else "unknown"
+        metrics.tool_calls.labels(tool=known, outcome=result.outcome.value).inc()
         try:
             self._audit.append(run.tenant, entry)
         except Exception as exc:
@@ -248,11 +260,9 @@ class ToolExecutor:
             resource_site=str(run.site),
             agent=PolicyAgent(agent.id, agent.version, agent.status, agent.allowed_scopes),
         )
-        with tracer.start_as_current_span(
-            "policy.decision", attributes={"pw.policy.scope": spec.scope}
-        ) as span:
+        with tracer.start_as_current_span("policy.decision") as span:
             decision = self._policy.decide(request)
-            span.set_attribute("pw.policy.allow", decision.allow)
+            record_policy_decision(span, spec.name, spec.scope, decision.allow, decision.reasons)
         return decision
 
 

@@ -50,6 +50,8 @@ from palletwise.db.copilot_repo import (
     UsageRecord,
 )
 from palletwise.llm import estimated_cost
+from palletwise.telemetry import metrics
+from palletwise.telemetry.setup import user_hash
 from palletwise.telemetry.tracing import current_trace_id, tracer
 from palletwise.tools.executor import RunContext
 
@@ -163,7 +165,7 @@ class LedgerMeter:
             self.owner.tenant, self.agent.id, self.day, estimate, self.agent.daily_token_budget
         )
 
-    def settle(self, estimate: int, call: ModelCall) -> None:
+    def settle(self, estimate: int, call: ModelCall) -> Decimal:
         used = call.input_tokens + call.output_tokens
         self.ledger.settle(self.owner.tenant, self.agent.id, self.day, estimate, used)
         cost = estimated_cost(
@@ -188,6 +190,7 @@ class LedgerMeter:
                 outcome=call.outcome,
             ),
         )
+        return cost
 
 
 def _owner(principal: Principal, site_id: UUID) -> Owner | None:
@@ -319,7 +322,7 @@ async def start_run(body: RunIn, principal: CurrentPrincipal, svc: Services, aut
     meter = LedgerMeter(svc.ledger, owner, run_id, agent, day)
 
     channel: asyncio.Queue[RunEvent | None] = asyncio.Queue()
-    task = asyncio.create_task(_drive(svc, run_request, meter, owner, channel))
+    task = asyncio.create_task(_drive(svc, run_request, meter, owner, channel, conversation_id))
     svc.active[run_id] = task
 
     async def stream() -> AsyncIterator[dict[str, str]]:
@@ -350,16 +353,33 @@ async def _drive(
     meter: LedgerMeter,
     owner: Owner,
     channel: "asyncio.Queue[RunEvent | None]",
+    conversation_id: UUID,
 ) -> None:
     """Runs the copilot, forwards its events, then stores and audits the run whatever happens."""
     state = RunState()
     run_status = "COMPLETED"
     started = clock.monotonic()
+    first: dict[str, float] = {}
     watcher = asyncio.create_task(_watch_cancel(svc, owner, request.run.run_id, asyncio.current_task()))
     try:
-        with tracer.start_as_current_span("copilot.run", attributes={"pw.run.id": str(request.run.run_id)}):
-            async for event in svc.runtime.run(request, meter, state):
-                await channel.put(event)
+        attributes = {
+            "pw.run.id": str(request.run.run_id),
+            "pw.conversation.id": str(conversation_id),
+            "pw.agent.id": request.agent.id,
+            "pw.agent.version": request.agent.version,
+            "pw.prompt.version": request.agent.prompt_version,
+            "pw.user.hash": user_hash(request.run.subject),
+        }
+        with tracer.start_as_current_span("copilot.run", attributes=attributes) as span:
+            try:
+                async for event in svc.runtime.run(request, meter, state):
+                    marker = FIRST_MARKERS.get(event.type)
+                    if marker and marker not in first:
+                        first[marker] = clock.monotonic() - started
+                    await channel.put(event)
+            finally:
+                span.set_attribute("pw.run.path", state.path or "none")
+                span.set_attribute("pw.run.outcome", state.outcome or "none")
     except asyncio.CancelledError:
         run_status = "CANCELLED"
         raise
@@ -368,11 +388,27 @@ async def _drive(
         if run_status != "CANCELLED" and state.outcome == "ERROR":
             run_status = "FAILED"
         latency = round((clock.monotonic() - started) * 1000)
+        _observe_run(state, run_status, latency, first)
         await asyncio.shield(
             asyncio.to_thread(_record, svc, request, meter, owner, state, run_status, latency)
         )
         svc.active.pop(request.run.run_id, None)
         channel.put_nowait(None)
+
+
+FIRST_MARKERS = {"pw.result": "highlight", "TEXT_MESSAGE_CONTENT": "text"}
+
+
+def _observe_run(state: RunState, run_status: str, latency_ms: int, first: dict[str, float]) -> None:
+    """Run metrics (evals spec 12); labels are fixed enumerations only."""
+    path = state.path or "none"
+    outcome = "CANCELLED" if run_status == "CANCELLED" else (state.outcome or "none")
+    metrics.copilot_runs.labels(path=path, outcome=outcome).inc()
+    metrics.run_duration.labels(path=path, outcome=outcome).observe(latency_ms / 1000)
+    if "highlight" in first:
+        metrics.time_to_first_highlight.labels(path=path).observe(first["highlight"])
+    if "text" in first:
+        metrics.time_to_first_text.labels(path=path).observe(first["text"])
 
 
 async def _watch_cancel(
@@ -472,6 +508,7 @@ async def feedback(
         svc.conversations.add_feedback, owner, run_id, body.rating, body.comment
     ):
         return problem(404, "NOT_FOUND", "Not found.", current_trace_id())
+    metrics.feedback.labels(rating=body.rating).inc()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

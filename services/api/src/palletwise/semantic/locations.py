@@ -22,7 +22,7 @@ from palletwise.contracts.results import (
     ResultStatus,
     StreamFreshness,
 )
-from palletwise.db.connection import Connection
+from palletwise.db.connection import Connection, query
 from palletwise.semantic.model import semantic_model, site_time
 
 MAX_ROWS = 200
@@ -87,11 +87,16 @@ class Moment:
 
 
 def read_moment(conn: Connection, site: UUID) -> Moment:
-    row = conn.execute("SELECT as_of, time_zone FROM sem.site_now WHERE site_id = %s", (site,)).fetchone()
+    row = query(
+        conn, "site_now", "SELECT as_of, time_zone FROM sem.site_now WHERE site_id = %s", (site,)
+    ).fetchone()
     if row is None or row[0] is None:
         raise SiteNotReady(str(site))
-    streams = conn.execute(
-        "SELECT stream, data_as_of FROM sem.stream_freshness WHERE site_id = %s ORDER BY stream", (site,)
+    streams = query(
+        conn,
+        "stream_freshness",
+        "SELECT stream, data_as_of FROM sem.stream_freshness WHERE site_id = %s ORDER BY stream",
+        (site,),
     ).fetchall()
     freshness = tuple(StreamFreshness(stream=s, data_as_of=t) for s, t in streams)
     return Moment(site, row[0], row[1], freshness)
@@ -130,8 +135,11 @@ def product_locations(
         return blocked
 
     if sku is not None:
-        found = conn.execute(
-            "SELECT product_id, sku, name FROM sem.product WHERE lower(sku) = lower(%s)", (sku,)
+        found = query(
+            conn,
+            "product_by_sku",
+            "SELECT product_id, sku, name FROM sem.product WHERE lower(sku) = lower(%s)",
+            (sku,),
         ).fetchall()
         if not found:
             return _envelope(moment, "find_product_locations", request, explain,
@@ -159,7 +167,9 @@ def product_locations(
     product_id, product_sku, product_name = found[0][:3]
     request = {**request, "sku": product_sku, "resolved_product": str(product_id)}
     explain = {"sku": product_sku}
-    rows = conn.execute(
+    rows = query(
+        conn,
+        "product_locations",
         """
         SELECT bin_id, bin_code, bin_role, zone_code, on_hand, allocated, available, storable,
                last_movement_at, zone_id
@@ -196,11 +206,13 @@ def product_locations(
     )  # fmt: skip
 
 
-def _resolve_query(conn: Connection, query: str) -> list[tuple[Any, ...]]:
+def _resolve_query(conn: Connection, words: str) -> list[tuple[Any, ...]]:
     """One product when the best match is unique by rank; otherwise every candidate."""
-    found = conn.execute(
+    found = query(
+        conn,
+        "search_products",
         "SELECT product_id, sku, name, brand, category_name, rank FROM sem.search_products(%s, %s)",
-        (query, CANDIDATES),
+        (words, CANDIDATES),
     ).fetchall()
     if not found:
         return []
@@ -220,7 +232,9 @@ def bin_contents(conn: Connection, site: UUID, bin_code: str) -> ResultEnvelope:
     explain = {"bin_code": bin_code}
     if (blocked := _unavailable(moment, "get_bin_contents", request, explain)) is not None:
         return blocked
-    location = conn.execute(
+    location = query(
+        conn,
+        "location_by_code",
         "SELECT bin_id, bin_code FROM sem.location WHERE site_id = %s AND lower(bin_code) = lower(%s)",
         (site, bin_code),
     ).fetchone()
@@ -230,7 +244,9 @@ def bin_contents(conn: Connection, site: UUID, bin_code: str) -> ResultEnvelope:
     bin_id, code = location
     request = {**request, "bin_code": code}
     explain = {"bin_code": code}
-    rows = conn.execute(
+    rows = query(
+        conn,
+        "bin_contents",
         """
         SELECT product_id, sku, name, on_hand, allocated, available, last_movement_at
           FROM sem.bin_contents(%s, %s, %s)

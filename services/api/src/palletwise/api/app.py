@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from palletwise.agent.runtime import CopilotRuntime
 from palletwise.api import auth_routes, copilot, sites
+from palletwise.api.observability import request_span
 from palletwise.api.security import CurrentPrincipal, csrf_middleware, require_session, site_in_scope
 from palletwise.auth.crypto import KeyRing
 from palletwise.auth.oidc import OidcClient
@@ -23,8 +24,17 @@ from palletwise.db.copilot_repo import ConversationStore, RateLimiter, UsageLedg
 from palletwise.db.session_repo import SessionStore
 from palletwise.llm import build_provider
 from palletwise.policy import PolicyClient
-from palletwise.settings import LlmSettings, OidcSettings, PolicySettings, SessionSettings, WebSettings
+from palletwise.settings import (
+    LlmSettings,
+    OidcSettings,
+    PolicySettings,
+    SessionSettings,
+    TelemetrySettings,
+    WebSettings,
+)
+from palletwise.telemetry import metrics
 from palletwise.telemetry.logs import configure_api_logging
+from palletwise.telemetry.setup import configure_telemetry
 from palletwise.tools.catalog import v1_tools
 from palletwise.tools.executor import ToolExecutor
 
@@ -71,6 +81,9 @@ def build_copilot() -> copilot.CopilotServices:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     configure_api_logging()
+    telemetry = TelemetrySettings()
+    configure_telemetry("palletwise-api", telemetry)
+    metrics.serve_metrics(telemetry.metrics_port)
     if getattr(app.state, "auth", None) is None:
         app.state.auth = build_auth_service()
     if getattr(app.state, "copilot", None) is None:
@@ -132,6 +145,9 @@ def create_app(
         title="PalletWise API",
         version="0.1.0",
         lifespan=lifespan,
+        # FastAPI's built-in telemetry is off: our request middleware emits the one http.server
+        # span with allowlisted attributes, and nothing else records exception messages.
+        telemetry={"tracing": False, "metrics": False, "logs": False, "operation_spans": False},
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
     )
@@ -139,6 +155,7 @@ def create_app(
     app.state.copilot = copilot_services
     app.state.reads = reads
     app.middleware("http")(csrf_middleware((web or WebSettings()).public_origin))
+    app.middleware("http")(request_span)  # added last, so outermost: it sees CSRF refusals too
     app.include_router(public)
     app.include_router(auth_routes.router)
     app.include_router(protected)

@@ -10,6 +10,7 @@ import json
 import logging
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
@@ -29,6 +30,9 @@ from palletwise.agent.guardrails import grounding_problems, normalize_dashes
 from palletwise.agent.suggestions import STARTERS, Suggestion, suggest
 from palletwise.contracts.results import ResultEnvelope, ResultStatus
 from palletwise.llm import LLMProvider, ResolvedModel
+from palletwise.telemetry import metrics
+from palletwise.telemetry.setup import content_capture
+from palletwise.telemetry.tracing import tracer
 from palletwise.tools.executor import Outcome, RunContext, ToolCallResult, ToolRegistry
 
 log = logging.getLogger(__name__)
@@ -75,7 +79,9 @@ class ModelMeter(Protocol):
 
     def reserve(self, estimate: int) -> bool: ...
 
-    def settle(self, estimate: int, call: ModelCall) -> None: ...
+    def settle(self, estimate: int, call: ModelCall) -> Decimal | None:
+        """Releases the reservation, records usage, and returns the estimated cost when known."""
+        ...
 
 
 class ToolGateway(Protocol):
@@ -167,21 +173,55 @@ class MeteredModel(WrapperModel):
             self._state.budget_exhausted = True
             raise BudgetExhausted
         started = clock.monotonic()
-        try:
-            response = await super().request(messages, model_settings, model_request_parameters)
-        except BaseException:
-            await asyncio.to_thread(self._meter.settle, estimate, self._call(0, 0, 0, started, "ERROR"))
-            raise
-        usage = response.usage
-        self._state.input_tokens += usage.input_tokens
-        self._state.output_tokens += usage.output_tokens
-        call = self._call(usage.input_tokens, usage.output_tokens, usage.cache_read_tokens, started, "OK")
-        await asyncio.to_thread(self._meter.settle, estimate, call)
-        return response
+        with tracer.start_as_current_span(
+            "gen_ai.chat",
+            attributes={
+                "gen_ai.system": "vertex_ai",
+                "gen_ai.operation.name": "chat",
+                "gen_ai.request.model": self._resolved.name,
+                "pw.model.purpose": self._purpose,
+            },
+        ) as span:
+            if content_capture():
+                span.add_event("gen_ai.content.prompt", {"gen_ai.prompt": _last_prompt(messages)})
+            try:
+                response = await super().request(messages, model_settings, model_request_parameters)
+            except BaseException:
+                span.set_attribute("pw.model.outcome", "ERROR")
+                await asyncio.to_thread(self._meter.settle, estimate, self._call(0, 0, 0, started, "ERROR"))
+                raise
+            usage = response.usage
+            self._state.input_tokens += usage.input_tokens
+            self._state.output_tokens += usage.output_tokens
+            call = self._call(usage.input_tokens, usage.output_tokens, usage.cache_read_tokens, started, "OK")
+            cost = await asyncio.to_thread(self._meter.settle, estimate, call)
+            span.set_attribute("pw.model.outcome", "OK")
+            span.set_attribute("gen_ai.usage.input_tokens", usage.input_tokens)
+            span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens)
+            span.set_attribute("gen_ai.response.finish_reasons", (str(response.finish_reason or "unknown"),))
+            model = metrics.bounded(self._resolved.name)
+            metrics.llm_tokens.labels(model=model, direction="input").inc(usage.input_tokens)
+            metrics.llm_tokens.labels(model=model, direction="output").inc(usage.output_tokens)
+            metrics.llm_tokens.labels(model=model, direction="cached").inc(usage.cache_read_tokens)
+            if cost is not None:
+                span.set_attribute("pw.cost.estimated", float(cost))
+                metrics.llm_cost.labels(model=model).inc(float(cost))
+            if content_capture():
+                span.add_event("gen_ai.content.completion", {"gen_ai.completion": _response_text(response)})
+            return response
 
     def _call(self, i: int, o: int, c: int, started: float, outcome: Literal["OK", "ERROR"]) -> ModelCall:
         latency = round((clock.monotonic() - started) * 1000)
         return ModelCall(self._resolved.name, self._resolved.region, self._purpose, i, o, c, latency, outcome)
+
+
+def _last_prompt(messages: list[ModelMessage]) -> str:
+    """The newest request's text, for development content capture only (bounded)."""
+    return str(messages[-1])[:4000] if messages else ""
+
+
+def _response_text(response: ModelResponse) -> str:
+    return " ".join(str(getattr(p, "content", "")) for p in response.parts)[:4000]
 
 
 def _truncated(result: Any) -> bool:
@@ -362,6 +402,7 @@ class CopilotRuntime:
             problems = grounding_problems(text, [result], request.question)
             if text and not problems:
                 return text
+            metrics.guardrail_triggers.labels(kind="grounding").inc()
             log.info("wording attempt %s not grounded: %s", attempt + 1, problems)
             prompt += (
                 f"\n\nYour previous answer used values not in the data ({', '.join(problems)}). Rewrite it."
@@ -428,6 +469,7 @@ class CopilotRuntime:
             results = [r for _, r in state.results]
             problems = grounding_problems(text, results, request.question)
             if problems:
+                metrics.guardrail_triggers.labels(kind="grounding").inc()
                 log.info("answer not grounded, regenerating: %s", problems)
                 retry = await agent.run(
                     f"Your answer used values not in the tool results ({', '.join(problems)}). "

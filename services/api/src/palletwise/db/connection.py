@@ -6,6 +6,7 @@ borrow and discards broken ones, so a database restart needs no reconnect logic 
 
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import Any
 from uuid import UUID
 
 import psycopg
@@ -13,6 +14,8 @@ from psycopg.conninfo import make_conninfo
 from psycopg_pool import ConnectionPool
 
 from palletwise.settings import DatabaseSettings, role_credentials
+from palletwise.telemetry import metrics
+from palletwise.telemetry.tracing import tracer
 
 
 def dsn(db: DatabaseSettings, user: str, password: str) -> str:
@@ -51,6 +54,36 @@ def role_pool(role_env_prefix: str, *, max_size: int = 10) -> ConnectionPool:
             kwargs={"autocommit": False},
         )
     return _pools[role_env_prefix]
+
+
+def query(
+    conn: psycopg.Connection[Any], name: str, sql: str, params: Any = ()
+) -> psycopg.Cursor[tuple[Any, ...]]:
+    """Runs one statement under a db.query span named by `name` (evals spec 10).
+
+    The span carries the statement name and the row count, never the SQL text or its values.
+    """
+    with tracer.start_as_current_span("db.query", attributes={"pw.db.statement": name}) as span:
+        cursor = conn.execute(sql, params)  # pyright: ignore[reportArgumentType]
+        span.set_attribute("db.response.returned_rows", max(cursor.rowcount, 0))
+        return cursor
+
+
+def pool_stats() -> dict[str, dict[str, int]]:
+    """Connections per role pool for the pw_db_pool_connections gauge (evals spec 12)."""
+    stats: dict[str, dict[str, int]] = {}
+    for prefix, pool in list(_pools.items()):
+        raw = pool.get_stats()
+        size, available = raw.get("pool_size", 0), raw.get("pool_available", 0)
+        stats[prefix.removeprefix("PW_").lower()] = {
+            "idle": available,
+            "busy": max(0, size - available),
+            "waiting": raw.get("requests_waiting", 0),
+        }
+    return stats
+
+
+metrics.register_pool_source(pool_stats)
 
 
 def close_pools() -> None:

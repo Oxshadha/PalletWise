@@ -13,6 +13,14 @@ x-python: &python
     PW_DB_HOST: postgres
     PW_DB_PORT: "5432"
     PW_DB_NAME: palletwise
+    # Telemetry (evals spec 9 to 13), shared by every Python process. Export is off unless an
+    # OTLP endpoint or Langfuse keys are set; /metrics is served either way (API: internal 9464).
+    PW_TELEMETRY_ENVIRONMENT: development
+    PW_TELEMETRY_MASK_SALT: ${PW_TELEMETRY_MASK_SALT:-}
+    PW_TELEMETRY_OTLP_ENDPOINT: ${PW_TELEMETRY_OTLP_ENDPOINT:-}
+    LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+    LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+    LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
 
 x-health-python: &health-python
   test: ["CMD", "palletwise-healthcheck"]

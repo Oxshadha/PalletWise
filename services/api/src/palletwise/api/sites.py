@@ -25,7 +25,7 @@ from palletwise.db.audit_repo import AuditEntry, AuditLog
 from palletwise.db.connection import Pool, tenant_session
 from palletwise.policy import PolicyClient, PolicyRequest, PolicyUser
 from palletwise.semantic import locations, map_state
-from palletwise.telemetry.tracing import current_trace_id, tracer
+from palletwise.telemetry.tracing import current_trace_id, record_policy_decision, tracer
 
 router = APIRouter(prefix="/api/sites/{site_id}", tags=["map"])
 
@@ -141,8 +141,9 @@ async def _authorize(
         resource_tenant=str(identity.tenant),
         resource_site=str(site_id),
     )
-    with tracer.start_as_current_span("policy.decision", attributes={"pw.policy.scope": "inventory.read"}):
+    with tracer.start_as_current_span("policy.decision") as span:
         decision = await asyncio.to_thread(reads.policy.decide, request)
+        record_policy_decision(span, action, "inventory.read", decision.allow, decision.reasons)
     if decision.allow:
         return None
     entry = AuditEntry(

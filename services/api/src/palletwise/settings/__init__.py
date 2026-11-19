@@ -6,7 +6,7 @@ Each process reads only the database credentials of its own role
 
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -137,3 +137,28 @@ class LlmSettings(BaseSettings):
     }
     request_timeout_seconds: float = 15.0
     run_timeout_seconds: float = 45.0
+
+
+class TelemetrySettings(BaseSettings):
+    """Traces, metrics and logs (evals spec 9 to 13). Export is off unless an endpoint is set."""
+
+    model_config = SettingsConfigDict(env_prefix="PW_TELEMETRY_", extra="ignore", populate_by_name=True)
+
+    # "production" refuses content capture at startup (evals spec 11).
+    environment: str = "development"
+    # Prompts and responses as span events: development only, on synthetic data.
+    trace_content: bool = Field(default=False, validation_alias="PW_TRACE_CONTENT")
+    # Salt for masking personal data in exported telemetry. A secret; required in production.
+    mask_salt: str | None = None
+    # Share of non-copilot root traces kept; copilot runs are always kept.
+    sample_ratio: float = Field(default=0.1, ge=0.0, le=1.0)
+    # Any OTLP/HTTP traces endpoint, for example a collector.
+    otlp_endpoint: str | None = None
+    # Langfuse via its OTLP endpoint, when both keys are set.
+    langfuse_host: str | None = Field(
+        default=None, validation_alias=AliasChoices("LANGFUSE_BASE_URL", "LANGFUSE_HOST")
+    )
+    langfuse_public_key: str | None = Field(default=None, validation_alias="LANGFUSE_PUBLIC_KEY")
+    langfuse_secret_key: str | None = Field(default=None, validation_alias="LANGFUSE_SECRET_KEY")
+    # The API serves /metrics here, on an internal port the edge does not route.
+    metrics_port: int = 9464

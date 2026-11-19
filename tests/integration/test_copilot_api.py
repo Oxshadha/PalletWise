@@ -568,3 +568,78 @@ def test_starters_come_from_the_server_and_only_name_built_tools(env: Env) -> No
     ]
     status = env.client.get(f"/api/sites/{env.site.site}/status").json()
     assert status["time_zone"] == "Asia/Colombo"
+
+
+# ---------------------------------------------------------------- traces (evals spec 10, 16)
+
+
+def test_a_model_run_is_one_trace_with_every_span_correctly_parented(env: Env, exported_spans: Any) -> None:
+    env.sign_in()
+    env.models.models["gemini_flash"] = tool_then_say("The wireless mouse is SKU-102.")
+    exported_spans.clear()
+    status, headers, _ = env.ask("Which bins hold the wireless mouse?")
+    assert status == 200
+    trace_id = headers["x-trace-id"]
+    mine = [s for s in exported_spans.get_finished_spans() if format(s.context.trace_id, "032x") == trace_id]
+    names = [s.name for s in mine]
+    for expected in (
+        "http.server",
+        "copilot.run",
+        "gen_ai.chat",
+        "tool.execute",
+        "policy.decision",
+        "db.query",
+    ):
+        assert expected in names, (expected, names)
+    by_id = {s.context.span_id: s for s in mine}
+
+    def parent(span: Any) -> str | None:
+        return by_id[span.parent.span_id].name if span.parent and span.parent.span_id in by_id else None
+
+    def ancestors(span: Any) -> list[str]:
+        found: list[str] = []
+        while span.parent and span.parent.span_id in by_id:
+            span = by_id[span.parent.span_id]
+            found.append(span.name)
+        return found
+
+    run_span = next(s for s in mine if s.name == "copilot.run")
+    assert ancestors(run_span) == ["http.server"]
+    assert names.count("http.server") == 1 and not [n for n in names if n.startswith(("POST", "fastapi"))]
+    for span in mine:
+        expected_parent = {
+            "gen_ai.chat": "copilot.run",
+            "tool.execute": "copilot.run",
+            "policy.decision": "tool.execute",
+            "db.query": "tool.execute",
+        }.get(span.name)
+        if expected_parent:
+            assert parent(span) == expected_parent, (span.name, parent(span))
+    run = next(s for s in mine if s.name == "copilot.run")
+    attributes = dict(run.attributes or {})
+    assert attributes["pw.run.path"] == "C" and attributes["pw.run.outcome"] == "ANSWER"
+    assert attributes["pw.user.hash"].startswith("h:") and "manager" not in attributes["pw.user.hash"]
+    chat = next(s for s in mine if s.name == "gen_ai.chat")
+    assert dict(chat.attributes or {})["gen_ai.usage.input_tokens"] >= 0
+    tool = next(s for s in mine if s.name == "tool.execute")
+    assert dict(tool.attributes or {})["pw.tool.highlight_count"] >= 1
+    # Never exported: no cookie or session value appears anywhere in the run's exported spans.
+    exported_text = repr([(s.name, dict(s.attributes or {}), [dict(e.attributes or {}) for e in s.events])
+                          for s in mine])  # fmt: skip
+    secrets_seen = [v for v in env.client.cookies.values() if v and v in exported_text]
+    assert not secrets_seen and "SELECT" not in exported_text
+    # The audit entries carry the same trace id (NFR-OBS-03).
+    audited = env.db.execute(
+        "SELECT DISTINCT trace_id FROM pw.audit_event WHERE run_id = %s", (UUID(headers["x-run-id"]),)
+    ).fetchall()
+    assert audited == [(trace_id,)]
+
+
+def test_an_error_response_carries_the_trace_id_of_its_request(env: Env, exported_spans: Any) -> None:
+    env.sign_in()
+    env.set_agent(status="SUSPENDED")
+    exported_spans.clear()
+    status, _, body = env.ask("Where is SKU-102 stored?")
+    assert status == 503
+    servers = [s for s in exported_spans.get_finished_spans() if s.name == "http.server"]
+    assert body["trace_id"] in {format(s.context.trace_id, "032x") for s in servers}

@@ -109,3 +109,19 @@ def connect_session(database: dict[str, Any]) -> Generator[Callable[[str], psyco
     yield _connect
     for conn in opened:
         conn.close()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def exported_spans() -> Any:
+    """The process tracer provider for every test: the real setup, every trace sampled, and an
+    in-memory exporter behind the same sanitizing filter production uses (evals spec 11, 16)."""
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from palletwise.settings import TelemetrySettings
+    from palletwise.telemetry.setup import configure_telemetry
+
+    exporter = InMemorySpanExporter()
+    configure_telemetry(
+        "palletwise-test", TelemetrySettings(sample_ratio=1.0, mask_salt="test-salt"), exporters=[exporter]
+    )
+    return exporter

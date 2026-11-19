@@ -4,6 +4,7 @@ A separate connection and role from the destination (pw_ingest): neither role ca
 the other side (simulator spec 2).
 """
 
+from datetime import datetime
 from uuid import UUID
 
 import psycopg
@@ -36,3 +37,10 @@ def pull(conn: psycopg.Connection, run_id: UUID, after_sequence: int, limit: int
         )
         for r in rows
     ]
+
+
+def newest_time(conn: psycopg.Connection, run_id: UUID) -> datetime | None:
+    """Simulated time of the newest record of a run in the outbox (the ingest lag reference)."""
+    with conn.transaction():
+        row = conn.execute("SELECT max(sim_time) FROM sim.outbox WHERE run_id = %s", (run_id,)).fetchone()
+    return row[0] if row else None
