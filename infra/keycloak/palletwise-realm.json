@@ -6,8 +6,14 @@
   "registrationAllowed": false,
   "roles": {
     "realm": [
-      { "name": "warehouse_manager", "description": "Warehouse Manager (personas 3)" },
-      { "name": "admin", "description": "Admin (personas 4)" }
+      {
+        "name": "warehouse_manager",
+        "description": "Warehouse Manager (personas 3)"
+      },
+      {
+        "name": "admin",
+        "description": "Admin (personas 4)"
+      }
     ]
   },
   "users": [
@@ -18,8 +24,16 @@
       "emailVerified": true,
       "firstName": "Demo",
       "lastName": "Manager",
-      "credentials": [{ "type": "password", "value": "${env.KC_DEV_MANAGER_PASSWORD}", "temporary": false }],
-      "realmRoles": ["warehouse_manager"]
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_DEV_MANAGER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "warehouse_manager"
+      ]
     },
     {
       "username": "admin",
@@ -28,8 +42,16 @@
       "emailVerified": true,
       "firstName": "Demo",
       "lastName": "Admin",
-      "credentials": [{ "type": "password", "value": "${env.KC_DEV_ADMIN_PASSWORD}", "temporary": false }],
-      "realmRoles": ["admin"]
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_DEV_ADMIN_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin"
+      ]
     }
   ],
   "clients": [
@@ -39,12 +61,29 @@
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
-      "secret": "${env.KC_BFF_CLIENT_SECRET}",
+      "secret": "${KC_BFF_CLIENT_SECRET}",
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
-      "redirectUris": ["http://localhost:8080/api/auth/callback"],
-      "webOrigins": ["http://localhost:8080"],
-      "attributes": { "pkce.code.challenge.method": "S256" }
+      "redirectUris": [
+        "http://localhost:8080/api/auth/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:8080"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "standard.token.exchange.enabled": "true"
+      },
+      "optionalClientScopes": [
+        "copilot-audience"
+      ],
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles",
+        "web-origins"
+      ]
     },
     {
       "clientId": "palletwise-copilot",
@@ -52,11 +91,36 @@
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
-      "secret": "${env.KC_COPILOT_CLIENT_SECRET}",
+      "secret": "${KC_COPILOT_CLIENT_SECRET}",
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
-      "attributes": { "standard.token.exchange.enabled": "true" }
+      "attributes": {
+        "standard.token.exchange.enabled": "true"
+      }
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "copilot-audience",
+      "description": "Adds aud=palletwise-copilot; requested only during token exchange",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-palletwise-copilot",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "palletwise-copilot",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
     }
   ]
 }

@@ -59,7 +59,8 @@ Authorization code flow against Keycloak. The browser never sees an access, refr
 | Agent identity | Keycloak client `palletwise-copilot` (confidential). PalletWise record: **agent registry** row in `pw.agent` with id, version, status (`ACTIVE`, `SUSPENDED`), allowed scopes, primary and fallback model, prompt version, max steps, daily token budget. Slice 1 seeds one row; the Admin UI arrives in Slice 7. |
 | Token exchange | At the start of a copilot run the API obtains a fresh user access token by server-side refresh (section 3), then exchanges it for a token issued to `palletwise-copilot`. The exchanged token is validated for issuer, audience and client. The API never accepts a subject or agent identity from the request. |
 | Failure | If refresh or exchange fails, the run is denied. There is no fallback to a service account. |
-| Delegation claim | Keycloak's support for an RFC 8693 `act` claim is verified at the start of Slice 1. Without it, the API records the acting agent itself (subject from the exchanged token, agent from the registry). The policy input is the same either way. |
+| Delegation claim | **Verified in Slice 1 (Keycloak 26.4.7): standard token exchange issues no RFC 8693 `act` claim.** The API therefore records the acting agent itself: subject from the exchanged token, `azp` must be `palletwise-bff`, `aud` must be `palletwise-copilot`, and the agent identity and version come from the registry. The policy input is unchanged. |
+| Copilot audience | Keycloak issues the `palletwise-copilot` audience only to a client mapped to it. The realm gives `palletwise-bff` the **optional** client scope `copilot-audience`, requested only in the exchange call, so ordinary user tokens never carry the copilot audience. |
 | Effective rights | The user's scopes **intersected with** the agent's allowed scopes, only while the agent is `ACTIVE` (NFR-SEC-02). Agent scopes can only remove rights, never add them. |
 
 ## 6. Authorization (OPA)
@@ -145,4 +146,5 @@ Default deny. **Fail closed:** if OPA or the agent registry cannot be reached, t
 | Date | Change |
 |---|---|
 | 2026-11-18 | First draft. |
+| 2026-11-19 | Slice 1 step 1 findings (no design change): no `act` claim from Keycloak, documented fallback in use; optional `copilot-audience` scope added to the realm. Also fixed a Slice 0 bug: the realm file used `${env.X}` placeholders, which Keycloak does not substitute, leaving literal client secrets and dev passwords; the syntax is `${X}`. |
 | 2026-11-19 | Revision 2 after review: OIDC state, nonce, PKCE and token validation with a login attempt table; fresh user token by refresh for token exchange; failure means deny; client roles; attribute lifecycle and revalidation on refresh; AES-GCM refresh tokens with key ids; refresh serialization; expiry checked per request; explicit copilot prohibition on approval and admin scopes; fail closed when OPA or the registry is unavailable; resource tenant in the policy input; three-layer model; extended tests. Not adopted: computing scopes in the API (the map lives in OPA policy data instead); a separate `Domain` prohibition (the `__Host-` prefix already guarantees it). |
