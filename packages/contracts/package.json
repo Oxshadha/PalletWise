@@ -1,0 +1,18 @@
+{
+  "name": "@palletwise/contracts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "generate": "openapi-typescript openapi.json -o src/api.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "lint": "tsc --noEmit -p .",
+    "test": "echo 'generated types only'"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^6.0.3"
+  }
+}

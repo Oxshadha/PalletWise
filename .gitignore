@@ -1,0 +1,44 @@
+# --- Secrets: never commit ---
+google-service-account.json
+*service-account*.json
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+
+# --- Local source material, not part of the repository ---
+# The two approved inputs are copied into data/reference/.
+General Data/
+Requirement.pdf
+
+# --- OS / editor ---
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# --- Node ---
+node_modules/
+dist/
+*.tsbuildinfo
+playwright-report/
+test-results/
+
+# --- Local data ---
+*.db
+*.sqlite
+
+# Original design files; the repository keeps copies in docs/design and apps/web/public/brand.
+UI/

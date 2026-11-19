@@ -1,0 +1,234 @@
+# PalletWise local stack (engineering baseline 7.1).
+# Start with `make up`. Every process runs with its own database role.
+# Image digests are pinned in infra/images.env and passed in by the Makefile.
+
+name: palletwise
+
+# One image for every Python service. Only `migrate` builds it; the others reuse it.
+x-python: &python
+  image: palletwise/python:dev
+  pull_policy: never
+  restart: unless-stopped
+  environment: &db-env
+    PW_DB_HOST: postgres
+    PW_DB_PORT: "5432"
+    PW_DB_NAME: palletwise
+
+x-health-python: &health-python
+  test: ["CMD", "palletwise-healthcheck"]
+  interval: 5s
+  timeout: 3s
+  retries: 30
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PW_BOOTSTRAP_USER}
+      POSTGRES_PASSWORD: ${PW_BOOTSTRAP_PASSWORD}
+      POSTGRES_DB: palletwise
+    ports:
+      - "127.0.0.1:${PW_POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PW_BOOTSTRAP_USER} -d palletwise"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    <<: *python
+    pull_policy: build
+    build:
+      context: ..
+      dockerfile: infra/docker/python.Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE}
+    restart: "no"
+    command: ["palletwise-migrate"]
+    environment:
+      <<: *db-env
+      PW_BOOTSTRAP_USER: ${PW_BOOTSTRAP_USER}
+      PW_BOOTSTRAP_PASSWORD: ${PW_BOOTSTRAP_PASSWORD}
+      PW_MIGRATOR_USER: pw_migrator
+      PW_MIGRATOR_PASSWORD: ${PW_MIGRATOR_PASSWORD}
+      PW_APP_PASSWORD: ${PW_APP_PASSWORD}
+      PW_INGEST_PASSWORD: ${PW_INGEST_PASSWORD}
+      PW_EVALUATOR_PASSWORD: ${PW_EVALUATOR_PASSWORD}
+      PW_PROPOSAL_WRITER_PASSWORD: ${PW_PROPOSAL_WRITER_PASSWORD}
+      PW_WORKFLOW_PASSWORD: ${PW_WORKFLOW_PASSWORD}
+      PW_SIM_ADMIN_PASSWORD: ${PW_SIM_ADMIN_PASSWORD}
+      PW_AGENT_READ_PASSWORD: ${PW_AGENT_READ_PASSWORD}
+      PW_MEMORY_PASSWORD: ${PW_MEMORY_PASSWORD}
+      SIM_OWNER_PASSWORD: ${SIM_OWNER_PASSWORD}
+      SIM_OUTBOX_READER_PASSWORD: ${SIM_OUTBOX_READER_PASSWORD}
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  simulator:
+    <<: *python
+    command: ["pw-simulator"]
+    environment:
+      <<: *db-env
+      SIM_OWNER_USER: sim_owner
+      SIM_OWNER_PASSWORD: ${SIM_OWNER_PASSWORD}
+      SIM_DATA_DIR: /app/data/reference
+    healthcheck:
+      <<: *health-python
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  worker-connector:
+    <<: *python
+    command: ["palletwise-connector"]
+    environment:
+      <<: *db-env
+      SIM_OUTBOX_READER_USER: sim_outbox_reader
+      SIM_OUTBOX_READER_PASSWORD: ${SIM_OUTBOX_READER_PASSWORD}
+      PW_INGEST_USER: pw_ingest
+      PW_INGEST_PASSWORD: ${PW_INGEST_PASSWORD}
+      PW_HEALTH_PORT: "8081"
+    healthcheck:
+      <<: *health-python
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      simulator: { condition: service_healthy }
+
+  simadmin:
+    <<: *python
+    command: ["palletwise-simadmin"]
+    environment:
+      <<: *db-env
+      PW_SIM_ADMIN_USER: pw_sim_admin
+      PW_SIM_ADMIN_PASSWORD: ${PW_SIM_ADMIN_PASSWORD}
+      PW_SIM_CONTROL_URL: http://simulator:8000
+      PW_SIM_SEED: ${PW_SIM_SEED:-42}
+      PW_HEALTH_PORT: "8082"
+    healthcheck:
+      <<: *health-python
+      # Healthy only once the initial load has finished and the site is READY.
+      retries: 120
+      start_period: 60s
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      simulator: { condition: service_healthy }
+      worker-connector: { condition: service_healthy }
+
+  worker-evaluator:
+    <<: *python
+    command: ["palletwise-evaluator"]
+    environment:
+      <<: *db-env
+      PW_EVALUATOR_USER: pw_evaluator
+      PW_EVALUATOR_PASSWORD: ${PW_EVALUATOR_PASSWORD}
+      PW_HEALTH_PORT: "8083"
+    healthcheck:
+      <<: *health-python
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  worker-workflow:
+    <<: *python
+    command: ["palletwise-workflow"]
+    environment:
+      <<: *db-env
+      PW_WORKFLOW_USER: pw_workflow
+      PW_WORKFLOW_PASSWORD: ${PW_WORKFLOW_PASSWORD}
+      PW_HEALTH_PORT: "8084"
+    healthcheck:
+      <<: *health-python
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  api:
+    <<: *python
+    command: ["uvicorn", "palletwise.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      <<: *db-env
+      PW_APP_USER: pw_app
+      PW_APP_PASSWORD: ${PW_APP_PASSWORD}
+      PW_HEALTH_PATH: /api/health
+    healthcheck:
+      <<: *health-python
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+
+  keycloak:
+    image: ${KEYCLOAK_IMAGE}
+    restart: unless-stopped
+    command: ["start-dev", "--import-realm", "--http-port=8080"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      KC_HEALTH_ENABLED: "true"
+      KC_DEV_MANAGER_PASSWORD: ${KC_DEV_MANAGER_PASSWORD}
+      KC_DEV_ADMIN_PASSWORD: ${KC_DEV_ADMIN_PASSWORD}
+      KC_BFF_CLIENT_SECRET: ${KC_BFF_CLIENT_SECRET}
+      KC_COPILOT_CLIENT_SECRET: ${KC_COPILOT_CLIENT_SECRET}
+    ports:
+      - "127.0.0.1:${PW_KEYCLOAK_HOST_PORT:-8180}:8080"
+    volumes:
+      - ./keycloak/palletwise-realm.json:/opt/keycloak/data/import/palletwise-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q 'UP' <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+
+  opa:
+    image: ${OPA_IMAGE}
+    restart: unless-stopped
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "--log-level=info", "/policy"]
+    volumes:
+      - ../policy:/policy:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8181/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  web:
+    image: palletwise/web:dev
+    build:
+      context: ..
+      dockerfile: infra/docker/web.Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE}
+        NGINX_IMAGE: ${NGINX_IMAGE}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      api: { condition: service_healthy }
+
+  edge:
+    image: ${TRAEFIK_IMAGE}
+    restart: unless-stopped
+    command:
+      - --entrypoints.web.address=:8080
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --ping=true
+      - --ping.entrypoint=web
+    ports:
+      - "127.0.0.1:${PW_EDGE_HOST_PORT:-8080}:8080"
+    volumes:
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping", "--ping.entrypoint=web", "--entrypoints.web.address=:8080"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      api: { condition: service_healthy }
+      web: { condition: service_healthy }
+
+volumes:
+  pgdata:

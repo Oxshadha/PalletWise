@@ -190,7 +190,7 @@ The run response is an event stream using AG-UI event types plus PalletWise even
 | Event | Content |
 |---|---|
 | `RUN_STARTED` | run id, path (A, B or C) |
-| `TOOL_CALL_START`, `TOOL_CALL_END` | tool name and normalized, already-authorized arguments, for the "how I got this" panel; no internal identifiers beyond those already in the result |
+| `TOOL_CALL_START`, `TOOL_CALL_END` | tool name and normalized, already-authorized arguments, for traces and the Admin audit view; the Manager sees the plain-language "how computed" explanation instead (UX spec 7) |
 | `pw.result` | the result envelope (semantic spec 7.5), including highlights |
 | `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END` | answer text |
 | `pw.suggestions` | suggestions (section 11) |

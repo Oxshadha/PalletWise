@@ -1,0 +1,102 @@
+/*
+ * PalletWise design tokens: the ONLY place colors, fonts, sizes, radii and shadows are defined.
+ * Components use var(--token) in CSS, or readToken("--token") in TypeScript (for example the
+ * 3D map), so a rebrand or theme change is an edit to this file only.
+ *
+ * Source: product owner palette and type choices (2026-11-18), docs/design/mockup-*.png.
+ * Theme: light by default; dark when <html data-theme="dark">. The choice (light, dark or
+ * system) is resolved by public/theme-init.js before the first paint.
+ */
+
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+
+:root {
+  /* ---- Brand palette (product owner) */
+  --pw-color-background: #f7f9fc;
+  --pw-color-surface: #ffffff;
+  --pw-color-text-primary: #092a66;
+  --pw-color-accent: #0875ed;
+  --pw-color-secondary: #8abafb;
+
+  /* ---- Derived roles (proposed from the mockups; adjust freely) */
+  --pw-color-text-muted: #4a5d80;
+  --pw-color-text-on-accent: #ffffff;
+  --pw-color-border: #e3e9f2;
+  --pw-color-accent-soft: #e6f0fd;
+  --pw-color-focus-ring: #0875ed;
+
+  /* ---- Status colors for map states and exceptions (proposed; reason table in agent spec 10) */
+  --pw-color-status-info: #0875ed;
+  --pw-color-status-warning: #b45309;
+  --pw-color-status-critical: #c62828;
+  --pw-color-status-success: #15803d;
+
+  /* ---- Typography */
+  --pw-font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pw-font-weight-body: 400;
+  --pw-font-weight-navigation: 500;
+  --pw-font-weight-kpi: 500;
+  --pw-font-weight-heading: 600;
+  --pw-font-weight-heading-strong: 600;
+
+  --pw-font-size-xs: 0.75rem; /* 12px captions */
+  --pw-font-size-sm: 0.875rem; /* 14px secondary text */
+  --pw-font-size-md: 1rem; /* 16px body */
+  --pw-font-size-lg: 1.25rem; /* 20px card titles */
+  --pw-font-size-xl: 1.75rem; /* 28px section headings */
+  --pw-font-size-2xl: 2.25rem; /* 36px page headings */
+  --pw-font-size-kpi: 2rem; /* 32px KPI numbers */
+  --pw-line-height-body: 1.5;
+  --pw-line-height-heading: 1.2;
+
+  /* ---- Spacing (4px base) */
+  --pw-space-1: 0.25rem;
+  --pw-space-2: 0.5rem;
+  --pw-space-3: 0.75rem;
+  --pw-space-4: 1rem;
+  --pw-space-6: 1.5rem;
+  --pw-space-8: 2rem;
+  --pw-space-12: 3rem;
+
+  /* ---- Shape and depth (from the mockups: soft cards, pill toggles) */
+  --pw-radius-sm: 0.5rem;
+  --pw-radius-md: 0.75rem;
+  --pw-radius-lg: 1.25rem;
+  --pw-radius-pill: 999px;
+  --pw-shadow-card: 0 1px 2px rgb(9 42 102 / 0.04), 0 8px 24px rgb(9 42 102 / 0.06);
+  --pw-shadow-popover: 0 12px 32px rgb(9 42 102 / 0.14);
+
+  /* ---- Brand assets */
+  --pw-logo: url("/brand/logo-light.png");
+
+  color-scheme: light;
+}
+
+/* Dark theme: defined once. public/theme-init.js resolves the user's choice (light, dark or
+   system) into data-theme before the first paint, so system dark needs no second copy. */
+:root[data-theme="dark"] {
+  --pw-color-background: #0b1122;
+  --pw-color-surface: #111c32;
+  --pw-color-text-primary: #f4f7fc;
+  --pw-color-accent: #0875ed;
+  --pw-color-secondary: #64748b;
+
+  --pw-color-text-muted: #a9b6cc;
+  --pw-color-text-on-accent: #ffffff;
+  --pw-color-border: #22304d;
+  --pw-color-accent-soft: #15284a;
+  --pw-color-focus-ring: #8abafb;
+
+  --pw-color-status-info: #5aa2f5;
+  --pw-color-status-warning: #f59e0b;
+  --pw-color-status-critical: #f87171;
+  --pw-color-status-success: #4ade80;
+
+  --pw-shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
+  --pw-shadow-popover: 0 12px 32px rgb(0 0 0 / 0.45);
+  --pw-logo: url("/brand/logo-dark.png");
+
+  color-scheme: dark;
+}

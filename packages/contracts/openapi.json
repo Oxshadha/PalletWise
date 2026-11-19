@@ -1,0 +1,106 @@
+{
+  "components": {
+    "schemas": {
+      "Health": {
+        "properties": {
+          "database": {
+            "title": "Database",
+            "type": "boolean"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ready",
+          "database"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "SiteStatusOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "data_status": {
+            "title": "Data Status",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sim_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sim Time"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "data_status",
+          "sim_time"
+        ],
+        "title": "SiteStatusOut",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "PalletWise API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/health": {
+      "get": {
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/api/sites/current/status": {
+      "get": {
+        "operationId": "current_site_status_api_sites_current_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "The site has not been created yet"
+          }
+        },
+        "summary": "Current Site Status"
+      }
+    }
+  }
+}
