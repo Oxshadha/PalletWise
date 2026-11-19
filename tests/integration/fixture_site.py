@@ -29,6 +29,14 @@ class FixtureSite:
             {"id": uuid4(), "tenant_id": self.tenant, "code": f"C{uuid4().hex[:6]}", "name": "General"},
         )
         self._seq = 0
+        # Every stream synced at the site clock, as after a completed load (CWM 10.2); a site
+        # that never synced answers UNAVAILABLE, which only the dedicated tests want.
+        synced = self.db.execute(
+            "UPDATE pw.sync_state s SET data_as_of = c.sim_time, last_success_at = c.sim_time"
+            "  FROM pw.site_clock c WHERE c.site_id = s.site_id AND s.site_id = %s",
+            (self.site,),
+        ).rowcount
+        assert synced == 4, "a provisioned site has one sync state per stream"
 
     # ------------------------------------------------------------ rows
 

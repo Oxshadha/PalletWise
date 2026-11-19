@@ -113,7 +113,12 @@ def test_evidence_uses_the_site_clock_and_the_oldest_stream(site: Site) -> None:
     ).fetchone()
     assert clock and oldest and result.evidence.as_of == clock[0] and result.evidence.data_as_of == oldest[0]
     assert {f.stream for f in result.evidence.freshness} == {"MASTER", "MOVEMENTS", "ALLOCATIONS"}
-    assert result.evidence.settings_version_id is None
+    # Every answer names the settings version in effect (Slice 2 acceptance), even when its
+    # definitions use no setting, so all numbers in one answer share one version.
+    current = site.db.execute(
+        "SELECT id FROM pw.settings_version WHERE site_id = %s ORDER BY version_no DESC LIMIT 1", (site.site,)
+    ).fetchone()
+    assert current and result.evidence.settings_version_id == current[0]
     text = " ".join(result.evidence.how_computed)
     assert "SKU-102" in text and "(Asia/Colombo)" in text and not any(d in text for d in DASHES)
 

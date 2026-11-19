@@ -73,7 +73,7 @@ class StreamFreshness(Frozen):
 class Evidence(Frozen):
     as_of: datetime
     time_zone: str
-    # None while no definition used depends on a setting (settings arrive in Slice 2).
+    # The settings version in effect for the whole answer (semantic spec 2, Slice 2 acceptance).
     settings_version_id: UUID | None
     data_as_of: datetime | None  # the oldest data_as_of among the streams used
     freshness: tuple[StreamFreshness, ...]

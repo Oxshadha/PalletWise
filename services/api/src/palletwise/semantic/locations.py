@@ -69,13 +69,20 @@ class Moment:
     as_of: datetime
     time_zone: str
     freshness: tuple[StreamFreshness, ...]
+    settings_version_id: UUID  # the version in effect when the request started (semantic spec 2)
 
     def evidence(self, streams: tuple[str, ...], how_computed: tuple[str, ...]) -> Evidence:
         used = tuple(f for f in self.freshness if f.stream in streams)
         times = [f.data_as_of for f in used]
         oldest = None if not times or any(t is None for t in times) else min(t for t in times if t)
-        return Evidence(as_of=self.as_of, time_zone=self.time_zone, settings_version_id=None,
-                        data_as_of=oldest, freshness=used, how_computed=how_computed)  # fmt: skip
+        return Evidence(
+            as_of=self.as_of,
+            time_zone=self.time_zone,
+            settings_version_id=self.settings_version_id,
+            data_as_of=oldest,
+            freshness=used,
+            how_computed=how_computed,
+        )
 
     def missing_streams(self, streams: tuple[str, ...]) -> list[str]:
         known = {f.stream: f.data_as_of for f in self.freshness}
@@ -99,7 +106,15 @@ def read_moment(conn: Connection, site: UUID) -> Moment:
         (site,),
     ).fetchall()
     freshness = tuple(StreamFreshness(stream=s, data_as_of=t) for s, t in streams)
-    return Moment(site, row[0], row[1], freshness)
+    settings = query(
+        conn,
+        "current_settings",
+        "SELECT settings_version_id FROM sem.current_settings WHERE site_id = %s",
+        (site,),
+    ).fetchone()
+    if settings is None:
+        raise SiteNotReady(str(site))  # every site has settings from creation (CWM 9.1)
+    return Moment(site, row[0], row[1], freshness, settings[0])
 
 
 def _envelope(

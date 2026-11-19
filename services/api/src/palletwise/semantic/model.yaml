@@ -20,6 +20,33 @@ measures:
     unit: units
     how_computed: >-
       Available is on hand minus allocated.
+  demand_units:
+    label: Units picked
+    unit: units
+    how_computed: >-
+      Units picked for orders that were not cancelled, minus picks that were reversed.
+      Shipping is not counted, so nothing is counted twice.
+  days_since_last_pick:
+    label: Days since last pick
+    unit: days
+    how_computed: >-
+      Whole days since the product was last picked for an order that was not cancelled.
+  stock_value:
+    label: Stock value
+    unit: LKR
+    how_computed: >-
+      Stock value is units on hand times the product's unit value.
+  utilization_pct:
+    label: Utilization
+    unit: percent
+    how_computed: >-
+      Utilization is the larger of volume used and weight used, as a percentage of capacity.
+      For a zone it is the total used over the total capacity of its active locations.
+  shortfall:
+    label: Short
+    unit: units
+    how_computed: >-
+      Short is the units due minus the units available in the pick locations.
 
 results:
   find_product_locations:
@@ -33,3 +60,49 @@ results:
     how_computed: >-
       Every product in location {bin_code} at {as_of}, by units on hand, with the time of
       its last stock movement.
+  get_low_stock:
+    measures: [available]
+    how_computed: >-
+      Products with a replenishment policy whose available units in their pick location are
+      at or below the policy minimum, at {as_of}. Stock in reserve does not count: the pick
+      location is where orders are picked from.
+  get_top_movers:
+    measures: [demand_units]
+    how_computed: >-
+      The {limit} products with the most units picked for orders in the last {days} days up
+      to {as_of}. Picks for cancelled orders do not count, and reversed picks are subtracted.
+  get_dead_stock:
+    measures: [days_since_last_pick, stock_value]
+    how_computed: >-
+      Products with stock in pick, reserve or bulk locations that have not been picked for an
+      order for more than {period} days (or never), at {as_of}. Products first received less
+      than {period} days ago are left out, because they are new. Largest stock value first.
+  get_slow_in_prime:
+    measures: [days_since_last_pick, on_hand]
+    how_computed: >-
+      Products not picked for an order for more than {period} days (or never) that still have
+      stock in a fast-pick zone, at {as_of}. One row per fast-pick location holding them.
+  get_zone_summary:
+    measures: [on_hand, stock_value, utilization_pct]
+    how_computed: >-
+      Stock and space used in every active zone at {as_of}, zones with the most units on hand
+      first.
+  get_capacity_hotspots:
+    measures: [utilization_pct]
+    how_computed: >-
+      Zones at or above {threshold} percent of their capacity, or with any location over
+      capacity, at {as_of}. Highest utilization first.
+  get_delayed_orders:
+    measures: []
+    how_computed: >-
+      Open orders past their dispatch deadline at {as_of}, and orders shipped after their
+      deadline since {since}.
+  get_order_stockout_risks:
+    measures: [shortfall]
+    how_computed: >-
+      For each product, the units on open order lines due within {hours} hours (overdue lines
+      included) that are not yet allocated, compared with the units available in its pick
+      locations, at {as_of}. A product is at risk when the units due are more than the pick
+      face holds. Replenishment fixes it when reserve stock covers the shortfall; otherwise it
+      is a true shortage. For replenishment before the first dispatch, the window ends at
+      today's next dispatch deadline and only products a replenishment can fix are listed.
