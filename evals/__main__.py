@@ -71,7 +71,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if not failed else 1
         llm = LlmSettings()
         configs = named(args.compare.split(",") if args.compare else [args.config])
-        compared = compare(env, cases, provider, configs, runs=args.runs)
+        # A provider per configuration: each API runs on its own event loop (runner.compare).
+        compared = compare(env, cases, lambda: build_provider(LlmSettings()), configs, runs=args.runs)
         entries = [
             ConfigRun(name, config.as_json(), results)
             for (name, results), config in zip(compared, configs, strict=True)

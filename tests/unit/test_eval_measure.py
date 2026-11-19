@@ -9,6 +9,7 @@ from evals.measure import (
     check_gates,
     combined_status,
     facts_missing,
+    invalid_reason,
     milestones,
     model_calls,
     normalize_fact_text,
@@ -189,3 +190,13 @@ def test_configurations_alternate_who_goes_first() -> None:
 def test_an_a_a_comparison_gets_distinct_names() -> None:
     assert config_names([RuntimeConfig(), RuntimeConfig()]) == ["baseline-a", "baseline-b"]
     assert config_names([RuntimeConfig()]) == ["baseline"]
+
+
+def test_a_run_the_provider_mostly_rejected_is_invalid_not_a_measurement() -> None:
+    # The first baseline: 122 of 201 calls refused in about 5 ms by a model client on a closed loop.
+    assert (
+        invalid_reason({"rejected_calls": 122, "calls": 201})
+        == "the provider rejected 122 of 201 model calls"
+    )
+    assert invalid_reason({"rejected_calls": 1, "calls": 100}) is None
+    assert invalid_reason({"rejected_calls": 0, "calls": 0}) is None

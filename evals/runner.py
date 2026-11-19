@@ -4,7 +4,7 @@ import json
 import re
 import statistics
 import subprocess
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -18,6 +18,7 @@ from evals.measure import (
     check_gates,
     combined_status,
     facts_missing,
+    invalid_reason,
     milestones,
     model_calls,
     pct,
@@ -237,10 +238,14 @@ def _deterministic_case(env: EvalEnv, executor: Any, api: Any, case: Case) -> Ca
 
 
 def model(
-    env: EvalEnv, cases: list[Case], provider: LLMProvider, runs: int = 3, config: RuntimeConfig | None = None
+    env: EvalEnv,
+    cases: list[Case],
+    providers: Callable[[], LLMProvider],
+    runs: int = 3,
+    config: RuntimeConfig | None = None,
 ) -> list[CaseResult]:
     """One configuration, every case `runs` times (evals spec 6)."""
-    return compare(env, cases, provider, [config or RuntimeConfig()], runs)[0][1]
+    return compare(env, cases, providers, [config or RuntimeConfig()], runs)[0][1]
 
 
 def config_names(configs: Sequence[RuntimeConfig]) -> list[str]:
@@ -260,14 +265,23 @@ def run_order(n_configs: int, run: int) -> list[int]:
 
 
 def compare(
-    env: EvalEnv, cases: list[Case], provider: LLMProvider, configs: Sequence[RuntimeConfig], runs: int = 3
+    env: EvalEnv,
+    cases: list[Case],
+    providers: Callable[[], LLMProvider],
+    configs: Sequence[RuntimeConfig],
+    runs: int = 3,
 ) -> list[tuple[str, list[CaseResult]]]:
-    """Every configuration on the same cases in one session, interleaved case by case and run by run."""
+    """Every configuration on the same cases in one session, interleaved case by case and run by run.
+
+    Each configuration gets its own provider from `providers`: each API runs on its own event loop,
+    and a model client is bound to the loop that first used it, so a shared one fails on the other
+    loop at once (found by the first baseline run, which was discarded).
+    """
     names = config_names(configs)
     by_id = {c.id: c for c in cases}
     results: dict[str, list[CaseResult]] = {n: [] for n in names}
     with ExitStack() as stack:
-        apis = [stack.enter_context(env.api(provider, config=c)) for c in configs]
+        apis = [stack.enter_context(env.api(providers(), config=c)) for c in configs]
         current_role = None
         for case in sorted(cases, key=lambda c: c.role):
             if case.role != current_role:
@@ -431,6 +445,10 @@ def score(results: list[CaseResult]) -> dict[str, Any]:
         "text_source": {
             s: sum(run["text_source"] == s for _, run in runs) for s in ("model", "template", "message")
         },
+        "provider_errors": {
+            "rejected_calls": sum(c["outcome"] == "ERROR" and not c["usage_estimated"] for c in calls),
+            "calls": len(calls),
+        },
         "path_mix": {p: paths.count(p) for p in sorted(set(paths))},
         "unstable_cases": [r.case for r in results if len({run["passed"] for run in r.runs}) > 1],
     }
@@ -566,6 +584,9 @@ class ConfigRun:
             self.metrics = score(self.results)
             self.gates = check_gates(self.metrics)
             self.status = combined_status(self.gates)
+            reason = invalid_reason(self.metrics["provider_errors"])
+            if reason:
+                self.status = f"invalid: {reason}; {self.status}"
 
 
 def write_model_report(
@@ -723,6 +744,9 @@ def model_markdown(report: dict[str, Any]) -> str:
         "| text source | " + " | ".join(json.dumps(c["metrics"]["text_source"]) for c in configs) + " |",
         "| unstable cases | "
         + " | ".join(", ".join(c["metrics"]["unstable_cases"]) or "none" for c in configs)
+        + " |",
+        "| rejected model calls | "
+        + " | ".join("{rejected_calls} of {calls}".format(**c["metrics"]["provider_errors"]) for c in configs)
         + " |",
     ]
     if len(configs) > 1:

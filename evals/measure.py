@@ -206,3 +206,17 @@ def combined_status(gates: list[dict[str, Any]]) -> str:
     if failing:
         return "fail: " + ", ".join(failing)
     return "pass" + (f" (no data: {', '.join(missing)})" if missing else "")
+
+
+# Above this share of rejected model calls a run measures the provider, not the runtime.
+INVALID_REJECTED_SHARE = 0.05
+
+
+def invalid_reason(provider_errors: dict[str, int]) -> str | None:
+    """Why a run cannot count as a measurement of the runtime, or None. Rejected calls are
+    provider refusals (no tokens, not a timeout); a few happen in real use and the fallback handles
+    them, but beyond a small share the report would measure the provider, not the runtime."""
+    calls, rejected = provider_errors["calls"], provider_errors["rejected_calls"]
+    if calls and rejected / calls > INVALID_REJECTED_SHARE:
+        return f"the provider rejected {rejected} of {calls} model calls"
+    return None

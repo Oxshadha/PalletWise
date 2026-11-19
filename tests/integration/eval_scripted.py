@@ -52,7 +52,7 @@ def main(directory: Path) -> None:
     cases = [c for c in load_set("core")[0] if c.id in CASES]
     configs = [RuntimeConfig(), RuntimeConfig()]  # an A/A run: the comparison path itself
     with standalone() as env:
-        compared = compare(env, cases, ScriptedProvider(), configs, runs=2)
+        compared = compare(env, cases, ScriptedProvider, configs, runs=2)
         entries = [
             ConfigRun(name, c.as_json(), results)
             for (name, results), c in zip(compared, configs, strict=True)
