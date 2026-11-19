@@ -102,6 +102,9 @@ jobs:
 
   stack:
     name: Local stack starts healthy
+    # The slowest job (a full make up): runs after a merge into main, not on every pull request.
+    # Pull requests still get every test; main is checked end to end.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     needs: [python, web]
     steps:
@@ -109,14 +112,23 @@ jobs:
       - name: Create .env with random development values
         run: |
           python3 - <<'EOF'
-          import pathlib, secrets
+          import base64, os, pathlib, secrets
+          def value(line):
+              if line.startswith("PW_SESSION_KEYS="):  # AES-256 key: 32 random bytes, base64
+                  return "PW_SESSION_KEYS=k1:" + base64.b64encode(os.urandom(32)).decode()
+              return line.replace("change-me", secrets.token_urlsafe(18))
           src = pathlib.Path(".env.example").read_text()
-          pathlib.Path(".env").write_text("\n".join(
-              l.replace("change-me", secrets.token_urlsafe(18)) for l in src.splitlines()) + "\n")
+          pathlib.Path(".env").write_text("\n".join(value(l) for l in src.splitlines()) + "\n")
           EOF
       - name: make up (no optional credentials)
         run: make up
-      - name: Site is READY through the edge
-        run: curl -fsS http://localhost:8080/api/sites/current/status | grep -q '"data_status":"READY"'
+      - name: API answers through the edge
+        run: curl -fsS http://localhost:8080/api/health | grep -q '"ready":true'
+      - name: Site is READY (site status needs a session, so ask the simulation admin)
+        run: >-
+          docker compose --env-file infra/images.env --env-file .env -f infra/compose.yaml
+          exec -T simadmin python -c "import urllib.request as u;
+          print(u.urlopen('http://127.0.0.1:8082/health').read().decode())"
+          | grep -q '"data_status": "READY"'
       - if: failure()
         run: make logs > stack.log 2>&1 & sleep 5; cat stack.log | tail -200

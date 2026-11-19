@@ -33,6 +33,7 @@ Authorization code flow against Keycloak. The browser never sees an access, refr
 | ID token validation | Signature against Keycloak's published keys, `iss` equals the realm issuer, `aud` contains `palletwise-bff`, `azp` equals `palletwise-bff` when present, `exp` and `iat` valid, `nonce` equals the attempt's nonce. Any failure rejects the sign-in. |
 | Session creation | Only after a successful callback is a session created and its id issued. No session exists before authentication, so session fixation is not possible. |
 | Other endpoints | `POST /api/auth/logout`, `GET /api/me` (user, role, sites; never tokens) |
+| Refused sign-in | The callback redirects to `/?auth_error=<reason>` with reason `state`, `failed`, `role`, `tenant` or `unavailable`; the web app shows a plain message for each. The Keycloak session behind a refused sign-in is ended. |
 
 ## 3. Session
 
@@ -42,9 +43,10 @@ Authorization code flow against Keycloak. The browser never sees an access, refr
 | Cookie | `__Host-pw_session`: HttpOnly, Secure, SameSite=Lax, Path=/. The `__Host-` prefix guarantees no `Domain` attribute. Holds only the session id. |
 | Expiry | Idle 30 minutes, absolute 12 hours (settings), **checked on every authenticated request**. The cleanup sweep is housekeeping only. |
 | Token refresh | Keycloak access tokens live 5 minutes. When a server-side operation needs a fresh user access token, the API refreshes with the stored refresh token. **Refreshes are serialized per session** (row lock on the session during refresh), so concurrent requests never race on a rotating refresh token. |
-| Revalidation | Every refresh re-reads roles, tenant and sites from the new tokens. A lost role, a changed tenant or a disabled account ends the session; changed sites are updated in place. Revocation therefore takes effect within 5 minutes. |
+| Revalidation | An authenticated request refreshes when the last refresh is older than the access token lifetime (5 minutes); the database decides when it is due. Every refresh re-reads roles, tenant and sites from the new tokens. A lost role, a changed tenant or a disabled account ends the session; changed sites are updated in place. Revocation therefore takes effect within 5 minutes. |
 | Secrets in telemetry | Tokens, refresh tokens, session ids and encryption keys never appear in logs, traces or audit entries. |
-| Sign-out | Ends the local session, clears the cookie, revokes the refresh token at Keycloak and starts RP-initiated logout. |
+| Sign-out | Ends the local session, clears the cookie and ends the Keycloak session server to server with the refresh token, which also invalidates that token. No browser redirect to Keycloak is needed, so no ID token is kept. |
+| Identity provider unreachable | A request that needs revalidation is refused with 503; the session is kept, and access is never granted without revalidation. |
 
 ## 4. Roles, tenant and sites
 
@@ -59,7 +61,8 @@ Authorization code flow against Keycloak. The browser never sees an access, refr
 | Agent identity | Keycloak client `palletwise-copilot` (confidential). PalletWise record: **agent registry** row in `pw.agent` with id, version, status (`ACTIVE`, `SUSPENDED`), allowed scopes, primary and fallback model, prompt version, max steps, daily token budget. Slice 1 seeds one row; the Admin UI arrives in Slice 7. |
 | Token exchange | At the start of a copilot run the API obtains a fresh user access token by server-side refresh (section 3), then exchanges it for a token issued to `palletwise-copilot`. The exchanged token is validated for issuer, audience and client. The API never accepts a subject or agent identity from the request. |
 | Failure | If refresh or exchange fails, the run is denied. There is no fallback to a service account. |
-| Delegation claim | Keycloak's support for an RFC 8693 `act` claim is verified at the start of Slice 1. Without it, the API records the acting agent itself (subject from the exchanged token, agent from the registry). The policy input is the same either way. |
+| Delegation claim | **Verified in Slice 1 (Keycloak 26.4.7): standard token exchange issues no RFC 8693 `act` claim.** The API therefore records the acting agent itself: subject from the exchanged token, `azp` must be `palletwise-bff`, `aud` must be `palletwise-copilot`, and the agent identity and version come from the registry. The policy input is unchanged. |
+| Copilot audience | Keycloak issues the `palletwise-copilot` audience only to a client mapped to it. The realm gives `palletwise-bff` the **optional** client scope `copilot-audience`, requested only in the exchange call, so ordinary user tokens never carry the copilot audience. |
 | Effective rights | The user's scopes **intersected with** the agent's allowed scopes, only while the agent is `ACTIVE` (NFR-SEC-02). Agent scopes can only remove rights, never add them. |
 
 ## 6. Authorization (OPA)
@@ -106,7 +109,7 @@ Default deny. **Fail closed:** if OPA or the agent registry cannot be reached, t
 
 | Test | Expected |
 |---|---|
-| No session | 401 on every API endpoint except login, callback and health |
+| No session | 401 on every API endpoint except login, callback, logout (idempotent) and health |
 | Tokens never reach the browser | No token in any response body, URL or header other than the session cookie |
 | Invalid or reused state | Callback rejected |
 | Invalid nonce, wrong audience, wrong issuer, bad signature | Sign-in rejected |
@@ -123,7 +126,7 @@ Default deny. **Fail closed:** if OPA or the agent registry cannot be reached, t
 | Concurrent refresh | One refresh per session; no failed requests from token rotation |
 | CSRF | Missing or foreign `Origin` on a state-changing request refused |
 | Session expiry | Idle and absolute timeouts enforced on the request, not by the sweep |
-| Sign-out | Session row gone, refresh token revoked, Keycloak logout started |
+| Sign-out | Session row gone, Keycloak session ended, refresh token no longer usable |
 | RLS backstop | A query with a mismatched tenant context returns no rows |
 | OPA | Rego unit tests for every row of the scope table and every deny reason |
 
@@ -145,4 +148,8 @@ Default deny. **Fail closed:** if OPA or the agent registry cannot be reached, t
 | Date | Change |
 |---|---|
 | 2026-11-18 | First draft. |
+| 2026-11-19 | Slice 1 step 2 findings (no design change): sign-out ends the Keycloak session server to server instead of a browser redirect (same effect, no ID token stored); revalidation runs on the request every 5 minutes; 503 when Keycloak is unreachable; logout is idempotent and open. Realm fix: a realm file that declares client scopes gets none of Keycloak's built-in scopes, so `basic` is declared explicitly and the name mapper sits on the client. |
+| 2026-11-19 | Slice 1 step 1 findings (no design change): no `act` claim from Keycloak, documented fallback in use; optional `copilot-audience` scope added to the realm. Also fixed a Slice 0 bug: the realm file used `${env.X}` placeholders, which Keycloak does not substitute, leaving literal client secrets and dev passwords; the syntax is `${X}`. |
 | 2026-11-19 | Revision 2 after review: OIDC state, nonce, PKCE and token validation with a login attempt table; fresh user token by refresh for token exchange; failure means deny; client roles; attribute lifecycle and revalidation on refresh; AES-GCM refresh tokens with key ids; refresh serialization; expiry checked per request; explicit copilot prohibition on approval and admin scopes; fail closed when OPA or the registry is unavailable; resource tenant in the policy input; three-layer model; extended tests. Not adopted: computing scopes in the API (the map lives in OPA policy data instead); a separate `Domain` prohibition (the `__Host-` prefix already guarantees it). |
+| 2026-11-19 | Slice 1 step 3 findings (no design change): the agent registry is per tenant (each tenant has its own kill switch) and every new tenant gets the default copilot row from a trigger; model names in the registry are logical names resolved by the LLM provider. The policy builds `allow` only from positive conditions; deny reasons explain refusals for the audit. A first draft that allowed when no deny rule fired returned allow for empty input, which the Rego tests caught. |
+| 2026-11-19 | Slice 1 step 5 finding: the token exchange requests `openid copilot-audience`, not only `copilot-audience`. Keycloak 26 keeps the exchange's scope on the client session, so without `openid` the next refresh returned no ID token and revalidation (correctly) ended the session. A Keycloak test now delegates three times and checks the session survives. |

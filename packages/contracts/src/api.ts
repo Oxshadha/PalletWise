@@ -4,6 +4,162 @@
  */
 
 export interface paths {
+    "/api/auth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Callback */
+        get: operations["callback_api_auth_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Login */
+        get: operations["login_api_auth_login_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Logout */
+        post: operations["logout_api_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/copilot/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Conversations */
+        get: operations["conversations_api_copilot_conversations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/copilot/conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Conversation */
+        get: operations["conversation_api_copilot_conversations__conversation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/copilot/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Run */
+        post: operations["start_run_api_copilot_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/copilot/runs/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Run */
+        post: operations["cancel_run_api_copilot_runs__run_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/copilot/runs/{run_id}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Feedback */
+        post: operations["feedback_api_copilot_runs__run_id__feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/copilot/starters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Starters
+         * @description Starter suggestions for an empty conversation (UX spec 6): only built capabilities.
+         */
+        get: operations["starters_api_copilot_starters_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -21,15 +177,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sites/current/status": {
+    "/api/me": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Current Site Status */
-        get: operations["current_site_status_api_sites_current_status_get"];
+        /** Me */
+        get: operations["me_api_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/bins/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bin Details
+         * @description The same semantic definition the copilot's get_bin_contents uses (FR-MAP-06).
+         */
+        get: operations["bin_details_api_sites__site_id__bins__code__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/layout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Layout */
+        get: operations["layout_api_sites__site_id__layout_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/map-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current Map State */
+        get: operations["current_map_state_api_sites__site_id__map_state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Site Status */
+        get: operations["site_status_api_sites__site_id__status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -42,12 +269,410 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** BinOut */
+        BinOut: {
+            /** Bay */
+            bay: number | null;
+            /** Bin Role */
+            bin_role: string;
+            /** Code */
+            code: string;
+            /** Depth M */
+            depth_m: number;
+            /** Height M */
+            height_m: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Level */
+            level: number | null;
+            /** Rack Id */
+            rack_id: string | null;
+            /** Width M */
+            width_m: number;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+            /** Z */
+            z: number;
+            /**
+             * Zone Id
+             * Format: uuid
+             */
+            zone_id: string;
+        };
+        /** BinStateOut */
+        BinStateOut: {
+            /**
+             * Bin Id
+             * Format: uuid
+             */
+            bin_id: string;
+            /** On Hand */
+            on_hand: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "NORMAL" | "EMPTY";
+        };
+        /** Column */
+        Column: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "text" | "integer" | "number" | "boolean" | "datetime";
+            /** Unit */
+            unit?: string | null;
+        };
+        /** ConversationDetailOut */
+        ConversationDetailOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Runs */
+            runs: components["schemas"]["RunOut"][];
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ConversationOut */
+        ConversationOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** EntityRef */
+        EntityRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "product" | "bin" | "zone" | "order";
+        };
+        /** Evidence */
+        Evidence: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Data As Of */
+            data_as_of: string | null;
+            /** Freshness */
+            freshness: components["schemas"]["StreamFreshness"][];
+            /** How Computed */
+            how_computed: string[];
+            /** Settings Version Id */
+            settings_version_id: string | null;
+            /** Time Zone */
+            time_zone: string;
+        };
+        /** FeatureOut */
+        FeatureOut: {
+            /** Feature Type */
+            feature_type: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /** Outline */
+            outline: [
+                number,
+                number
+            ][];
+        };
+        /** FeedbackIn */
+        FeedbackIn: {
+            /** Comment */
+            comment?: string | null;
+            /**
+             * Rating
+             * @enum {string}
+             */
+            rating: "HELPFUL" | "NOT_HELPFUL";
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
         /** Health */
         Health: {
             /** Database */
             database: boolean;
             /** Ready */
             ready: boolean;
+        };
+        /** Highlight */
+        Highlight: {
+            reason: components["schemas"]["HighlightReason"];
+            severity: components["schemas"]["Severity"];
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+            /**
+             * Target Type
+             * @enum {string}
+             */
+            target_type: "bin" | "rack" | "zone";
+        };
+        /**
+         * HighlightReason
+         * @enum {string}
+         */
+        HighlightReason: "query" | "location" | "fast_mover" | "low_stock" | "stockout_risk" | "delayed_order" | "dead_stock" | "slow_in_prime" | "capacity" | "festival_risk" | "proposal";
+        /** LayoutOut */
+        LayoutOut: {
+            /** Bins */
+            bins: components["schemas"]["BinOut"][];
+            /** Features */
+            features: components["schemas"]["FeatureOut"][];
+            /** Racks */
+            racks: components["schemas"]["RackOut"][];
+            site: components["schemas"]["SiteGeometry"];
+            /** Zones */
+            zones: components["schemas"]["ZoneOut"][];
+        };
+        /** MapStateOut */
+        MapStateOut: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Bins */
+            bins: components["schemas"]["BinStateOut"][];
+            /** Data As Of */
+            data_as_of: string | null;
+            /** Time Zone */
+            time_zone: string;
+        };
+        /** MeOut */
+        MeOut: {
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "warehouse_manager" | "admin";
+            /** Sites */
+            sites: components["schemas"]["SiteOut"][];
+        };
+        /**
+         * PageContext
+         * @description What the user is looking at. Context for the model only, never used to authorize.
+         */
+        PageContext: {
+            /** Selected Bin */
+            selected_bin?: string | null;
+            /** Selected Zone */
+            selected_zone?: string | null;
+        };
+        /** RackOut */
+        RackOut: {
+            /** Bay Count */
+            bay_count: number;
+            /** Bay Width M */
+            bay_width_m: number;
+            /** Code */
+            code: string;
+            /** Depth M */
+            depth_m: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Level Count */
+            level_count: number;
+            /** Level Height M */
+            level_height_m: number;
+            /** Origin X */
+            origin_x: number;
+            /** Origin Y */
+            origin_y: number;
+            /** Rotation Deg */
+            rotation_deg: number;
+            /**
+             * Zone Id
+             * Format: uuid
+             */
+            zone_id: string;
+        };
+        /** ResultEnvelope */
+        ResultEnvelope: {
+            /**
+             * Columns
+             * @default []
+             */
+            columns: components["schemas"]["Column"][];
+            /**
+             * Entities
+             * @default []
+             */
+            entities: components["schemas"]["EntityRef"][];
+            evidence: components["schemas"]["Evidence"];
+            /**
+             * Highlights
+             * @default []
+             */
+            highlights: components["schemas"]["Highlight"][];
+            /**
+             * Highlights Truncated
+             * @default false
+             */
+            highlights_truncated: boolean;
+            /** Message */
+            message?: string | null;
+            /** Normalized Request */
+            normalized_request: {
+                [key: string]: unknown;
+            };
+            /**
+             * Rows
+             * @default []
+             */
+            rows: {
+                [key: string]: unknown;
+            }[];
+            status: components["schemas"]["ResultStatus"];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /**
+         * ResultStatus
+         * @enum {string}
+         */
+        ResultStatus: "OK" | "NO_RESULTS" | "NOT_FOUND" | "AMBIGUOUS" | "UNAVAILABLE";
+        /** RunIn */
+        RunIn: {
+            /** Conversation Id */
+            conversation_id?: string | null;
+            page_context?: components["schemas"]["PageContext"] | null;
+            /** Question */
+            question: string;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            suggestion?: components["schemas"]["SuggestionIn"] | null;
+        };
+        /** RunOut */
+        RunOut: {
+            /** Answer Text */
+            answer_text: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Outcome */
+            outcome: string | null;
+            /** Path */
+            path: string | null;
+            /** Question */
+            question: string;
+            /** Results */
+            results: unknown[];
+            /** Seq */
+            seq: number;
+            /** Status */
+            status: string;
+            /** Suggestions */
+            suggestions: unknown[];
+            /** Trace Id */
+            trace_id: string;
+        };
+        /**
+         * Severity
+         * @enum {string}
+         */
+        Severity: "info" | "warning" | "critical";
+        /** SiteGeometry */
+        SiteGeometry: {
+            /** Code */
+            code: string;
+            /** Depth M */
+            depth_m: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Width M */
+            width_m: number;
+        };
+        /** SiteOut */
+        SiteOut: {
+            /** Code */
+            code: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
         };
         /** SiteStatusOut */
         SiteStatusOut: {
@@ -59,6 +684,74 @@ export interface components {
             name: string;
             /** Sim Time */
             sim_time: string | null;
+            /** Time Zone */
+            time_zone: string;
+        };
+        /** StreamFreshness */
+        StreamFreshness: {
+            /** Data As Of */
+            data_as_of: string | null;
+            /**
+             * Stream
+             * @enum {string}
+             */
+            stream: "MASTER" | "MOVEMENTS" | "ORDERS" | "ALLOCATIONS";
+        };
+        /** SuggestionIn */
+        SuggestionIn: {
+            /** Arguments */
+            arguments: {
+                [key: string]: string | number | boolean | null;
+            };
+            /** Label */
+            label: string;
+            /** Tool */
+            tool: string;
+        };
+        /** SuggestionOut */
+        SuggestionOut: {
+            /** Arguments */
+            arguments: {
+                [key: string]: string | number | boolean | null;
+            };
+            /** Label */
+            label: string;
+            /** Tool */
+            tool: string;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+        };
+        /** ZoneOut */
+        ZoneOut: {
+            /** Code */
+            code: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Prime */
+            is_prime: boolean;
+            /** Name */
+            name: string;
+            /** Outline */
+            outline: [
+                number,
+                number
+            ][];
+            /** Zone Type */
+            zone_type: string;
         };
     };
     responses: never;
@@ -69,6 +762,292 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    callback_api_auth_callback_get: {
+        parameters: {
+            query?: {
+                state?: string;
+                code?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_api_auth_login_get: {
+        parameters: {
+            query?: {
+                return_to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_api_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    conversations_api_copilot_conversations_get: {
+        parameters: {
+            query: {
+                site_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    conversation_api_copilot_conversations__conversation_id__get: {
+        parameters: {
+            query: {
+                site_id: string;
+            };
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_run_api_copilot_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunIn"];
+            };
+        };
+        responses: {
+            /** @description Run events (agent spec 9.1) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description VALIDATION_FAILED */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description RATE_LIMITED */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description DATA_NOT_READY, COPILOT_SUSPENDED or UNAVAILABLE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cancel_run_api_copilot_runs__run_id__cancel_post: {
+        parameters: {
+            query: {
+                site_id: string;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    feedback_api_copilot_runs__run_id__feedback_post: {
+        parameters: {
+            query: {
+                site_id: string;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    starters_api_copilot_starters_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuggestionOut"][];
+                };
+            };
+        };
+    };
     health_api_health_get: {
         parameters: {
             query?: never;
@@ -89,7 +1068,7 @@ export interface operations {
             };
         };
     };
-    current_site_status_api_sites_current_status_get: {
+    me_api_me_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -104,15 +1083,149 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["MeOut"];
+                };
+            };
+        };
+    };
+    bin_details_api_sites__site_id__bins__code__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    layout_api_sites__site_id__layout_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-none-match"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LayoutOut"];
+                };
+            };
+            /** @description Not modified */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_map_state_api_sites__site_id__map_state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapStateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    site_status_api_sites__site_id__status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/json": components["schemas"]["SiteStatusOut"];
                 };
             };
-            /** @description The site has not been created yet */
+            /** @description Not one of your sites, or not created yet */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

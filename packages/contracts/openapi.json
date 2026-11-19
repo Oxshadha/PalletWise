@@ -1,6 +1,421 @@
 {
   "components": {
     "schemas": {
+      "BinOut": {
+        "properties": {
+          "bay": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bay"
+          },
+          "bin_role": {
+            "title": "Bin Role",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "depth_m": {
+            "title": "Depth M",
+            "type": "number"
+          },
+          "height_m": {
+            "title": "Height M",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "rack_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rack Id"
+          },
+          "width_m": {
+            "title": "Width M",
+            "type": "number"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          },
+          "z": {
+            "title": "Z",
+            "type": "number"
+          },
+          "zone_id": {
+            "format": "uuid",
+            "title": "Zone Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "zone_id",
+          "rack_id",
+          "bin_role",
+          "bay",
+          "level",
+          "x",
+          "y",
+          "z",
+          "width_m",
+          "depth_m",
+          "height_m"
+        ],
+        "title": "BinOut",
+        "type": "object"
+      },
+      "BinStateOut": {
+        "properties": {
+          "bin_id": {
+            "format": "uuid",
+            "title": "Bin Id",
+            "type": "string"
+          },
+          "on_hand": {
+            "title": "On Hand",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "NORMAL",
+              "EMPTY"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bin_id",
+          "state",
+          "on_hand"
+        ],
+        "title": "BinStateOut",
+        "type": "object"
+      },
+      "Column": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "text",
+              "integer",
+              "number",
+              "boolean",
+              "datetime"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "type"
+        ],
+        "title": "Column",
+        "type": "object"
+      },
+      "ConversationDetailOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/RunOut"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "created_at",
+          "updated_at",
+          "runs"
+        ],
+        "title": "ConversationDetailOut",
+        "type": "object"
+      },
+      "ConversationOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConversationOut",
+        "type": "object"
+      },
+      "EntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "product",
+              "bin",
+              "zone",
+              "order"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "label"
+        ],
+        "title": "EntityRef",
+        "type": "object"
+      },
+      "Evidence": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "data_as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data As Of"
+          },
+          "freshness": {
+            "items": {
+              "$ref": "#/components/schemas/StreamFreshness"
+            },
+            "title": "Freshness",
+            "type": "array"
+          },
+          "how_computed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "How Computed",
+            "type": "array"
+          },
+          "settings_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings Version Id"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "as_of",
+          "time_zone",
+          "settings_version_id",
+          "data_as_of",
+          "freshness",
+          "how_computed"
+        ],
+        "title": "Evidence",
+        "type": "object"
+      },
+      "FeatureOut": {
+        "properties": {
+          "feature_type": {
+            "title": "Feature Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "outline": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Outline",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "feature_type",
+          "label",
+          "outline"
+        ],
+        "title": "FeatureOut",
+        "type": "object"
+      },
+      "FeedbackIn": {
+        "additionalProperties": false,
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "rating": {
+            "enum": [
+              "HELPFUL",
+              "NOT_HELPFUL"
+            ],
+            "title": "Rating",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rating"
+        ],
+        "title": "FeedbackIn",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
       "Health": {
         "properties": {
           "database": {
@@ -17,6 +432,576 @@
           "database"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "Highlight": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "$ref": "#/components/schemas/HighlightReason"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "enum": [
+              "bin",
+              "rack",
+              "zone"
+            ],
+            "title": "Target Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_type",
+          "target_id",
+          "reason",
+          "severity"
+        ],
+        "title": "Highlight",
+        "type": "object"
+      },
+      "HighlightReason": {
+        "enum": [
+          "query",
+          "location",
+          "fast_mover",
+          "low_stock",
+          "stockout_risk",
+          "delayed_order",
+          "dead_stock",
+          "slow_in_prime",
+          "capacity",
+          "festival_risk",
+          "proposal"
+        ],
+        "title": "HighlightReason",
+        "type": "string"
+      },
+      "LayoutOut": {
+        "properties": {
+          "bins": {
+            "items": {
+              "$ref": "#/components/schemas/BinOut"
+            },
+            "title": "Bins",
+            "type": "array"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureOut"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "racks": {
+            "items": {
+              "$ref": "#/components/schemas/RackOut"
+            },
+            "title": "Racks",
+            "type": "array"
+          },
+          "site": {
+            "$ref": "#/components/schemas/SiteGeometry"
+          },
+          "zones": {
+            "items": {
+              "$ref": "#/components/schemas/ZoneOut"
+            },
+            "title": "Zones",
+            "type": "array"
+          }
+        },
+        "required": [
+          "site",
+          "zones",
+          "racks",
+          "bins",
+          "features"
+        ],
+        "title": "LayoutOut",
+        "type": "object"
+      },
+      "MapStateOut": {
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "bins": {
+            "items": {
+              "$ref": "#/components/schemas/BinStateOut"
+            },
+            "title": "Bins",
+            "type": "array"
+          },
+          "data_as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data As Of"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "as_of",
+          "time_zone",
+          "data_as_of",
+          "bins"
+        ],
+        "title": "MapStateOut",
+        "type": "object"
+      },
+      "MeOut": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "warehouse_manager",
+              "admin"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "sites": {
+            "items": {
+              "$ref": "#/components/schemas/SiteOut"
+            },
+            "title": "Sites",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "role",
+          "sites"
+        ],
+        "title": "MeOut",
+        "type": "object"
+      },
+      "PageContext": {
+        "additionalProperties": false,
+        "description": "What the user is looking at. Context for the model only, never used to authorize.",
+        "properties": {
+          "selected_bin": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Bin"
+          },
+          "selected_zone": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Zone"
+          }
+        },
+        "title": "PageContext",
+        "type": "object"
+      },
+      "RackOut": {
+        "properties": {
+          "bay_count": {
+            "title": "Bay Count",
+            "type": "integer"
+          },
+          "bay_width_m": {
+            "title": "Bay Width M",
+            "type": "number"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "depth_m": {
+            "title": "Depth M",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "level_count": {
+            "title": "Level Count",
+            "type": "integer"
+          },
+          "level_height_m": {
+            "title": "Level Height M",
+            "type": "number"
+          },
+          "origin_x": {
+            "title": "Origin X",
+            "type": "number"
+          },
+          "origin_y": {
+            "title": "Origin Y",
+            "type": "number"
+          },
+          "rotation_deg": {
+            "title": "Rotation Deg",
+            "type": "number"
+          },
+          "zone_id": {
+            "format": "uuid",
+            "title": "Zone Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "zone_id",
+          "origin_x",
+          "origin_y",
+          "rotation_deg",
+          "bay_count",
+          "level_count",
+          "bay_width_m",
+          "depth_m",
+          "level_height_m"
+        ],
+        "title": "RackOut",
+        "type": "object"
+      },
+      "ResultEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Column"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "entities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/EntityRef"
+            },
+            "title": "Entities",
+            "type": "array"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/Evidence"
+          },
+          "highlights": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Highlight"
+            },
+            "title": "Highlights",
+            "type": "array"
+          },
+          "highlights_truncated": {
+            "default": false,
+            "title": "Highlights Truncated",
+            "type": "boolean"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "normalized_request": {
+            "additionalProperties": true,
+            "title": "Normalized Request",
+            "type": "object"
+          },
+          "rows": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ResultStatus"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "status",
+          "evidence",
+          "normalized_request"
+        ],
+        "title": "ResultEnvelope",
+        "type": "object"
+      },
+      "ResultStatus": {
+        "enum": [
+          "OK",
+          "NO_RESULTS",
+          "NOT_FOUND",
+          "AMBIGUOUS",
+          "UNAVAILABLE"
+        ],
+        "title": "ResultStatus",
+        "type": "string"
+      },
+      "RunIn": {
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "page_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "question": {
+            "maxLength": 4000,
+            "title": "Question",
+            "type": "string"
+          },
+          "site_id": {
+            "format": "uuid",
+            "title": "Site Id",
+            "type": "string"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SuggestionIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "site_id",
+          "question"
+        ],
+        "title": "RunIn",
+        "type": "object"
+      },
+      "RunOut": {
+        "properties": {
+          "answer_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer Text"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "results": {
+            "items": {},
+            "title": "Results",
+            "type": "array"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "suggestions": {
+            "items": {},
+            "title": "Suggestions",
+            "type": "array"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "question",
+          "path",
+          "status",
+          "outcome",
+          "answer_text",
+          "results",
+          "suggestions",
+          "trace_id",
+          "created_at",
+          "finished_at"
+        ],
+        "title": "RunOut",
+        "type": "object"
+      },
+      "Severity": {
+        "enum": [
+          "info",
+          "warning",
+          "critical"
+        ],
+        "title": "Severity",
+        "type": "string"
+      },
+      "SiteGeometry": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "depth_m": {
+            "title": "Depth M",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "width_m": {
+            "title": "Width M",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "width_m",
+          "depth_m"
+        ],
+        "title": "SiteGeometry",
+        "type": "object"
+      },
+      "SiteOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name"
+        ],
+        "title": "SiteOut",
         "type": "object"
       },
       "SiteStatusOut": {
@@ -44,15 +1029,227 @@
               }
             ],
             "title": "Sim Time"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
           }
         },
         "required": [
           "code",
           "name",
           "data_status",
-          "sim_time"
+          "sim_time",
+          "time_zone"
         ],
         "title": "SiteStatusOut",
+        "type": "object"
+      },
+      "StreamFreshness": {
+        "additionalProperties": false,
+        "properties": {
+          "data_as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data As Of"
+          },
+          "stream": {
+            "enum": [
+              "MASTER",
+              "MOVEMENTS",
+              "ORDERS",
+              "ALLOCATIONS"
+            ],
+            "title": "Stream",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stream",
+          "data_as_of"
+        ],
+        "title": "StreamFreshness",
+        "type": "object"
+      },
+      "SuggestionIn": {
+        "additionalProperties": false,
+        "properties": {
+          "arguments": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxProperties": 10,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "label": {
+            "maxLength": 200,
+            "title": "Label",
+            "type": "string"
+          },
+          "tool": {
+            "pattern": "^[a-z][a-z_]{0,63}$",
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "tool",
+          "arguments"
+        ],
+        "title": "SuggestionIn",
+        "type": "object"
+      },
+      "SuggestionOut": {
+        "properties": {
+          "arguments": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Arguments",
+            "type": "object"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "tool",
+          "arguments"
+        ],
+        "title": "SuggestionOut",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "ZoneOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_prime": {
+            "title": "Is Prime",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "outline": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Outline",
+            "type": "array"
+          },
+          "zone_type": {
+            "title": "Zone Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "zone_type",
+          "is_prime",
+          "outline"
+        ],
+        "title": "ZoneOut",
         "type": "object"
       }
     }
@@ -63,6 +1260,372 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/auth/callback": {
+      "get": {
+        "operationId": "callback_api_auth_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 128,
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 4096,
+              "title": "Code",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Callback"
+      }
+    },
+    "/api/auth/login": {
+      "get": {
+        "operationId": "login_api_auth_login_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "return_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Return To"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login"
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "operationId": "logout_api_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout"
+      }
+    },
+    "/api/copilot/conversations": {
+      "get": {
+        "operationId": "conversations_api_copilot_conversations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConversationOut"
+                  },
+                  "title": "Response Conversations Api Copilot Conversations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Conversations",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/copilot/conversations/{conversation_id}": {
+      "get": {
+        "operationId": "conversation_api_copilot_conversations__conversation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Conversation",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/copilot/runs": {
+      "post": {
+        "operationId": "start_run_api_copilot_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Run events (agent spec 9.1)"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          },
+          "422": {
+            "description": "VALIDATION_FAILED"
+          },
+          "429": {
+            "description": "RATE_LIMITED"
+          },
+          "503": {
+            "description": "DATA_NOT_READY, COPILOT_SUSPENDED or UNAVAILABLE"
+          }
+        },
+        "summary": "Start Run",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/copilot/runs/{run_id}/cancel": {
+      "post": {
+        "operationId": "cancel_run_api_copilot_runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Run",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/copilot/runs/{run_id}/feedback": {
+      "post": {
+        "operationId": "feedback_api_copilot_runs__run_id__feedback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Feedback",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/copilot/starters": {
+      "get": {
+        "description": "Starter suggestions for an empty conversation (UX spec 6): only built capabilities.",
+        "operationId": "starters_api_copilot_starters_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SuggestionOut"
+                  },
+                  "title": "Response Starters Api Copilot Starters Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Starters",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "health_api_health_get",
@@ -81,9 +1644,198 @@
         "summary": "Health"
       }
     },
-    "/api/sites/current/status": {
+    "/api/me": {
       "get": {
-        "operationId": "current_site_status_api_sites_current_status_get",
+        "operationId": "me_api_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Me"
+      }
+    },
+    "/api/sites/{site_id}/bins/{code}": {
+      "get": {
+        "description": "The same semantic definition the copilot's get_bin_contents uses (FR-MAP-06).",
+        "operationId": "bin_details_api_sites__site_id__bins__code__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,31}$",
+              "title": "Code",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bin Details",
+        "tags": [
+          "map"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/layout": {
+      "get": {
+        "operationId": "layout_api_sites__site_id__layout_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LayoutOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "304": {
+            "description": "Not modified"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Layout",
+        "tags": [
+          "map"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/map-state": {
+      "get": {
+        "operationId": "current_map_state_api_sites__site_id__map_state_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MapStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Current Map State",
+        "tags": [
+          "map"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/status": {
+      "get": {
+        "operationId": "site_status_api_sites__site_id__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -96,10 +1848,20 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "The site has not been created yet"
+            "description": "Not one of your sites, or not created yet"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
-        "summary": "Current Site Status"
+        "summary": "Site Status"
       }
     }
   }

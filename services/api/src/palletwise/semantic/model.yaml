@@ -1,0 +1,35 @@
+# Semantic model (semantic spec 2): what each measure means and how each result is explained.
+# Versioned with the code. Changing a definition needs passing tests and the evaluation suite.
+# "how computed" texts are shown to people: plain language, no em or en dashes.
+version: 1
+
+measures:
+  on_hand:
+    label: On hand
+    unit: units
+    how_computed: >-
+      On hand is the number of units physically in a location, kept by applying every
+      stock movement from the warehouse system in order.
+  allocated:
+    label: Allocated
+    unit: units
+    how_computed: >-
+      Allocated is the number of units in a location reserved for open order lines.
+  available:
+    label: Available
+    unit: units
+    how_computed: >-
+      Available is on hand minus allocated.
+
+results:
+  find_product_locations:
+    measures: [on_hand, allocated, available]
+    how_computed: >-
+      Every location holding {sku} at {as_of}. Pick, reserve and bulk locations are listed
+      first, by units on hand; staging, receiving and returns locations hold stock in transit
+      and are not available for orders.
+  get_bin_contents:
+    measures: [on_hand, allocated, available]
+    how_computed: >-
+      Every product in location {bin_code} at {as_of}, by units on hand, with the time of
+      its last stock movement.

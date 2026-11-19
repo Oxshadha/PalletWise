@@ -2,6 +2,7 @@
 
 import os
 from collections.abc import Callable, Generator
+from pathlib import Path
 from typing import Any
 
 import psycopg
@@ -12,6 +13,7 @@ from palletwise.db.connection import dsn
 
 ROLE_PASSWORDS = {role: f"test-{role}" for role in LOGIN_ROLES}
 
+ROOT = Path(__file__).resolve().parents[1]
 POSTGRES_IMAGE = os.environ.get("PW_TEST_POSTGRES_IMAGE", "postgres:17-alpine")
 
 
@@ -55,3 +57,71 @@ def connect_as(database: dict[str, Any]) -> Generator[Callable[[str], psycopg.Co
     yield _connect
     for conn in opened:
         conn.close()
+
+
+def pinned_image(name: str) -> str:
+    """An image reference from infra/images.env, so tests use what the stack uses."""
+    for line in (ROOT / "infra/images.env").read_text().splitlines():
+        if line.startswith(f"{name}="):
+            return line.split("=", 1)[1].strip()
+    raise AssertionError(f"{name} missing from infra/images.env")
+
+
+@pytest.fixture(scope="session")
+def opa_url() -> Generator[str]:
+    """The real OPA serving policy/ (the same policy and data the stack loads)."""
+    import time
+
+    import httpx
+    from testcontainers.core.container import DockerContainer
+
+    container = (
+        DockerContainer(pinned_image("OPA_IMAGE"))
+        .with_command("run --server --addr=0.0.0.0:8181 /policy")
+        .with_exposed_ports(8181)
+        .with_volume_mapping(str(ROOT / "policy"), "/policy", "ro")
+    )
+    with container:
+        url = f"http://{container.get_container_host_ip()}:{container.get_exposed_port(8181)}"
+        deadline = time.monotonic() + 60
+        while True:
+            try:
+                if httpx.get(f"{url}/health").status_code == 200:
+                    break
+            except httpx.HTTPError:
+                pass
+            assert time.monotonic() < deadline, "OPA did not start"
+            time.sleep(0.5)
+        yield url
+
+
+@pytest.fixture(scope="session")
+def connect_session(database: dict[str, Any]) -> Generator[Callable[[str], psycopg.Connection]]:
+    """Like connect_as, for session- and module-scoped fixtures; closed at the end of the run."""
+    opened: list[psycopg.Connection] = []
+
+    def _connect(role: str) -> psycopg.Connection:
+        password = "postgres" if role == "postgres" else ROLE_PASSWORDS[role]
+        conn = psycopg.connect(dsn(database["settings"], role, password))
+        opened.append(conn)
+        return conn
+
+    yield _connect
+    for conn in opened:
+        conn.close()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def exported_spans() -> Any:
+    """The process tracer provider for every test: the real setup, every trace sampled, and an
+    in-memory exporter behind the same sanitizing filter production uses (evals spec 11, 16)."""
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from palletwise.settings import TelemetrySettings
+    from palletwise.telemetry.setup import configure_telemetry
+
+    exporter = InMemorySpanExporter()
+    configure_telemetry(
+        "palletwise-test", TelemetrySettings(sample_ratio=1.0, mask_salt="test-salt"), exporters=[exporter]
+    )
+    return exporter

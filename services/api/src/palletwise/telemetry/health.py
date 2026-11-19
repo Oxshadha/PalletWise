@@ -15,11 +15,20 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from palletwise import clock
 
-LOG_FORMAT = "%(asctime)s %(name)s %(levelname)s %(message)s"
-
 
 def configure_logging() -> None:
-    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
+    """JSON log lines with trace ids (evals spec 13)."""
+    from palletwise.telemetry.logs import configure_logging as configure_json_logging
+
+    configure_json_logging()
+
+
+def start_process(service: str) -> None:
+    """Logs and traces for one process, before it does any work."""
+    from palletwise.telemetry.setup import configure_telemetry
+
+    configure_logging()
+    configure_telemetry(service)
 
 
 def health_port(default: int) -> int:
@@ -31,6 +40,16 @@ def serve_health(port: int, status: Callable[[], dict[str, object]]) -> Threadin
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
+            if self.path == "/metrics":
+                from palletwise.telemetry.metrics import exposition
+
+                payload = exposition()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
             if self.path != "/health":
                 self.send_response(404)
                 self.end_headers()
@@ -53,7 +72,7 @@ def serve_health(port: int, status: Callable[[], dict[str, object]]) -> Threadin
 
 def idle_worker(name: str, default_port: int, status: dict[str, object]) -> int:
     """Run a worker that only reports health until its slice adds work."""
-    configure_logging()
+    start_process(name)
     serve_health(health_port(default_port), lambda: status)
     logging.getLogger(name).info("%s started", name)
     while True:

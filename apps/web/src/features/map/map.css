@@ -1,0 +1,465 @@
+/* Warehouse panel (UX spec 3 to 5). Tokens only; every state has a pattern or outline. */
+
+.pw-map-panel {
+  min-width: 0;
+}
+
+.pw-map-body {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  gap: var(--pw-space-4);
+  min-height: 0;
+  flex: 1;
+}
+
+.pw-map-stage {
+  position: relative;
+  min-height: 24rem;
+  border-radius: var(--pw-radius-md);
+  background: radial-gradient(50rem 30rem at 50% 40%, var(--pw-color-surface), transparent 75%);
+  overflow: hidden;
+}
+
+.pw-map-stage:focus-visible {
+  outline: 3px solid var(--pw-color-focus-ring);
+  outline-offset: 2px;
+}
+
+.pw-scene {
+  position: absolute;
+  inset: 0;
+}
+
+.pw-map-skeleton {
+  position: absolute;
+  inset: var(--pw-space-6);
+  border: 2px dashed var(--pw-color-border);
+  border-radius: var(--pw-radius-md);
+}
+
+.pw-map-message {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: var(--pw-space-2);
+  padding: var(--pw-space-6);
+  text-align: center;
+}
+
+.pw-map-controls {
+  position: absolute;
+  right: var(--pw-space-4);
+  top: 50%;
+  translate: 0 -50%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pw-space-2);
+}
+
+/* Floating key, bottom left of the map. */
+.pw-map-key {
+  position: absolute;
+  left: var(--pw-space-4);
+  bottom: var(--pw-space-4);
+  display: flex;
+  gap: var(--pw-space-4);
+  margin: 0;
+  padding: var(--pw-space-2) var(--pw-space-4);
+  list-style: none;
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-glass);
+  backdrop-filter: blur(var(--pw-blur-glass));
+  font-size: var(--pw-font-size-xs);
+  color: var(--pw-color-text-muted);
+}
+
+.pw-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: var(--pw-space-1);
+  border-radius: var(--pw-radius-pill);
+  vertical-align: middle;
+}
+
+.pw-dot.is-stock {
+  background: var(--pw-color-map-carton);
+}
+
+.pw-dot.is-empty {
+  background: var(--pw-color-map-floor-line);
+}
+
+.pw-dot.is-info {
+  background: var(--pw-color-status-info);
+}
+
+/* Labels drawn in the 3D scene (real text, so it is Inter at any zoom). */
+.pw-zone-tag,
+.pw-pin-tag {
+  display: inline-block;
+  padding: var(--pw-space-1) var(--pw-space-2);
+  border-radius: var(--pw-radius-pill);
+  font-size: var(--pw-font-size-xs);
+  font-weight: var(--pw-font-weight-navigation);
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.pw-zone-tag {
+  background: var(--pw-color-accent-strong);
+  color: var(--pw-color-text-on-accent);
+  opacity: 0.92;
+}
+
+.pw-pin-tag {
+  background: var(--pw-color-surface);
+  color: var(--pw-color-text-primary);
+  box-shadow: var(--pw-shadow-card);
+  border: 2px solid var(--pw-color-status-info);
+}
+
+.pw-pin-tag.is-warning {
+  border-color: var(--pw-color-status-warning);
+}
+
+.pw-pin-tag.is-critical {
+  border-color: var(--pw-color-status-critical);
+}
+
+/* Zone list, as in the side column. */
+.pw-zone-list {
+  list-style: none;
+  margin: var(--pw-space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--pw-space-1);
+}
+
+.pw-zone-list li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--pw-space-2);
+  padding: var(--pw-space-2) var(--pw-space-2);
+  border-radius: var(--pw-radius-sm);
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-zone-list li.is-lit {
+  background: var(--pw-color-accent-soft);
+}
+
+.pw-zone-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-map-floor-line);
+}
+
+.pw-zone-list li.is-lit .pw-zone-dot {
+  background: var(--pw-color-status-info);
+}
+
+.pw-zone-name {
+  font-weight: var(--pw-font-weight-navigation);
+}
+
+.pw-zone-count {
+  font-size: var(--pw-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.pw-clear {
+  margin-top: var(--pw-space-2);
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-map-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pw-space-3);
+  min-width: 0;
+  overflow: auto;
+}
+
+.pw-map-side .pw-card-soft {
+  padding: var(--pw-space-3);
+}
+
+/* ---------------------------------------------------------------- 2D plan */
+
+.pw-plan {
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+
+.pw-plan-floor {
+  fill: var(--pw-color-surface);
+  stroke: var(--pw-color-border);
+  stroke-width: 0.1;
+}
+
+.pw-plan-zone {
+  fill: var(--pw-color-accent-soft);
+  stroke: var(--pw-color-text-muted);
+  stroke-width: 0.08;
+}
+
+.pw-plan-label {
+  fill: var(--pw-color-text-muted);
+  font-weight: var(--pw-font-weight-navigation);
+}
+
+.pw-plan-hatch {
+  stroke: var(--pw-color-text-muted);
+  stroke-width: 0.06;
+}
+
+.pw-plan-bin {
+  fill: var(--pw-color-secondary);
+  stroke: var(--pw-color-border);
+  stroke-width: 0.04;
+  cursor: pointer;
+}
+
+.pw-plan-bin.is-empty {
+  fill: url(#pw-empty-pattern);
+  stroke: var(--pw-color-text-muted);
+  stroke-dasharray: 0.15 0.1;
+}
+
+/* While an answer is shown, every other location steps back so the highlights stand out. */
+.pw-plan.has-highlights .pw-plan-bin:not(.is-info, .is-warning, .is-critical) {
+  fill: var(--pw-color-border);
+}
+
+.pw-plan-bin.is-info {
+  fill: var(--pw-color-status-info);
+  stroke: var(--pw-color-status-info);
+  stroke-width: 0.18;
+}
+
+.pw-plan-bin.is-warning {
+  fill: var(--pw-color-status-warning);
+  stroke: var(--pw-color-status-warning);
+  stroke-width: 0.18;
+}
+
+.pw-plan-bin.is-critical {
+  fill: var(--pw-color-status-critical);
+  stroke: var(--pw-color-status-critical);
+  stroke-width: 0.3;
+}
+
+.pw-plan-marker circle {
+  fill: none;
+  stroke-width: 0.35;
+}
+
+.pw-plan-marker text {
+  font-weight: var(--pw-font-weight-heading);
+  fill: var(--pw-color-text-primary);
+  paint-order: stroke;
+  stroke: var(--pw-color-surface);
+  stroke-width: 0.3;
+}
+
+.pw-plan-marker.is-info circle {
+  stroke: var(--pw-color-status-info);
+}
+
+.pw-plan-marker.is-warning circle {
+  stroke: var(--pw-color-status-warning);
+}
+
+.pw-plan-marker.is-critical circle {
+  stroke: var(--pw-color-status-critical);
+  stroke-width: 0.55;
+}
+
+.pw-plan-bin.is-selected {
+  stroke: var(--pw-color-focus-ring);
+  stroke-width: 0.25;
+  stroke-dasharray: 0.3 0.15;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pw-plan-bin.is-info,
+  .pw-plan-bin.is-warning,
+  .pw-plan-bin.is-critical {
+    animation: pw-pulse 0.6s ease-out 1;
+  }
+}
+
+@keyframes pw-pulse {
+  from {
+    stroke-opacity: 0.2;
+  }
+  to {
+    stroke-opacity: 1;
+  }
+}
+
+/* ---------------------------------------------------------------- side list, legend, popover */
+
+.pw-locations ul,
+.pw-legend ul {
+  list-style: none;
+  margin: var(--pw-space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--pw-space-1);
+}
+
+.pw-locations summary,
+.pw-legend summary {
+  cursor: pointer;
+  font-weight: var(--pw-font-weight-navigation);
+}
+
+.pw-count {
+  margin-left: var(--pw-space-1);
+  color: var(--pw-color-text-muted);
+}
+
+.pw-location {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: var(--pw-space-2);
+  padding: var(--pw-space-2) var(--pw-space-3);
+  border: 1px solid var(--pw-color-glass-border);
+  border-left-width: 3px;
+  border-radius: var(--pw-radius-sm);
+  background: var(--pw-color-surface);
+  font-size: var(--pw-font-size-sm);
+  color: var(--pw-color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pw-location.is-info {
+  border-left-color: var(--pw-color-status-info);
+}
+
+.pw-location.is-warning {
+  border-left-color: var(--pw-color-status-warning);
+}
+
+.pw-location.is-critical {
+  border-left-color: var(--pw-color-status-critical);
+}
+
+.pw-location[aria-pressed="true"] {
+  outline: 2px dashed var(--pw-color-focus-ring);
+}
+
+.pw-location-code {
+  font-weight: var(--pw-font-weight-navigation);
+}
+
+.pw-swatch {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  margin-right: var(--pw-space-2);
+  vertical-align: middle;
+  border-radius: var(--pw-radius-sm);
+  background: var(--pw-color-secondary);
+  border: 1px solid var(--pw-color-border);
+}
+
+.pw-swatch.is-empty {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--pw-color-surface) 0 3px,
+    var(--pw-color-text-muted) 3px 4px
+  );
+  border-style: dashed;
+}
+
+.pw-swatch.is-info {
+  border: 2px solid var(--pw-color-status-info);
+}
+
+.pw-swatch.is-warning {
+  border: 2px solid var(--pw-color-status-warning);
+}
+
+.pw-swatch.is-critical {
+  border: 4px solid var(--pw-color-status-critical);
+}
+
+.pw-swatch.is-selected {
+  border: 2px dashed var(--pw-color-focus-ring);
+}
+
+.pw-popover {
+  position: absolute;
+  top: var(--pw-space-3);
+  right: calc(var(--pw-space-4) * 2 + 2.5rem);
+  width: min(34rem, calc(100% - var(--pw-space-6)));
+  max-height: calc(100% - var(--pw-space-6));
+  overflow: auto;
+  padding: var(--pw-space-4);
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-md);
+  background: var(--pw-color-glass);
+  backdrop-filter: blur(var(--pw-blur-glass));
+  box-shadow: var(--pw-shadow-popover);
+}
+
+.pw-popover header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pw-popover h3 {
+  margin: 0;
+  font-size: var(--pw-font-size-lg);
+}
+
+@media (max-width: 1599px) {
+  .pw-map-body {
+    grid-template-columns: 12.5rem minmax(0, 1fr);
+  }
+
+  .pw-location {
+    flex-direction: column;
+    gap: 0;
+  }
+}
+
+@media (max-height: 820px) {
+  .pw-map-stage {
+    min-height: 16rem;
+  }
+}
+
+/* Hover tooltip in the scene: code and the main number (UX spec 3). */
+.pw-tooltip {
+  display: inline-grid;
+  gap: 0;
+  padding: var(--pw-space-1) var(--pw-space-3);
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-sm);
+  background: var(--pw-color-surface);
+  box-shadow: var(--pw-shadow-popover);
+  color: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-xs);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.pw-tooltip strong {
+  color: var(--pw-color-text-primary);
+  font-weight: var(--pw-font-weight-heading-strong);
+}

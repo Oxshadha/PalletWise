@@ -300,6 +300,7 @@ Generation of the full history completes in under 2 minutes on the reference mac
 | 10 | Global outbox sequence with tick markers drives the PalletWise clock |
 | 11 | No new task state: `SUBMITTED` already means accepted; `EXECUTED` is set only on ingestion of the task result. The review's extra `ACCEPTED` state was not adopted, with reason. |
 | 12 | Dataset hash over natural keys, excluding generated IDs and processing columns |
+| 13 | Product names are not unique (several SKUs share name, brand and category). Kept as is (product owner, 2026-11-19, option A): the copilot lists every match and the Manager picks the SKU; the catalogue and golden hash are unchanged. |
 
 ## 11. Change log
 

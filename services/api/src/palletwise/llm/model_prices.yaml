@@ -1,0 +1,18 @@
+# Estimated prices per million tokens for the "estimated cost" of each model call (evals spec 14).
+# Moves to versioned settings (`model_prices`) when settings arrive.
+#
+# Source: Google Cloud Vertex AI pricing, standard pay-as-you-go tier, global endpoint, checked
+# on 2026-11-19. Not the Priority, Flex or Batch tiers. Output prices include thinking tokens,
+# and the provider reports thinking tokens as output, so recorded usage already counts them.
+# A call is priced by the period whose effective_from is the latest one on or before its date.
+provider: google-vertex
+currency: USD
+verified_on: 2026-11-19
+models:
+  gemini-3.8-flash:
+    - {effective_from: 2026-01-01, input: 0.75, output: 3.75, cached: 0.075}
+    - {effective_from: 2027-01-01, input: 1.50, output: 7.50, cached: 0.15}
+  gemini-3.5-flash:
+    - {effective_from: 2026-01-01, input: 1.50, output: 9.00, cached: 0.15}
+  gemini-3.5-flash-lite:
+    - {effective_from: 2026-01-01, input: 0.30, output: 2.50, cached: 0.03}

@@ -5,10 +5,20 @@
   "sslRequired": "external",
   "registrationAllowed": false,
   "roles": {
-    "realm": [
-      { "name": "warehouse_manager", "description": "Warehouse Manager (personas 3)" },
-      { "name": "admin", "description": "Admin (personas 4)" }
-    ]
+    "client": {
+      "palletwise-bff": [
+        {
+          "name": "warehouse_manager",
+          "description": "Warehouse Manager (personas 3)",
+          "clientRole": true
+        },
+        {
+          "name": "admin",
+          "description": "Admin (personas 4)",
+          "clientRole": true
+        }
+      ]
+    }
   },
   "users": [
     {
@@ -18,8 +28,26 @@
       "emailVerified": true,
       "firstName": "Demo",
       "lastName": "Manager",
-      "credentials": [{ "type": "password", "value": "${env.KC_DEV_MANAGER_PASSWORD}", "temporary": false }],
-      "realmRoles": ["warehouse_manager"]
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_DEV_MANAGER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "palletwise-bff": [
+          "warehouse_manager"
+        ]
+      },
+      "attributes": {
+        "pw_tenant": [
+          "0193a000-0000-7000-8000-000000000001"
+        ],
+        "pw_sites": [
+          "0193a000-0000-7000-8000-000000000002"
+        ]
+      }
     },
     {
       "username": "admin",
@@ -28,8 +56,26 @@
       "emailVerified": true,
       "firstName": "Demo",
       "lastName": "Admin",
-      "credentials": [{ "type": "password", "value": "${env.KC_DEV_ADMIN_PASSWORD}", "temporary": false }],
-      "realmRoles": ["admin"]
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_DEV_ADMIN_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "palletwise-bff": [
+          "admin"
+        ]
+      },
+      "attributes": {
+        "pw_tenant": [
+          "0193a000-0000-7000-8000-000000000001"
+        ],
+        "pw_sites": [
+          "0193a000-0000-7000-8000-000000000002"
+        ]
+      }
     }
   ],
   "clients": [
@@ -39,12 +85,86 @@
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
-      "secret": "${env.KC_BFF_CLIENT_SECRET}",
+      "secret": "${KC_BFF_CLIENT_SECRET}",
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
-      "redirectUris": ["http://localhost:8080/api/auth/callback"],
-      "webOrigins": ["http://localhost:8080"],
-      "attributes": { "pkce.code.challenge.method": "S256" }
+      "redirectUris": [
+        "http://localhost:8080/api/auth/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:8080"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "standard.token.exchange.enabled": "true",
+        "post.logout.redirect.uris": "http://localhost:8080/*"
+      },
+      "optionalClientScopes": [
+        "copilot-audience"
+      ],
+      "defaultClientScopes": [
+        "basic"
+      ],
+      "frontchannelLogout": false,
+      "protocolMappers": [
+        {
+          "name": "pw-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false",
+            "introspection.token.claim": "true",
+            "usermodel.clientRoleMapping.clientId": "palletwise-bff",
+            "claim.name": "pw_roles",
+            "jsonType.label": "String",
+            "multivalued": "true"
+          }
+        },
+        {
+          "name": "pw-tenant",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false",
+            "introspection.token.claim": "true",
+            "user.attribute": "pw_tenant",
+            "claim.name": "pw_tenant",
+            "jsonType.label": "String",
+            "multivalued": "false"
+          }
+        },
+        {
+          "name": "pw-sites",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false",
+            "introspection.token.claim": "true",
+            "user.attribute": "pw_sites",
+            "claim.name": "pw_sites",
+            "jsonType.label": "String",
+            "multivalued": "true"
+          }
+        },
+        {
+          "name": "full-name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-full-name-mapper",
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "false",
+            "userinfo.token.claim": "false",
+            "introspection.token.claim": "false"
+          }
+        }
+      ],
+      "fullScopeAllowed": false
     },
     {
       "clientId": "palletwise-copilot",
@@ -52,11 +172,93 @@
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
-      "secret": "${env.KC_COPILOT_CLIENT_SECRET}",
+      "secret": "${KC_COPILOT_CLIENT_SECRET}",
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
-      "attributes": { "standard.token.exchange.enabled": "true" }
+      "attributes": {
+        "standard.token.exchange.enabled": "true"
+      },
+      "defaultClientScopes": [
+        "basic"
+      ],
+      "optionalClientScopes": []
     }
-  ]
+  ],
+  "clientScopes": [
+    {
+      "name": "basic",
+      "description": "Subject and authentication time. Declared here because a realm file that lists client scopes gets no built-in ones.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "auth_time",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usersessionmodel-note-mapper",
+          "config": {
+            "user.session.note": "AUTH_TIME",
+            "claim.name": "auth_time",
+            "jsonType.label": "long",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "copilot-audience",
+      "description": "Adds aud=palletwise-copilot; requested only during token exchange",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-palletwise-copilot",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "palletwise-copilot",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 43200,
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"validations\": {\"length\": {\"min\": 3, \"max\": 255}, \"username-prohibited-characters\": {}, \"up-username-not-idn-homograph\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"multivalued\": false}, {\"name\": \"email\", \"displayName\": \"${email}\", \"validations\": {\"email\": {}, \"length\": {\"max\": 255}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"multivalued\": false}, {\"name\": \"firstName\", \"displayName\": \"${firstName}\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"lastName\", \"displayName\": \"${lastName}\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"pw_tenant\", \"displayName\": \"PalletWise tenant\", \"validations\": {\"pattern\": {\"pattern\": \"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$\", \"error-message\": \"must be a UUID\"}}, \"permissions\": {\"view\": [\"admin\"], \"edit\": [\"admin\"]}, \"multivalued\": false}, {\"name\": \"pw_sites\", \"displayName\": \"PalletWise sites\", \"validations\": {\"pattern\": {\"pattern\": \"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$\", \"error-message\": \"must be a UUID\"}, \"multivalued\": {\"max\": \"100\"}}, \"permissions\": {\"view\": [\"admin\"], \"edit\": [\"admin\"]}, \"multivalued\": true}], \"groups\": []}"
+          ]
+        }
+      }
+    ]
+  },
+  "defaultDefaultClientScopes": [
+    "basic"
+  ],
+  "defaultOptionalClientScopes": []
 }
