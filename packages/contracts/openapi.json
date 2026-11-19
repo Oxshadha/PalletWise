@@ -94,6 +94,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "The site has not been created yet"
           }
         },
         "summary": "Current Site Status"

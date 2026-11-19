@@ -107,6 +107,13 @@ export interface operations {
                     "application/json": components["schemas"]["SiteStatusOut"];
                 };
             };
+            /** @description The site has not been created yet */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
 }
