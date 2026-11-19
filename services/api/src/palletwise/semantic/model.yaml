@@ -47,6 +47,29 @@ measures:
     unit: units
     how_computed: >-
       Short is the units due minus the units available in the pick locations.
+  days_of_cover:
+    label: Days of cover
+    unit: operating days
+    how_computed: >-
+      Days of cover is stock in pick, reserve and bulk locations divided by average daily
+      demand over the last {window} operating days before today. For a category or brand it
+      is total stock over total demand, not an average of products. No recent demand means no
+      value.
+  days_since_last_move:
+    label: Days since last movement
+    unit: days
+    how_computed: >-
+      Whole days since the product last moved in any way, including internal transfers.
+  units_moved:
+    label: Units moved
+    unit: units
+    how_computed: >-
+      Units in stock movements of the chosen types in the period.
+  movement_count:
+    label: Movements
+    unit: movements
+    how_computed: >-
+      Number of stock movements of the chosen types in the period.
 
 results:
   find_product_locations:
@@ -106,3 +129,40 @@ results:
       face holds. Replenishment fixes it when reserve stock covers the shortfall; otherwise it
       is a true shortage. For replenishment before the first dispatch, the window ends at
       today's next dispatch deadline and only products a replenishment can fix are listed.
+
+# The query language catalogue (semantic spec 7.2 and 7.3). Every measure, dimension and filter
+# the DSL accepts is listed here; anything else is rejected. The compiler maps each name to one
+# reviewed expression over sem objects (semantic/query.py); the two must list the same names.
+query:
+  dimensions:
+    product: {label: Product, type: product}
+    category: {label: Category, type: text}
+    brand: {label: Brand, type: text}
+    zone: {label: Zone, type: location}
+    rack: {label: Rack, type: location}
+    bin: {label: Location, type: location}
+    bin_role: {label: Location type, type: text, values: [PICK, RESERVE, BULK, STAGING, RECEIVING, RETURNS]}
+    customer: {label: Outlet, type: text}
+    movement_type:
+      label: Movement type
+      type: text
+      values: [RECEIPT, PUTAWAY, REPLENISH, TRANSFER, PICK, SHIP, ADJUSTMENT]
+    day: {label: Day, type: time}
+    week: {label: Week, type: time}
+    month: {label: Month, type: time}
+  measures:
+    on_hand: {class: snapshot, dimensions: [product, category, brand, zone, rack, bin, bin_role]}
+    allocated: {class: snapshot, dimensions: [product, category, brand, zone, rack, bin, bin_role]}
+    available: {class: snapshot, dimensions: [product, category, brand, zone, rack, bin, bin_role]}
+    stock_value: {class: snapshot, dimensions: [product, category, brand, zone, rack, bin, bin_role]}
+    utilization_pct: {class: snapshot, dimensions: [zone, rack, bin]}
+    days_of_cover: {class: snapshot, dimensions: [product, category, brand]}
+    projected_days_of_cover:
+      class: snapshot
+      dimensions: [product, category, brand]
+      available_from: the festival projection (Slice 5)
+    days_since_last_pick: {class: snapshot, dimensions: [product, bin], requires: [product]}
+    days_since_last_move: {class: snapshot, dimensions: [product]}
+    demand_units: {class: flow, dimensions: [product, category, brand, customer, day, week, month]}
+    units_moved: {class: flow, dimensions: [product, category, brand, movement_type, day, week, month]}
+    movement_count: {class: flow, dimensions: [product, category, brand, movement_type, day, week, month]}
