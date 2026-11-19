@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Response, status
 from pydantic import BaseModel
 
 from palletwise.agent.runtime import CopilotRuntime
-from palletwise.api import auth_routes, copilot
+from palletwise.api import auth_routes, copilot, sites
 from palletwise.api.security import CurrentPrincipal, csrf_middleware, require_session, site_in_scope
 from palletwise.auth.crypto import KeyRing
 from palletwise.auth.oidc import OidcClient
@@ -74,6 +74,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.auth = build_auth_service()
     if getattr(app.state, "copilot", None) is None:
         app.state.copilot = build_copilot()
+    if getattr(app.state, "reads", None) is None:
+        app_pool = role_pool("PW_APP")
+        app.state.reads = sites.ReadServices(
+            PolicyClient(PolicySettings()), AuditLog(app_pool), app_pool, role_pool("PW_AGENT_READ")
+        )
     yield
     for task in list(app.state.copilot.active.values()):
         task.cancel()
@@ -114,6 +119,7 @@ def create_app(
     auth: AuthService | None = None,
     web: WebSettings | None = None,
     copilot_services: copilot.CopilotServices | None = None,
+    reads: sites.ReadServices | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="PalletWise API",
@@ -124,11 +130,13 @@ def create_app(
     )
     app.state.auth = auth
     app.state.copilot = copilot_services
+    app.state.reads = reads
     app.middleware("http")(csrf_middleware((web or WebSettings()).public_origin))
     app.include_router(public)
     app.include_router(auth_routes.router)
     app.include_router(protected)
     app.include_router(copilot.router)
+    app.include_router(sites.router)
     return app
 
 

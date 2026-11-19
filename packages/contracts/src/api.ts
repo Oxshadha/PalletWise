@@ -174,6 +174,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sites/{site_id}/bins/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bin Details
+         * @description The same semantic definition the copilot's get_bin_contents uses (FR-MAP-06).
+         */
+        get: operations["bin_details_api_sites__site_id__bins__code__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/layout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Layout */
+        get: operations["layout_api_sites__site_id__layout_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/map-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current Map State */
+        get: operations["current_map_state_api_sites__site_id__map_state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sites/{site_id}/status": {
         parameters: {
             query?: never;
@@ -195,6 +249,70 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** BinOut */
+        BinOut: {
+            /** Bay */
+            bay: number | null;
+            /** Bin Role */
+            bin_role: string;
+            /** Code */
+            code: string;
+            /** Depth M */
+            depth_m: number;
+            /** Height M */
+            height_m: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Level */
+            level: number | null;
+            /** Rack Id */
+            rack_id: string | null;
+            /** Width M */
+            width_m: number;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+            /** Z */
+            z: number;
+            /**
+             * Zone Id
+             * Format: uuid
+             */
+            zone_id: string;
+        };
+        /** BinStateOut */
+        BinStateOut: {
+            /**
+             * Bin Id
+             * Format: uuid
+             */
+            bin_id: string;
+            /** On Hand */
+            on_hand: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "NORMAL" | "EMPTY";
+        };
+        /** Column */
+        Column: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "text" | "integer" | "number" | "boolean" | "datetime";
+            /** Unit */
+            unit?: string | null;
+        };
         /** ConversationDetailOut */
         ConversationDetailOut: {
             /**
@@ -237,6 +355,56 @@ export interface components {
              */
             updated_at: string;
         };
+        /** EntityRef */
+        EntityRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "product" | "bin" | "zone" | "order";
+        };
+        /** Evidence */
+        Evidence: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Data As Of */
+            data_as_of: string | null;
+            /** Freshness */
+            freshness: components["schemas"]["StreamFreshness"][];
+            /** How Computed */
+            how_computed: string[];
+            /** Settings Version Id */
+            settings_version_id: string | null;
+            /** Time Zone */
+            time_zone: string;
+        };
+        /** FeatureOut */
+        FeatureOut: {
+            /** Feature Type */
+            feature_type: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /** Outline */
+            outline: [
+                number,
+                number
+            ][];
+        };
         /** FeedbackIn */
         FeedbackIn: {
             /** Comment */
@@ -258,6 +426,52 @@ export interface components {
             database: boolean;
             /** Ready */
             ready: boolean;
+        };
+        /** Highlight */
+        Highlight: {
+            reason: components["schemas"]["HighlightReason"];
+            severity: components["schemas"]["Severity"];
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+            /**
+             * Target Type
+             * @enum {string}
+             */
+            target_type: "bin" | "rack" | "zone";
+        };
+        /**
+         * HighlightReason
+         * @enum {string}
+         */
+        HighlightReason: "query" | "location" | "fast_mover" | "low_stock" | "stockout_risk" | "delayed_order" | "dead_stock" | "slow_in_prime" | "capacity" | "festival_risk" | "proposal";
+        /** LayoutOut */
+        LayoutOut: {
+            /** Bins */
+            bins: components["schemas"]["BinOut"][];
+            /** Features */
+            features: components["schemas"]["FeatureOut"][];
+            /** Racks */
+            racks: components["schemas"]["RackOut"][];
+            site: components["schemas"]["SiteGeometry"];
+            /** Zones */
+            zones: components["schemas"]["ZoneOut"][];
+        };
+        /** MapStateOut */
+        MapStateOut: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Bins */
+            bins: components["schemas"]["BinStateOut"][];
+            /** Data As Of */
+            data_as_of: string | null;
+            /** Time Zone */
+            time_zone: string;
         };
         /** MeOut */
         MeOut: {
@@ -281,6 +495,85 @@ export interface components {
             /** Selected Zone */
             selected_zone?: string | null;
         };
+        /** RackOut */
+        RackOut: {
+            /** Bay Count */
+            bay_count: number;
+            /** Bay Width M */
+            bay_width_m: number;
+            /** Code */
+            code: string;
+            /** Depth M */
+            depth_m: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Level Count */
+            level_count: number;
+            /** Level Height M */
+            level_height_m: number;
+            /** Origin X */
+            origin_x: number;
+            /** Origin Y */
+            origin_y: number;
+            /** Rotation Deg */
+            rotation_deg: number;
+            /**
+             * Zone Id
+             * Format: uuid
+             */
+            zone_id: string;
+        };
+        /** ResultEnvelope */
+        ResultEnvelope: {
+            /**
+             * Columns
+             * @default []
+             */
+            columns: components["schemas"]["Column"][];
+            /**
+             * Entities
+             * @default []
+             */
+            entities: components["schemas"]["EntityRef"][];
+            evidence: components["schemas"]["Evidence"];
+            /**
+             * Highlights
+             * @default []
+             */
+            highlights: components["schemas"]["Highlight"][];
+            /**
+             * Highlights Truncated
+             * @default false
+             */
+            highlights_truncated: boolean;
+            /** Message */
+            message?: string | null;
+            /** Normalized Request */
+            normalized_request: {
+                [key: string]: unknown;
+            };
+            /**
+             * Rows
+             * @default []
+             */
+            rows: {
+                [key: string]: unknown;
+            }[];
+            status: components["schemas"]["ResultStatus"];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /**
+         * ResultStatus
+         * @enum {string}
+         */
+        ResultStatus: "OK" | "NO_RESULTS" | "NOT_FOUND" | "AMBIGUOUS" | "UNAVAILABLE";
         /** RunIn */
         RunIn: {
             /** Conversation Id */
@@ -328,6 +621,27 @@ export interface components {
             /** Trace Id */
             trace_id: string;
         };
+        /**
+         * Severity
+         * @enum {string}
+         */
+        Severity: "info" | "warning" | "critical";
+        /** SiteGeometry */
+        SiteGeometry: {
+            /** Code */
+            code: string;
+            /** Depth M */
+            depth_m: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Width M */
+            width_m: number;
+        };
         /** SiteOut */
         SiteOut: {
             /** Code */
@@ -350,6 +664,16 @@ export interface components {
             name: string;
             /** Sim Time */
             sim_time: string | null;
+        };
+        /** StreamFreshness */
+        StreamFreshness: {
+            /** Data As Of */
+            data_as_of: string | null;
+            /**
+             * Stream
+             * @enum {string}
+             */
+            stream: "MASTER" | "MOVEMENTS" | "ORDERS" | "ALLOCATIONS";
         };
         /** SuggestionIn */
         SuggestionIn: {
@@ -374,6 +698,27 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** ZoneOut */
+        ZoneOut: {
+            /** Code */
+            code: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Prime */
+            is_prime: boolean;
+            /** Name */
+            name: string;
+            /** Outline */
+            outline: [
+                number,
+                number
+            ][];
+            /** Zone Type */
+            zone_type: string;
         };
     };
     responses: never;
@@ -686,6 +1031,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeOut"];
+                };
+            };
+        };
+    };
+    bin_details_api_sites__site_id__bins__code__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    layout_api_sites__site_id__layout_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-none-match"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LayoutOut"];
+                };
+            };
+            /** @description Not modified */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_map_state_api_sites__site_id__map_state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapStateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

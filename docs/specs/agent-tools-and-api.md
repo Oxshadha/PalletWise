@@ -327,6 +327,38 @@ CWM 11.3 names a `pw_memory` role for "conversation tables (other spec)", but no
 - Written and read only by `pw_memory`. RLS checks the tenant **and** the owner subject (`app.user_subject`, set per transaction like the tenant), so one user can never read another user's conversations, even through a bug in the API (FR-COP-11). No delete grant: retention is a later job (NFR-PRV-03).
 - Usage, budget and rate limits are written by `pw_app` through owner functions: `pw.model_usage`, `pw.agent_budget_day` (`reserve_budget`, `settle_budget`), `pw.rate_window` (`rate_limit_hit`, fixed one-minute windows per user and key).
 
+## 14b. Memory and caching (approved 2026-11-19)
+
+**Memory.** Conversation memory keeps references, never authority or freshness: a follow-up such as "what else is in that first location?" uses the previous result only to resolve the identifier, then runs the tool again through policy against current data.
+
+| Memory | Decision |
+|---|---|
+| Short-term | The last 6 questions and answers (at most about 2,000 tokens) and the previous result's identifiers (working set), inside one conversation |
+| Episodic | Conversations are stored and browsable (14a) but never fed to the model in another conversation |
+| Semantic | Facts and definitions live only in the semantic layer, versioned and tested |
+| Procedural | Prompts, tools and fast-path rules are versioned and pass the evaluation gate before release |
+| Cross-conversation | None in v1. Later only as explicit preferences the user can see and edit (for example a default zone), never free-text memory written by the model |
+
+**Caching.** A cache sits after authorization and after the tool has run on current data, never before. It can save a model call; it can never skip policy, the tool, audit or freshness.
+
+| Option | Decision | When |
+|---|---|---|
+| Provider prompt caching | Approved. Measured in Slice 1: 0 cached tokens over 28 calls, because requests (about 550 input tokens) are below the provider's minimum cacheable prefix. Nothing to build now: the prefix (instructions, then tool definitions, then the user's data block) stays stable, `cached_tokens` is recorded per call, and the saving is measured again when the prompt grows. Prompts are never padded to reach the minimum. | Slice 1 (measured), revisited in Slice 2 |
+| Answer-wording cache | Approved | Slice 2 |
+| Learned routes | Approved with safeguards | Slice 3 or later |
+| Whole-answer or similarity cache | Rejected: the same question can have a different answer a minute later, and similar questions can name different SKUs | Not planned |
+
+**Answer-wording cache (Slice 2).** Order: authenticate and bind tenant and site, authorize, run the tool on current data, validate and hash the result, then look up the wording; on a miss call the model and store the grounded wording.
+
+- Key: tenant, site, tool, normalized arguments, result hash, **normalized question**, prompt version, semantic model version, model id, template version, locale and units.
+- The question is in the key because path A wording is written from the question and the result; without it, wording could echo another user's phrasing.
+- No authorization fingerprint in the key: a lookup happens only after this user's authorized tool call produced this exact result, so reused wording restates only data the user already received. Adding scopes would split the cache without adding protection.
+- Only wording that passed the grounding check is stored.
+
+**Learned routes (Slice 3 or later).** Never learned automatically from how often something is asked, and never promoted by a user message. A candidate route is promoted only after it passes a fixed evaluation set, under explicit promotion rules, versioned with rollback, isolated per tenant. A learned route only chooses the tool; the call still runs through `tools.executor`.
+
+**Storage.** PostgreSQL first, behind a cache interface so Redis can replace it without touching the copilot: forced RLS per tenant, keys as above, a TTL with cleanup, a size bound per tenant, a cache version that invalidates every entry, and no credentials, tokens or personal data beyond what the key requires.
+
 ## 15. Decisions for review
 
 | # | Decision |

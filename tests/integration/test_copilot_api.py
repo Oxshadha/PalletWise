@@ -12,6 +12,7 @@ import threading
 import time
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 from uuid import UUID, uuid4
@@ -26,7 +27,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from support import load_site, provision_site
 
 from palletwise.agent.runtime import BUDGET_TEXT, CopilotRuntime
-from palletwise.api import copilot
+from palletwise.api import copilot, sites
 from palletwise.api.app import create_app
 from palletwise.auth.crypto import KeyRing
 from palletwise.auth.oidc import OidcClient
@@ -167,7 +168,10 @@ def env(ready_site: Site, connect_session: Connect, opa_url: str) -> Generator[E
         audit=audit,
         app_pool=app_pool,
     )
-    client = TestClient(create_app(auth, WebSettings(public_origin=ORIGIN), services), base_url=ORIGIN)
+    reads = sites.ReadServices(
+        PolicyClient(PolicySettings(url=opa_url)), audit, app_pool, role_pool("PW_AGENT_READ")
+    )
+    client = TestClient(create_app(auth, WebSettings(public_origin=ORIGIN), services, reads), base_url=ORIGIN)
     db = connect_session("postgres")
     db.autocommit = True
     env = Env(idp, client, ready_site, db, models)
@@ -466,3 +470,87 @@ def test_a_run_left_running_by_a_dead_process_is_closed(env: Env) -> None:
     assert env.db.execute("SELECT error_code FROM pw.copilot_run WHERE id = %s", (run_id,)).fetchone() == (
         "INTERRUPTED",
     )
+
+
+# ---------------------------------------------------------------- map endpoints (UX spec 3 to 5)
+
+
+def test_layout_is_generated_from_location_data_and_cached_by_etag(env: Env) -> None:
+    env.sign_in()
+    response = env.client.get(f"/api/sites/{env.site.site}/layout")
+    assert response.status_code == 200
+    layout = response.json()
+    counts = env.db.execute(
+        """SELECT (SELECT count(*) FROM pw.zone WHERE site_id = %(s)s AND is_active),
+                  (SELECT count(*) FROM pw.rack WHERE site_id = %(s)s AND is_active),
+                  (SELECT count(*) FROM pw.bin WHERE site_id = %(s)s AND is_active)""",
+        {"s": env.site.site},
+    ).fetchone()
+    assert (len(layout["zones"]), len(layout["racks"]), len(layout["bins"])) == counts
+    assert layout["site"]["code"] == "PLG" and layout["zones"][0]["outline"]
+    again = env.client.get(
+        f"/api/sites/{env.site.site}/layout", headers={"If-None-Match": response.headers["etag"]}
+    )
+    assert again.status_code == 304
+
+
+def test_a_deactivated_bin_leaves_the_map_without_code_changes(env: Env) -> None:
+    env.sign_in()
+    code = env.client.get(f"/api/sites/{env.site.site}/layout").json()["bins"][0]["code"]
+    env.db.execute(
+        "UPDATE pw.bin SET is_active = false WHERE site_id = %s AND code = %s", (env.site.site, code)
+    )
+    try:
+        codes = {b["code"] for b in env.client.get(f"/api/sites/{env.site.site}/layout").json()["bins"]}
+        assert code not in codes
+    finally:
+        env.db.execute(
+            "UPDATE pw.bin SET is_active = true WHERE site_id = %s AND code = %s", (env.site.site, code)
+        )
+
+
+def test_map_state_comes_from_the_semantic_layer(env: Env) -> None:
+    env.sign_in()
+    state = env.client.get(f"/api/sites/{env.site.site}/map-state").json()
+    empty = env.db.execute(
+        """SELECT b.id FROM pw.bin b WHERE b.site_id = %s AND b.is_active AND NOT EXISTS (
+             SELECT 1 FROM pw.inventory_balance ib WHERE ib.bin_id = b.id AND ib.on_hand > 0)""",
+        (env.site.site,),
+    ).fetchall()
+    assert {b["bin_id"] for b in state["bins"] if b["state"] == "EMPTY"} == {str(r[0]) for r in empty}
+    clock = env.db.execute(
+        "SELECT sim_time FROM pw.site_clock WHERE site_id = %s", (env.site.site,)
+    ).fetchone()
+    assert clock is not None and datetime.fromisoformat(state["as_of"]) == clock[0]
+
+
+def test_bin_details_use_the_same_definition_as_the_copilot(env: Env) -> None:
+    env.sign_in()
+    _, _, events = env.ask("Where is SKU-102 stored?")
+    code = of_type(events, "pw.result")[0]["result"]["rows"][0]["bin_code"]
+    details = env.client.get(f"/api/sites/{env.site.site}/bins/{code}").json()
+    assert details["status"] == "OK" and "SKU-102" in {r["sku"] for r in details["rows"]}
+    assert env.client.get(f"/api/sites/{env.site.site}/bins/Z9-99-99").status_code == 404
+    assert env.client.get(f"/api/sites/{env.site.site}/bins/bad%20code").status_code == 422
+
+
+def test_map_endpoints_are_site_scoped_and_fail_closed(env: Env) -> None:
+    env.sign_in()
+    other = uuid4()
+    for path in ("layout", "map-state", "bins/A1-01-01"):
+        assert env.client.get(f"/api/sites/{other}/{path}").status_code == 404
+    down = httpx.MockTransport(lambda _: httpx.Response(503))
+    env.client.app.state.reads = sites.ReadServices(  # type: ignore[attr-defined]
+        PolicyClient(PolicySettings(url="http://opa.invalid"), transport=down),
+        AuditLog(role_pool("PW_APP")),
+        role_pool("PW_APP"),
+        role_pool("PW_AGENT_READ"),
+    )
+    response = env.client.get(f"/api/sites/{env.site.site}/layout")
+    assert response.status_code == 403 and response.json()["code"] == "FORBIDDEN"
+    denied = env.db.execute(
+        "SELECT deny_reasons FROM pw.audit_event WHERE tenant_id = %s AND action = 'map.layout'"
+        " ORDER BY seq DESC LIMIT 1",
+        (env.site.tenant,),
+    ).fetchone()
+    assert denied == (["policy_unavailable"],)
