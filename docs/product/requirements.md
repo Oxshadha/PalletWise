@@ -169,7 +169,7 @@
 | ID | Pri | Requirement | Acceptance criteria |
 |---|---|---|---|
 | NFR-PERF-01 | Must | Fast path answer with highlights: p95 at most 1.5 s. | Measured by load test on the reference environment. |
-| NFR-PERF-02 | Must | Model path: first highlight p95 at most 3 s, first text p95 at most 2 s, complete answer p95 at most 8 s. | As above. |
+| NFR-PERF-02 | Must | Model path, each milestone measured independently: first progress p95 at most 1 s, first map highlights p95 at most 3 s, first headline p95 at most 4 s, complete answer p95 at most 8 s. A progress event never counts as the headline (ADR 0001). | Gated in the model evaluation run together with quality and cost. |
 | NFR-PERF-03 | Must | Map renders the v1 site (about 600 bins) at 60 frames per second on the reference laptop. | Measured in a browser performance test. |
 | NFR-PERF-04 | Should | Map stays usable (at least 30 frames per second) with 10,000 bins. | As above, on a generated large layout. |
 | NFR-PERF-05 | Must | Live updates appear within 2 s of the data change. | Measured end to end. |
@@ -198,6 +198,7 @@
 |---|---|---|---|
 | NFR-CST-01 | Must | Token usage and estimated cost are recorded per request, user, tool and model. | Recorded token totals reconcile with provider-reported usage within 5 percent. |
 | NFR-CST-02 | Must | The agent's daily token budget is enforced. When it is reached, the copilot falls back to fast path answers and says so. | Test with a low budget. |
+| NFR-CST-03 | Must | Estimated model cost per answer p95 at most 0.003 USD, a fixed hard limit. Every model call of the answer counts, including fallback, hedged, discarded and cancelled calls; a call cancelled before usage is reported is charged an upper bound (ADR 0001). | Gated in the model evaluation run together with quality and latency. |
 
 ### 3.8 Observability (OBS)
 
@@ -249,3 +250,4 @@ Resolved: Q1, what happens to an approved proposal in v1. Decision (2026-11-18):
 | 2026-11-18 | First draft. |
 | 2026-11-18 | Q1 resolved: human-approved execution against the simulator in v1. Added FR-PRP-09 to FR-PRP-14 and FR-SIM-08, extended FR-PRP-03 states. |
 | 2026-11-18 | Review round: SUBMITTED meaning and expiry trigger (FR-PRP-03), cycle-count validation (FR-PRP-09), unknown-outcome reconciliation (FR-PRP-10), cycle-count responsibility (FR-PRP-14), settings versioning (FR-ADM-04), kill-switch precedence (FR-ADM-03), estimated cost (FR-ADM-06, NFR-CST-01), working-set rules (FR-COP-06), answer feedback (FR-COP-14), map state layering (FR-MAP-03), score normalization (FR-EXC-02), per-day ramp (FR-FES-02), projection rules (FR-FES-05), clock consistency (FR-SIM-09), least-privilege roles for propose tools (NFR-SEC-04), wider isolation tests (NFR-SEC-03), audit retention segments (NFR-AUD-04), measurement conditions (NFR-PERF-07), Vertex-available model comparison (NFR-QLT-03), screen sizes (NFR-UX-04). |
+| 2026-11-19 | ADR 0001 (balanced answer runtime), approved by the product owner: NFR-PERF-02 replaces "first text p95 at most 2 s" with four independent milestones (first progress, first map highlights, first headline, complete answer); new NFR-CST-03, a 0.003 USD p95 cost limit per answer. |
