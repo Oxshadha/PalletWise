@@ -251,9 +251,11 @@ def standalone() -> Generator[EvalEnv]:
         if "=" in line and not line.startswith("#")
     )
     passwords = {role: f"eval-{role}" for role in LOGIN_ROLES}
+    # Data in memory (tmpfs): the image declares a data volume, and an anonymous volume would be
+    # left behind on the host after every run.
     with PostgresContainer(
         "postgres:17-alpine", username="postgres", password="postgres", dbname="palletwise"
-    ) as pg:
+    ).with_tmpfs_mount("/var/lib/postgresql/data") as pg:
         os.environ.update(
             {
                 "PW_DB_HOST": pg.get_container_host_ip(),

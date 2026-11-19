@@ -22,9 +22,11 @@ def database() -> Generator[dict[str, Any]]:
     """Start PostgreSQL, bootstrap roles, apply migrations and load the calendar."""
     from testcontainers.postgres import PostgresContainer
 
+    # Data in memory (tmpfs): the image declares a data volume, and an anonymous volume would be
+    # left behind on the host after every run.
     with PostgresContainer(
         POSTGRES_IMAGE, username="postgres", password="postgres", dbname="palletwise"
-    ) as pg:
+    ).with_tmpfs_mount("/var/lib/postgresql/data") as pg:
         host = pg.get_container_host_ip()
         port = int(pg.get_exposed_port(5432))
         os.environ.update({"PW_DB_HOST": host, "PW_DB_PORT": str(port), "PW_DB_NAME": "palletwise"})
