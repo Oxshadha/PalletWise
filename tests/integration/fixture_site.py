@@ -24,10 +24,7 @@ class FixtureSite:
         self.tenant, self.site = provision_site(connect_as)
         self.db = connect_as("postgres")
         self.db.autocommit = True
-        self._category = self._insert(
-            "category",
-            {"id": uuid4(), "tenant_id": self.tenant, "code": f"C{uuid4().hex[:6]}", "name": "General"},
-        )
+        self._categories: dict[str, UUID] = {}
         self._seq = 0
         # Every stream synced at the site clock, as after a completed load (CWM 10.2); a site
         # that never synced answers UNAVAILABLE, which only the dedicated tests want.
@@ -102,14 +99,29 @@ class FixtureSite:
             },
         )  # fmt: skip
 
+    def category(self, name: str) -> UUID:
+        if name not in self._categories:
+            code = f"{name[:3].upper()}{uuid4().hex[:4]}"
+            self._categories[name] = self._insert(
+                "category", {"id": uuid4(), "tenant_id": self.tenant, "code": code, "name": name}
+            )
+        return self._categories[name]
+
     def product(
-        self, sku: str, *, volume_m3: float = 0.01, weight_kg: float = 1.0, value: float = 100.0
+        self,
+        sku: str,
+        *,
+        volume_m3: float = 0.01,
+        weight_kg: float = 1.0,
+        value: float = 100.0,
+        category: str = "General",
+        brand: str = "Brand",
     ) -> UUID:
         return self._insert(
             "product",
             {
                 "id": uuid4(), "tenant_id": self.tenant, "sku": sku, "name": f"Product {sku}",
-                "category_id": self._category, "brand": "Brand", "uom": "EA",
+                "category_id": self.category(category), "brand": brand, "uom": "EA",
                 "unit_volume_m3": volume_m3, "unit_weight_kg": weight_kg, "unit_value": value,
                 "temperature_class": "AMBIENT",
             },
