@@ -38,6 +38,9 @@ questions:
   - text: show me the top 5 fastest-moving items
     tool: get_top_movers
     arguments: {limit: 5}
+  - text: show me the top 5 movers
+    tool: get_top_movers
+    arguments: {limit: 5}
   - text: which zones have the highest stock levels
     tool: get_zone_summary
     arguments: {}

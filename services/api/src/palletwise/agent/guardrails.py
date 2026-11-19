@@ -82,6 +82,10 @@ def _allowed_numbers(results: Iterable[ResultEnvelope], question: str) -> set[De
                     allowed.add(d)
                 elif isinstance(value, datetime):
                     allowed |= _time_parts(value, result.evidence.time_zone)
+        # The parameters the tool ran with ("the last 30 days", "top 5") are facts of the answer.
+        for value in result.normalized_request.values():
+            if (d := _decimal(value)) is not None:
+                allowed.add(d)
         for moment in (result.evidence.as_of, result.evidence.data_as_of):
             if moment is not None:
                 allowed |= _time_parts(moment, result.evidence.time_zone)

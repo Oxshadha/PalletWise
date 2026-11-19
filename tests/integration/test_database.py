@@ -43,6 +43,30 @@ def test_migration_round_trip(database: dict[str, Any]) -> None:
     migrate.run_calendar(database["settings"])
 
 
+def test_the_prompt_migration_moves_only_system_seeded_agents(
+    database: dict[str, Any], connect_as: Connect
+) -> None:
+    """Migration 0013 (prompt v2) changes the seed and the rows it seeded; an agent an
+    administrator customized keeps its prompt version (Slice 2 step 5)."""
+    from support import provision_site
+
+    from palletwise.db import migrate
+
+    db = connect_as("postgres")
+    db.autocommit = True
+    migrate.downgrade(database["settings"], "0012_query_blocks")
+    try:
+        seeded, _ = provision_site(connect_as)
+        customized, _ = provision_site(connect_as)
+        db.execute("UPDATE pw.agent SET updated_by = 'admin-1' WHERE tenant_id = %s", (customized,))
+    finally:
+        migrate.upgrade(database["settings"])
+    prompts = dict(db.execute(
+        "SELECT tenant_id, prompt_version FROM pw.agent WHERE tenant_id = ANY(%s)", ([seeded, customized],)
+    ).fetchall())  # fmt: skip
+    assert prompts == {seeded: "system.v2", customized: "system.v1"}
+
+
 def test_missing_tenant_context_fails_closed(connect_as: Connect) -> None:
     conn = connect_as("pw_app")
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
