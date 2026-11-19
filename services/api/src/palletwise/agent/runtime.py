@@ -549,6 +549,16 @@ class CopilotRuntime:
             parts.append("Earlier in this conversation:\n" + data_block(turns))
         if request.page_context:
             parts.append("What the user is looking at:\n" + data_block(request.page_context))
+        ws = request.run.working_set
+        if ws is not None and ws.size:
+            # Counts only: the identifiers stay with the server, which applies them (semantic spec 7.5).
+            counts = (("product", len(ws.products)), ("location", len(ws.bins)), ("zone", len(ws.zones)))
+            held = ", ".join(f"{n} {kind}{'' if n == 1 else 's'}" for kind, n in counts if n)
+            parts.append(
+                f"The previous answer listed {held}. For a follow-up about those (for example 'of those, "
+                'which are in zone B?\'), call query_inventory with "scope": {"working_set": true}; '
+                "current data is read again for them."
+            )
         parts.append(f"Question: {request.question}")
         return "\n\n".join(parts)
 

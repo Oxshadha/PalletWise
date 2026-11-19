@@ -114,3 +114,25 @@ class ResultEnvelope(Frozen):
     @property
     def row_count(self) -> int:
         return len(self.rows)
+
+
+class WorkingSet(Frozen):
+    """The previous answer's identifiers for follow-up questions (semantic spec 7.5, Slice 2 D5).
+
+    Only typed identifiers, never values: a follow-up re-reads current data for them. Scoped to
+    one conversation, owner, site and tenant by the conversation store; at most MAX_ENTITIES.
+    """
+
+    run_id: UUID  # provenance: the run that produced the result
+    tool: str | None  # provenance: the tool that produced it
+    created_at: datetime
+    products: tuple[UUID, ...] = ()
+    bins: tuple[UUID, ...] = ()
+    zones: tuple[UUID, ...] = ()
+
+    def ids(self, kind: str) -> tuple[UUID, ...]:
+        return {"product": self.products, "bin": self.bins, "zone": self.zones}.get(kind, ())
+
+    @property
+    def size(self) -> int:
+        return len(self.products) + len(self.bins) + len(self.zones)

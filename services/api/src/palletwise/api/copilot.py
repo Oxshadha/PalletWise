@@ -302,6 +302,13 @@ async def start_run(body: RunIn, principal: CurrentPrincipal, svc: Services, aut
         agent.prompt_version,
     )
     history = await asyncio.to_thread(svc.conversations.recent_turns, owner, conversation_id, HISTORY_TURNS)
+    # The previous answer's identifiers, for "of those" follow-ups (semantic spec 7.5). Results
+    # from before the current simulation run (a reset) no longer count.
+    working_set = (
+        await asyncio.to_thread(svc.conversations.working_set, owner, conversation_id, site.data_since)
+        if body.conversation_id is not None
+        else None
+    )
 
     run_request = RunRequest(
         question=question,
@@ -314,6 +321,7 @@ async def start_run(body: RunIn, principal: CurrentPrincipal, svc: Services, aut
             sites=identity.sites,
             site=owner.site,
             model=agent.primary_model,
+            working_set=working_set,
         ),
         agent=AgentProfile(
             agent.id,

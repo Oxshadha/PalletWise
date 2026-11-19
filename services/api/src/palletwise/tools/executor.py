@@ -22,7 +22,7 @@ from uuid import UUID
 from pydantic import BaseModel, ValidationError
 
 from palletwise import clock
-from palletwise.contracts.results import RequestRejected, ResultEnvelope
+from palletwise.contracts.results import RequestRejected, ResultEnvelope, WorkingSet
 from palletwise.db.agent_repo import AgentRecord, AgentRegistry
 from palletwise.db.audit_repo import AuditEntry, AuditLog
 from palletwise.db.connection import Connection, Pool, tenant_session
@@ -61,6 +61,7 @@ class ToolContext:
     conn: Connection
     tenant: UUID
     site: UUID
+    working_set: WorkingSet | None = None  # the previous answer's identifiers (semantic spec 7.5)
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,6 +108,8 @@ class RunContext:
     site: UUID
     agent_id: str = "copilot"
     model: str | None = None
+    # Loaded from the conversation store by the API, never from the model (semantic spec 7.5).
+    working_set: WorkingSet | None = None
 
 
 StopReason = Literal["suspended", "registry_unavailable"]
@@ -257,13 +260,16 @@ class ToolExecutor:
         # 4. Handler, as pw_agent_read, bound to the session's tenant.
         try:
             with tenant_session(self._read_pool, run.tenant, read_snapshot=True) as conn:
-                output = spec.handler(ToolContext(conn, run.tenant, run.site), params)
+                output = spec.handler(ToolContext(conn, run.tenant, run.site, run.working_set), params)
         except RequestRejected as exc:  # a reason the agent can act on, not a failure
             return finish(Outcome.VALIDATION_FAILED, agent=agent, parameters=normalized, decision=decision,
                           message=str(exc))  # fmt: skip
         except Exception:
             log.exception("tool %s failed", name)
             return finish(Outcome.ERROR, agent=agent, parameters=normalized, decision=decision)
+        if isinstance(output, ResultEnvelope) and "working_set_from" in output.normalized_request:
+            # The answer narrowed a previous result: the audit names that result (semantic spec 7.5).
+            normalized = {**normalized, "working_set_from": output.normalized_request["working_set_from"]}
         return finish(Outcome.OK, agent=agent, parameters=normalized, decision=decision, output=output)
 
     def _decide(self, run: RunContext, spec: ToolSpec[Any, Any], agent: AgentRecord) -> Decision:

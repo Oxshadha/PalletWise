@@ -518,3 +518,35 @@ def test_a_reservation_is_released_even_if_cancelled_twice_and_the_loop_stops(yi
 
     asyncio.run(scenario())
     assert meter.reserved == 0 and [c.outcome for c in meter.settled] == ["ERROR"]
+
+
+def test_the_model_is_told_counts_of_the_previous_result_never_its_identifiers() -> None:
+    from dataclasses import replace
+    from datetime import UTC, datetime
+
+    from palletwise.contracts.results import WorkingSet
+
+    seen: list[str] = []
+
+    def fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        seen.extend(str(m) for m in messages)
+        return ModelResponse(parts=[TextPart("Here you go.")])
+
+    products, bin_id = (uuid4(), uuid4()), uuid4()
+    ws = WorkingSet(run_id=uuid4(), tool="get_low_stock", created_at=datetime.now(UTC), products=products,
+                    bins=(bin_id,))  # fmt: skip
+    base = request("Of those, which are in zone B?")
+    runtime = CopilotRuntime(
+        v1_tools(), FakeGateway(), FakeProvider(gemini_flash=FunctionModel(fn)), run_timeout=10
+    )
+
+    async def collect() -> None:
+        async for _ in runtime.run(
+            replace(base, run=replace(base.run, working_set=ws)), FakeMeter(), RunState()
+        ):
+            pass
+
+    asyncio.run(collect())
+    text = " ".join(seen)
+    assert "The previous answer listed 2 products, 1 location." in text
+    assert all(str(i) not in text for i in (*products, bin_id, ws.run_id))

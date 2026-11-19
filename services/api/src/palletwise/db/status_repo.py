@@ -17,13 +17,18 @@ class SiteStatus:
     data_status_detail: str | None
     sim_time: datetime | None
     time_zone: str = "UTC"
+    # When the site's current simulation run started: results from before it describe data that
+    # a reset replaced, so their working sets no longer count (FR-SIM-09).
+    data_since: datetime | None = None
 
 
 def site_status(conn: psycopg.Connection, tenant_id: UUID, site_id: UUID) -> SiteStatus | None:
     with tenant_transaction(conn, tenant_id):
         row = conn.execute(
             """
-            SELECT s.code, s.name, s.data_status, s.data_status_detail, c.sim_time, s.time_zone
+            SELECT s.code, s.name, s.data_status, s.data_status_detail, c.sim_time, s.time_zone,
+                   (SELECT max(r.started_at) FROM pw.simulation_run r
+                     WHERE r.site_id = s.id AND r.status = 'ACTIVE')
               FROM pw.site s LEFT JOIN pw.site_clock c ON c.site_id = s.id
              WHERE s.id = %s
             """,
@@ -38,6 +43,7 @@ def site_status(conn: psycopg.Connection, tenant_id: UUID, site_id: UUID) -> Sit
         data_status_detail=row[3],
         sim_time=row[4],
         time_zone=row[5],
+        data_since=row[6],
     )
 
 

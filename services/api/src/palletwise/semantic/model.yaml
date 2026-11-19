@@ -132,7 +132,7 @@ results:
   query_inventory:
     measures: []
     how_computed: >-
-      A query of {measures}{by}. Stock as of {as_of}.{period}
+      A query of {measures}{by}. Stock as of {as_of}.{period}{narrowed}
 
 # The query language catalogue (semantic spec 7.2 and 7.3). Every measure, dimension and filter
 # the DSL accepts is listed here; anything else is rejected. The compiler maps each name to one

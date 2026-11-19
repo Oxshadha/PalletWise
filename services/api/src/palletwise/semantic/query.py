@@ -52,6 +52,7 @@ from palletwise.contracts.results import (
     HighlightReason,
     ResultEnvelope,
     ResultStatus,
+    WorkingSet,
 )
 from palletwise.db.connection import Connection, query
 from palletwise.semantic.locations import Moment, read_moment
@@ -89,7 +90,7 @@ class Context:
 
     site: UUID
     moment: Moment
-    working_set: dict[str, list[UUID]] | None
+    working_set: WorkingSet | None
 
     @property
     def as_of(self) -> datetime:
@@ -521,7 +522,10 @@ def compile_query(request: QueryRequest, ctx: Context) -> tuple[Select[Any], dic
     order = [primary.desc().nulls_last() if direction == "desc" else primary.asc().nulls_last()]
     order += [named[d].asc().nulls_last() for d in request.dimensions]
     stmt = stmt.order_by(*order).limit(request.limit + 1)
-    return stmt, {"streams": tuple(dict.fromkeys(streams))}
+    narrowed = (
+        _narrowing_kind(FAMILIES[computed[0]](ctx, request), ctx) if request.scope.working_set else None
+    )
+    return stmt, {"streams": tuple(dict.fromkeys(streams)), "narrowed": narrowed}
 
 
 def _key(sub: Any, d: str) -> Any:
@@ -531,15 +535,20 @@ def _key(sub: Any, d: str) -> Any:
     return func.coalesce(cast(value, String), literal(""))
 
 
+def _narrowing_kind(source: Source, ctx: Context) -> str | None:
+    """The identifier type a family can narrow by: products first, then locations, then zones."""
+    ws = ctx.working_set
+    return next((t for t in ("product", "bin", "zone") if t in source.ids and ws and ws.ids(t)), None)
+
+
 def _working_set(source: Source, request: QueryRequest, ctx: Context) -> list[ColumnElement[bool]]:
     """scope.working_set restricts every family to the previous result's identifiers (7.5)."""
     if not request.scope.working_set:
         return []
-    usable = [t for t in ("product", "bin", "zone") if t in source.ids and (ctx.working_set or {}).get(t)]
-    if not usable:
+    kind = _narrowing_kind(source, ctx)
+    if kind is None or ctx.working_set is None:
         raise QueryRejected("there is no previous result to narrow down")
-    kind = usable[0]
-    return [source.ids[kind].in_([ctx.p(i) for i in (ctx.working_set or {})[kind]])]
+    return [source.ids[kind].in_([ctx.p(i) for i in ctx.working_set.ids(kind)])]
 
 
 def to_sql(stmt: Select[Any]) -> tuple[str, dict[str, Any]]:
@@ -551,8 +560,11 @@ def to_sql(stmt: Select[Any]) -> tuple[str, dict[str, Any]]:
 # ---------------------------------------------------------------- stage 7: the envelope
 
 
+NOUNS = {"product": ("product", "products"), "bin": ("location", "locations"), "zone": ("zone", "zones")}
+
+
 def run(
-    conn: Connection, site: UUID, request: QueryRequest, working_set: dict[str, list[UUID]] | None = None
+    conn: Connection, site: UUID, request: QueryRequest, working_set: WorkingSet | None = None
 ) -> ResultEnvelope:
     moment = read_moment(conn, site)
     ctx = Context(site, moment, working_set)
@@ -562,25 +574,27 @@ def run(
         "SELECT sem.setting(%s, 'trailing_window_operating_days')",
         (moment.settings_version_id,),
     ).fetchone()
-    window = f"{row[0]:g}" if row else ""
-    normalized = {"tool": TOOL, **request.model_dump(mode="json", by_alias=True, exclude_defaults=False)}
+    explain = {"window": f"{row[0]:g}" if row else "", "narrowed": ""}
+    normalized: dict[str, Any] = {"tool": TOOL, **request.model_dump(mode="json", by_alias=True)}
+    if request.scope.working_set and working_set is not None:  # provenance, for audit (Slice 2 D5)
+        normalized["working_set_from"] = {"run_id": str(working_set.run_id), "tool": working_set.tool}
+
+    def envelope(streams: Sequence[str], **fields: Any) -> ResultEnvelope:
+        return ResultEnvelope(
+            evidence=moment.evidence(tuple(streams), _how(moment, request, explain)),
+            normalized_request=normalized,
+            **fields,
+        )
+
     try:
         check_values(conn, site, request)
         stmt, meta = compile_query(request, ctx)
     except NotFound as exc:
-        return _envelope(
-            moment, request, normalized, ("MASTER",), window, status=ResultStatus.NOT_FOUND, message=str(exc)
-        )
+        return envelope(("MASTER",), status=ResultStatus.NOT_FOUND, message=str(exc))
     streams: tuple[str, ...] = meta["streams"]
     if moment.missing_streams(streams):
-        return _envelope(
-            moment,
-            request,
-            normalized,
-            streams,
-            window,
-            status=ResultStatus.UNAVAILABLE,
-            message="This data has not been loaded yet.",
+        return envelope(
+            streams, status=ResultStatus.UNAVAILABLE, message="This data has not been loaded yet."
         )
     sql, params = to_sql(stmt)
     cursor = query(conn, TOOL, sql, params)
@@ -588,24 +602,15 @@ def run(
     fetched = [dict(zip(names, r, strict=True)) for r in cursor.fetchall()]
     truncated = len(fetched) > request.limit
     rows = fetched[: request.limit]
+    kind: str | None = meta["narrowed"]
+    if kind is not None and working_set is not None:
+        explain["narrowed"] = _narrowed(kind, working_set, request, fetched, truncated)
     if not rows:
-        return _envelope(
-            moment,
-            request,
-            normalized,
-            streams,
-            window,
-            status=ResultStatus.NO_RESULTS,
-            message="No rows match this query.",
-        )
+        return envelope(streams, status=ResultStatus.NO_RESULTS, message="No rows match this query.")
     highlights, highlights_truncated, entities = _locations(conn, site, request, rows)
     visible = [*request.dimensions, *request.measures]
-    return _envelope(
-        moment,
-        request,
-        normalized,
+    return envelope(
         streams,
-        window,
         status=ResultStatus.OK,
         columns=_columns(request),
         rows=tuple({k: r[k] for k in visible} for r in rows),
@@ -614,6 +619,22 @@ def run(
         highlights_truncated=highlights_truncated,
         entities=entities,
     )
+
+
+def _narrowed(
+    kind: str, ws: WorkingSet, request: QueryRequest, fetched: list[dict[str, Any]], truncated: bool
+) -> str:
+    """Says which previous result was narrowed and how many of its items this result leaves out
+    (FR-COP-06): filtered out by the follow-up, or no longer in the data at all."""
+    total = len(ws.ids(kind))
+    noun = NOUNS[kind][0] if total == 1 else NOUNS[kind][1]
+    sentence = f" Narrowed to the {total} {noun} of the previous answer."
+    if kind in request.dimensions and not truncated:
+        missing = total - len({r[f"_id_{kind}"] for r in fetched if r.get(f"_id_{kind}") is not None})
+        if missing:
+            verb = "is" if missing == 1 else "are"
+            sentence += f" {missing} of them {verb} not in this result."
+    return sentence
 
 
 def _columns(request: QueryRequest) -> tuple[Column, ...]:
@@ -671,37 +692,19 @@ def _distinct(entities: Iterable[EntityRef]) -> tuple[EntityRef, ...]:
     return tuple(seen.values())[:MAX_ENTITIES]
 
 
-def _how(moment: Moment, request: QueryRequest, window: str) -> tuple[str, ...]:
+def _how(moment: Moment, request: QueryRequest, explain: dict[str, str]) -> tuple[str, ...]:
     """The card states both points in time (spec 7.1): stock as of now; demand over the range."""
     model = semantic_model()
     names = ", ".join(model.measures[m].label.lower() for m in request.measures)
-    by = (
-        f" by {', '.join(model.query.dimensions[d].label.lower() for d in request.dimensions)}"
-        if request.dimensions
-        else ""
-    )
+    dims = ", ".join(model.query.dimensions[d].label.lower() for d in request.dimensions)
     tr = request.time_range
     period = ""
     if tr is not None:
         span = f"the last {tr.last_days} days" if tr.last_days else f"{tr.from_date} to {tr.to_date}"
         period = f" Demand and movements over {span}, up to {moment.local_time}."
     summary = model.results[TOOL].how_computed.format(
-        measures=names, by=by, as_of=moment.local_time, period=period
-    )
-    texts = [model.measures[m].how_computed.replace("{window}", window) for m in request.measures]
+        measures=names, by=f" by {dims}" if dims else "", as_of=moment.local_time, period=period,
+        narrowed=explain["narrowed"],
+    )  # fmt: skip
+    texts = [model.measures[m].how_computed.replace("{window}", explain["window"]) for m in request.measures]
     return (summary, *texts)
-
-
-def _envelope(
-    moment: Moment,
-    request: QueryRequest,
-    normalized: dict[str, Any],
-    streams: Sequence[str],
-    window: str,
-    **fields: Any,
-) -> ResultEnvelope:
-    return ResultEnvelope(
-        evidence=moment.evidence(tuple(streams), _how(moment, request, window)),
-        normalized_request=normalized,
-        **fields,
-    )

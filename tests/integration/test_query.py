@@ -5,16 +5,16 @@ numbers are worked out by hand or come from the fixed tools, which must agree (s
 """
 
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import psycopg
 import pytest
 from fixture_site import FixtureSite
 
-from palletwise.contracts.results import ResultEnvelope, ResultStatus
+from palletwise.contracts.results import ResultEnvelope, ResultStatus, WorkingSet
 from palletwise.db.connection import role_pool, tenant_session
 from palletwise.semantic import query, rules
 from palletwise.semantic.query_request import QueryRejected, validate
@@ -319,6 +319,12 @@ def test_truncation_and_entities(shop: FixtureSite) -> None:
 # ---------------------------------------------------------------- the working set hook (spec 7.5)
 
 
+def previous(products: list[UUID]) -> WorkingSet:
+    return WorkingSet(
+        run_id=uuid4(), tool="get_low_stock", created_at=datetime.now(UTC), products=tuple(products)
+    )
+
+
 def test_the_working_set_narrows_to_the_previous_identifiers(shop: FixtureSite) -> None:
     ids = shop.ids  # type: ignore[attr-defined]
     raw = {
@@ -327,13 +333,20 @@ def test_the_working_set_narrows_to_the_previous_identifiers(shop: FixtureSite) 
         "scope": {"working_set": True},
         "filters": [{"field": "zone", "op": "=", "value": "B"}],
     }
-    result = ask(shop, raw, {"product": [ids["cola"], ids["chips"]]})
+    ws = previous([ids["cola"], ids["chips"]])
+    result = ask(shop, raw, ws)
     assert rows(result, "product", "on_hand") == [("COLA", 70)]  # CHIPS is not in zone B
+    assert (
+        "Narrowed to the 2 products of the previous answer. 1 of them is not in this result."
+        in (result.evidence.how_computed[0])
+    )
+    assert result.normalized_request["working_set_from"] == {
+        "run_id": str(ws.run_id),
+        "tool": "get_low_stock",
+    }
     with pytest.raises(QueryRejected, match="no previous result to narrow down"):
         ask(shop, raw, None)
     with pytest.raises(QueryRejected, match="no previous result to narrow down"):
-        ask(
-            shop,
-            {"measures": ["utilization_pct"], "dimensions": ["zone"], "scope": {"working_set": True}},
-            {"product": [ids["cola"]]},
-        )  # products cannot narrow a zone utilization
+        # products cannot narrow a zone utilization
+        ask(shop, {"measures": ["utilization_pct"], "dimensions": ["zone"], "scope": {"working_set": True}},
+            previous([ids["cola"]]))  # fmt: skip

@@ -220,7 +220,7 @@ QUERY_INVENTORY = _rule_tool(
     _query_description(),
     QueryInventoryInput,
     query.SCOPE,
-    lambda ctx, p: query.run(ctx.conn, ctx.site, p),
+    lambda ctx, p: query.run(ctx.conn, ctx.site, p, ctx.working_set),
 )
 
 SLICE_2_TOOLS = (
