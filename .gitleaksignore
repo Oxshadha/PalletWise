@@ -1,0 +1,3 @@
+# Reviewed false positives (gitleaks fingerprint: commit:file:rule:line). Add a reason for each.
+# Fake JWT {"alg":"RS256"}.{"sub":"user"} used to test token redaction in telemetry.
+04813bae07036b5c8d1f451f263c00aff6a35ce3:tests/unit/test_telemetry.py:jwt:21
