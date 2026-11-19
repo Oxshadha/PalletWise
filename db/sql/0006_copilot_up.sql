@@ -30,6 +30,8 @@ CREATE TABLE pw.conversation (
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now(),
   UNIQUE (tenant_id, id),
+  -- Runs reference this key, so a run always has its conversation's owner and site.
+  UNIQUE (tenant_id, user_subject, site_id, id),
   FOREIGN KEY (tenant_id, site_id) REFERENCES pw.site (tenant_id, id)
 );
 CREATE INDEX conversation_owner ON pw.conversation (tenant_id, site_id, user_subject, updated_at DESC);
@@ -58,17 +60,24 @@ CREATE TABLE pw.copilot_run (
   created_at        timestamptz NOT NULL DEFAULT now(),
   finished_at       timestamptz,
   UNIQUE (conversation_id, seq),
-  FOREIGN KEY (tenant_id, conversation_id) REFERENCES pw.conversation (tenant_id, id)
+  UNIQUE (tenant_id, user_subject, id),
+  -- Ownership is inherited by construction: a run can only belong to a conversation with the
+  -- same tenant, owner and site, whatever the API does.
+  FOREIGN KEY (tenant_id, user_subject, site_id, conversation_id)
+    REFERENCES pw.conversation (tenant_id, user_subject, site_id, id)
 );
+CREATE INDEX copilot_run_running ON pw.copilot_run (tenant_id, user_subject, created_at) WHERE status = 'RUNNING';
 
 CREATE TABLE pw.run_feedback (
-  run_id        uuid PRIMARY KEY REFERENCES pw.copilot_run (id),
-  tenant_id     uuid NOT NULL REFERENCES pw.tenant (id),
+  run_id        uuid PRIMARY KEY,
+  tenant_id     uuid NOT NULL,
   user_subject  text NOT NULL,
   rating        text NOT NULL CHECK (rating IN ('HELPFUL', 'NOT_HELPFUL')),
   comment       text CHECK (length(comment) <= 1000),
   trace_id      text NOT NULL,
-  created_at    timestamptz NOT NULL DEFAULT now()
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  -- Feedback can only be given on the giver's own run.
+  FOREIGN KEY (tenant_id, user_subject, run_id) REFERENCES pw.copilot_run (tenant_id, user_subject, id)
 );
 
 DO $$

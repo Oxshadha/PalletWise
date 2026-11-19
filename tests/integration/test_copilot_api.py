@@ -419,3 +419,50 @@ def test_cancel_stops_a_running_answer(env: Env) -> None:
     worker.join()
     status = env.db.execute("SELECT status FROM pw.copilot_run WHERE id = %s", (run_id,)).fetchone()
     assert status == ("CANCELLED",)
+
+
+def test_an_admin_cannot_read_a_managers_conversation(env: Env) -> None:
+    env.sign_in(subject="manager-x")
+    _, headers, _ = env.ask("Where is SKU-102 stored?")
+    env.sign_in(subject="admin-x", role="admin")
+    params = {"site_id": str(env.site.site)}
+    assert (
+        env.client.get(
+            f"/api/copilot/conversations/{headers['x-conversation-id']}", params=params
+        ).status_code
+        == 404
+    )
+
+
+def test_the_database_refuses_a_run_in_another_users_conversation(env: Env, connect_session: Connect) -> None:
+    env.sign_in(subject="victim")
+    _, headers, _ = env.ask("Where is SKU-102 stored?")
+    memory = connect_session("pw_memory")
+    with memory.transaction():
+        memory.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
+        memory.execute("SELECT set_config('app.user_subject', 'attacker', true)")
+        with pytest.raises(psycopg.errors.ForeignKeyViolation):
+            memory.execute(
+                "INSERT INTO pw.copilot_run (id, tenant_id, conversation_id, site_id, user_subject, seq,"
+                " question, status, trace_id, agent_id) VALUES (gen_random_uuid(), %s, %s, %s, 'attacker',"
+                " 99, 'x', 'RUNNING', %s, 'copilot')",
+                (env.site.tenant, headers["x-conversation-id"], env.site.site, "ab" * 16),
+            )
+
+
+def test_a_run_left_running_by_a_dead_process_is_closed(env: Env) -> None:
+    env.sign_in(subject="crashed")
+    _, headers, _ = env.ask("Where is SKU-102 stored?")
+    run_id = headers["x-run-id"]
+    env.db.execute(
+        "UPDATE pw.copilot_run SET status = 'RUNNING', finished_at = NULL,"
+        " created_at = now() - interval '10 minutes' WHERE id = %s",
+        (run_id,),
+    )
+    stored = env.client.get(
+        f"/api/copilot/conversations/{headers['x-conversation-id']}", params={"site_id": str(env.site.site)}
+    ).json()
+    assert stored["runs"][0]["status"] == "FAILED"
+    assert env.db.execute("SELECT error_code FROM pw.copilot_run WHERE id = %s", (run_id,)).fetchone() == (
+        "INTERRUPTED",
+    )

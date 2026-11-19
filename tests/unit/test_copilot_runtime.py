@@ -354,3 +354,29 @@ def test_cancelling_the_consumer_stops_the_model_call() -> None:
 
     asyncio.run(scenario())
     assert meter.reserved == 0 and meter.settled and meter.settled[0].outcome == "ERROR"
+
+
+def test_an_answer_cut_off_at_the_output_limit_is_never_shown() -> None:
+    def cut(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[TextPart("SKU-102 is stored in")], finish_reason="length")
+
+    events, state, _, _ = run("Where is SKU-102 stored?", FakeProvider(gemini_flash_lite=FunctionModel(cut)))
+    assert text_of(events).startswith("SKU-102 is stored in 2 locations") and state.path == "B"
+
+
+def test_reservations_cover_the_whole_output_cap() -> None:
+    meter = FakeMeter()
+    seen: list[int] = []
+    original = meter.reserve
+
+    def reserve(estimate: int) -> bool:
+        seen.append(estimate)
+        return original(estimate)
+
+    meter.reserve = reserve  # type: ignore[method-assign]
+    run(
+        "Where is SKU-102 stored?",
+        FakeProvider(gemini_flash_lite=say("SKU-102 is in A8-01-02.")),
+        meter=meter,
+    )
+    assert seen and all(estimate > 400 for estimate in seen)  # input estimate plus the 400 token cap

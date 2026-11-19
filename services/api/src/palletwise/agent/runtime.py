@@ -34,9 +34,12 @@ log = logging.getLogger(__name__)
 PROMPTS = Path(__file__).with_name("prompts")
 LITE_MODEL = "gemini-flash-lite"
 MODEL_ROWS = 20  # rows of a result shown to the model; the UI shows all of them
-MAX_OUTPUT_TOKENS = 600
-WORDING_SETTINGS: ModelSettings = {"temperature": 0.1, "max_tokens": 200}
-AGENT_SETTINGS: ModelSettings = {"temperature": 0.1, "max_tokens": MAX_OUTPUT_TOKENS}
+# max_tokens caps thinking and answer together (verified on gemini-3.8-flash), so it is also the
+# upper bound used for the budget reservation. Thinking stays low: answers are short and grounded
+# in tool results, and low thinking measured over ten times fewer output tokens with the same answer.
+DEFAULT_MAX_OUTPUT = 1_024
+WORDING_SETTINGS: ModelSettings = {"temperature": 0.1, "max_tokens": 400, "thinking": "low"}
+AGENT_SETTINGS: ModelSettings = {"temperature": 0.1, "max_tokens": DEFAULT_MAX_OUTPUT, "thinking": "low"}
 
 Path_ = Literal["A", "B", "C"]
 CardOutcome = Literal["ANSWER", "NO_RESULTS", "DECLINE", "STALE", "DENIED", "ERROR"]
@@ -156,7 +159,8 @@ class MeteredModel(WrapperModel):
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
     ) -> ModelResponse:
-        estimate = _estimate_tokens(messages) + MAX_OUTPUT_TOKENS
+        cap = (model_settings or {}).get("max_tokens") or DEFAULT_MAX_OUTPUT
+        estimate = _estimate_tokens(messages) + cap  # input plus the most the call may output
         if not await asyncio.to_thread(self._meter.reserve, estimate):
             self._state.budget_exhausted = True
             raise BudgetExhausted
@@ -176,6 +180,11 @@ class MeteredModel(WrapperModel):
     def _call(self, i: int, o: int, c: int, started: float, outcome: Literal["OK", "ERROR"]) -> ModelCall:
         latency = round((clock.monotonic() - started) * 1000)
         return ModelCall(self._resolved.name, self._resolved.region, self._purpose, i, o, c, latency, outcome)
+
+
+def _truncated(result: Any) -> bool:
+    """An answer cut off at the output limit is never shown; the template is used instead."""
+    return result.response.finish_reason == "length"
 
 
 def _estimate_tokens(messages: list[ModelMessage]) -> int:
@@ -344,7 +353,7 @@ class CopilotRuntime:
         prompt = f"Question: {request.question}\n\nResult of {tool}:\n{data_block(model_view(result))}"
         for attempt in range(2):
             answer = await agent.run(prompt)
-            text = normalize_dashes(answer.output.strip())
+            text = "" if _truncated(answer) else normalize_dashes(answer.output.strip())
             problems = grounding_problems(text, [result], request.question)
             if text and not problems:
                 return text
@@ -390,7 +399,7 @@ class CopilotRuntime:
         prompt = self._user_prompt(request)
         try:
             answer = await agent.run(prompt, usage_limits=limits)
-            text = normalize_dashes(answer.output.strip())
+            text = "" if _truncated(answer) else normalize_dashes(answer.output.strip())
             results = [r for _, r in state.results]
             problems = grounding_problems(text, results, request.question)
             if problems:
@@ -401,7 +410,7 @@ class CopilotRuntime:
                     message_history=answer.all_messages(),
                     usage_limits=limits,
                 )
-                text = normalize_dashes(retry.output.strip())
+                text = "" if _truncated(retry) else normalize_dashes(retry.output.strip())
                 if grounding_problems(text, results, request.question):
                     text = ""
         except BudgetExhausted:

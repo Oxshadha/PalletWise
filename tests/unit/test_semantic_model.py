@@ -75,3 +75,28 @@ def test_find_product_locations_input_normalizes_whitespace() -> None:
 def test_bin_code_input_is_strict(code: str) -> None:
     with pytest.raises(ValidationError):
         GetBinContentsInput.model_validate({"bin_code": code})
+
+
+def test_prices_follow_their_effective_dates() -> None:
+    from datetime import date
+    from decimal import Decimal
+
+    from palletwise.llm import estimated_cost, prices
+
+    table = prices()
+    assert (table.provider, table.currency) == ("google-vertex", "USD")
+    # 1M input and 1M output tokens on gemini-3.8-flash, before and after the 2027 change.
+    assert estimated_cost("gemini-3.8-flash", 1_000_000, 1_000_000, 0, date(2026, 12, 31)) == Decimal(
+        "4.500000"
+    )
+    assert estimated_cost("gemini-3.8-flash", 1_000_000, 1_000_000, 0, date(2027, 1, 1)) == Decimal(
+        "9.000000"
+    )
+    # Cached input is billed at the cached rate, not on top of the input rate.
+    assert estimated_cost("gemini-3.8-flash", 1_000_000, 0, 1_000_000, date(2026, 11, 19)) == Decimal(
+        "0.075000"
+    )
+    assert estimated_cost("unknown-model", 1_000, 1_000, 0, date(2026, 11, 19)) == Decimal(0)
+    assert estimated_cost("gemini-3.8-flash", 1_000, 0, 0, date(2025, 1, 1)) == Decimal(
+        0
+    )  # before any period

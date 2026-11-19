@@ -166,7 +166,9 @@ class LedgerMeter:
     def settle(self, estimate: int, call: ModelCall) -> None:
         used = call.input_tokens + call.output_tokens
         self.ledger.settle(self.owner.tenant, self.agent.id, self.day, estimate, used)
-        cost = estimated_cost(call.model, call.input_tokens, call.output_tokens, call.cached_tokens)
+        cost = estimated_cost(
+            call.model, call.input_tokens, call.output_tokens, call.cached_tokens, clock.wall_now().date()
+        )
         self.cost += cost
         self.ledger.record(
             self.owner.tenant,

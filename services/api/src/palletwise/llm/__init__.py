@@ -3,6 +3,7 @@
 import logging
 import os
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from functools import cache
 from pathlib import Path
@@ -84,22 +85,52 @@ def build_provider(settings: LlmSettings) -> LLMProvider:
 
 @dataclass(frozen=True, slots=True)
 class Price:
+    effective_from: date
     input: Decimal
     output: Decimal
     cached: Decimal
 
 
+@dataclass(frozen=True, slots=True)
+class PriceTable:
+    provider: str
+    currency: str
+    models: dict[str, tuple[Price, ...]]  # each sorted by effective_from
+
+    def price(self, model: str, on: date) -> Price | None:
+        """The period in force on the given date, or None for an unknown model or date."""
+        current = None
+        for period in self.models.get(model, ()):
+            if period.effective_from <= on:
+                current = period
+        return current
+
+
 @cache
-def prices() -> dict[str, Price]:
-    raw = yaml.safe_load(PRICES_FILE.read_text(encoding="utf-8"))["models"]
-    return {name: Price(Decimal(str(p["input"])), Decimal(str(p["output"])), Decimal(str(p["cached"])))
-            for name, p in raw.items()}  # fmt: skip
+def prices() -> PriceTable:
+    raw = yaml.safe_load(PRICES_FILE.read_text(encoding="utf-8"))
+    models = {
+        name: tuple(sorted(
+            (Price(p["effective_from"], Decimal(str(p["input"])), Decimal(str(p["output"])),
+                   Decimal(str(p["cached"]))) for p in periods),
+            key=lambda price: price.effective_from,
+        ))
+        for name, periods in raw["models"].items()
+    }  # fmt: skip
+    return PriceTable(raw["provider"], raw["currency"], models)
 
 
-def estimated_cost(model: str, input_tokens: int, output_tokens: int, cached_tokens: int) -> Decimal:
-    """Provider-reported tokens times the price table (evals spec 14). Unknown model: 0."""
-    price = prices().get(model)
+def estimated_cost(
+    model: str, input_tokens: int, output_tokens: int, cached_tokens: int, on: date
+) -> Decimal:
+    """Provider-reported tokens times the price in force on the call's date (evals spec 14).
+
+    Unknown model: 0, and the usage record still keeps the tokens. Cached input is billed at the
+    cached rate instead of the input rate; output already includes thinking tokens.
+    """
+    price = prices().price(model, on)
     if price is None:
+        log.warning("no price for model %s on %s; estimated cost recorded as 0", model, on)
         return Decimal(0)
     billed_input = max(input_tokens - cached_tokens, 0)
     cost = (

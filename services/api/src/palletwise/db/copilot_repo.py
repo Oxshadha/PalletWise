@@ -18,6 +18,9 @@ from palletwise.db.connection import tenant_session
 from palletwise.db.ids import uuid7
 
 MAX_TITLE = 60
+# Longer than any run can last (run timeout plus disconnect grace), so only runs whose process
+# died are caught.
+INTERRUPTED_AFTER = "5 minutes"
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +87,15 @@ class ConversationStore:
     def _session(self, owner: Owner) -> Any:
         return tenant_session(self._pool, owner.tenant, subject=owner.subject)
 
+    @staticmethod
+    def _close_interrupted(conn: Any) -> None:
+        """Runs whose API process died never stay RUNNING: the owner's next visit closes them."""
+        conn.execute(
+            "UPDATE pw.copilot_run SET status = 'FAILED', error_code = 'INTERRUPTED', finished_at = now()"
+            " WHERE status = 'RUNNING' AND created_at < now() - %s::interval",
+            (INTERRUPTED_AFTER,),
+        )
+
     def owns(self, owner: Owner, conversation_id: UUID) -> bool:
         with self._session(owner) as conn:
             row = conn.execute(
@@ -104,6 +116,7 @@ class ConversationStore:
         """Creates the conversation when needed; returns (conversation id, run id)."""
         run_id = uuid7()
         with self._session(owner) as conn:
+            self._close_interrupted(conn)
             if conversation_id is None:
                 conversation_id = uuid7()
                 conn.execute(
@@ -206,6 +219,7 @@ class ConversationStore:
         self, owner: Owner, conversation_id: UUID
     ) -> tuple[ConversationSummary, list[RunRecord]] | None:
         with self._session(owner) as conn:
+            self._close_interrupted(conn)
             head = conn.execute(
                 "SELECT id, title, created_at, updated_at FROM pw.conversation"
                 " WHERE id = %s AND site_id = %s",
