@@ -112,8 +112,19 @@
   border-radius: var(--pw-radius-sm);
 }
 
+/* Wide tables scroll sideways; a soft edge shows there is more, only while there is more
+   (background-attachment local covers it once the end is reached). */
 .pw-answer-table {
   overflow-x: auto;
+  background:
+    linear-gradient(to right, var(--pw-color-surface), var(--pw-color-surface)) left / 24px 100%
+      no-repeat local,
+    linear-gradient(to left, var(--pw-color-surface), var(--pw-color-surface)) right / 24px 100%
+      no-repeat local,
+    radial-gradient(farthest-side at 0 50%, var(--pw-color-scroll-shade), transparent) left / 12px
+      100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, var(--pw-color-scroll-shade), transparent) right /
+      12px 100% no-repeat scroll;
 }
 
 /* Codes, quantities and times never break across lines; the table scrolls instead. */

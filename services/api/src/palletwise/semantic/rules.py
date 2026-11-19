@@ -399,6 +399,9 @@ def _zones(rows: Iterable[Row]) -> list[EntityRef]:
     return [EntityRef(type="zone", id=r["zone_id"], label=r["zone_code"]) for r in rows]
 
 
+ZONE_HIGHLIGHTS = 3
+
+
 def zone_summary(conn: Connection, site: UUID) -> ResultEnvelope:
     def shape(moment: Moment, explain: dict[str, str] | None) -> ResultEnvelope:
         rows, truncated = _fetch(
@@ -408,7 +411,9 @@ def zone_summary(conn: Connection, site: UUID) -> ResultEnvelope:
             (site, moment.as_of, moment.settings_version_id),
         )
         reason = HighlightReason.QUERY
-        zones = _highlights((("zone", r["zone_id"], DEFAULT_SEVERITY[reason]) for r in rows), reason)
+        # The zones holding the most stock, not every zone: a highlight points at the answer.
+        top = rows[:ZONE_HIGHLIGHTS]
+        zones = _highlights((("zone", r["zone_id"], DEFAULT_SEVERITY[reason]) for r in top), reason)
         return _result(
             moment,
             "get_zone_summary",

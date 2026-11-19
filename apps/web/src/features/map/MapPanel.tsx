@@ -358,6 +358,12 @@ export function MapPanel() {
               <span className="pw-dot is-empty" /> Empty
             </li>
             <li>
+              <span className="pw-dot is-low-stock" /> Low stock
+            </li>
+            <li>
+              <span className="pw-dot is-over-capacity" /> Over capacity
+            </li>
+            <li>
               <span className="pw-dot is-info" /> Highlighted
             </li>
           </ul>

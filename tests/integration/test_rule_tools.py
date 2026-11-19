@@ -285,3 +285,13 @@ def test_the_tool_description_lists_the_catalogue(connect_as: Connect) -> None:
     assert spec is not None and spec.scope == "inventory.read"
     assert "days_of_cover (snapshot, by product, category, brand)" in spec.description
     assert "projected_days_of_cover" not in spec.description  # not available until Slice 5
+
+
+def test_the_zone_summary_highlights_only_the_zones_holding_the_most(run: Any, connect_as: Connect) -> None:
+    f = FixtureSite(connect_as)
+    product = f.product("BOX")
+    for i, code in enumerate("ABCDE"):
+        f.stock(f.bin(f.zone(code), f"{code}-01"), product, (i + 1) * 10)  # E holds most, A least
+    envelope = ok(run(f, "get_zone_summary"))
+    assert [r["zone_code"] for r in envelope.rows] == ["E", "D", "C", "B", "A"]  # every zone listed
+    assert [c for _, c, _, _ in codes(f, envelope)] == ["E", "D", "C"]  # only the top three marked

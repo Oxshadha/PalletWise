@@ -96,6 +96,34 @@
   background: var(--pw-color-status-info);
 }
 
+/* The two hatched base states as small squares, matching the scene's plates (UX spec 5). */
+.pw-dot.is-low-stock,
+.pw-dot.is-over-capacity {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 0;
+}
+
+.pw-dot.is-low-stock {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--pw-color-surface) 0 2px,
+    var(--pw-color-status-warning) 2px 4px
+  );
+  box-shadow: inset 0 0 0 1px var(--pw-color-status-warning);
+}
+
+.pw-dot.is-over-capacity {
+  background:
+    repeating-linear-gradient(45deg, transparent 0 2px, var(--pw-color-status-critical) 2px 3px),
+    repeating-linear-gradient(
+      -45deg,
+      var(--pw-color-surface) 0 2px,
+      var(--pw-color-status-critical) 2px 3px
+    );
+  box-shadow: inset 0 0 0 1px var(--pw-color-status-critical);
+}
+
 /* Labels drawn in the 3D scene (real text, so it is Inter at any zoom). */
 .pw-zone-tag,
 .pw-pin-tag {
@@ -411,6 +439,14 @@
 
 .pw-location-code {
   font-weight: var(--pw-font-weight-navigation);
+  white-space: nowrap; /* "Zone A" and bin codes never break */
+}
+
+.pw-location > .pw-muted {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .pw-swatch {

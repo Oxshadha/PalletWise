@@ -40,14 +40,19 @@ export function CopilotPanel({ notReadyText }: { notReadyText: string | null }) 
     });
   }, [state.pending, notReadyText, dispatch, ask]);
 
-  // Auto-scroll unless the user has scrolled up to read earlier answers (UX spec 6).
+  // A new question always comes into view; while an answer streams, the view follows it unless
+  // the user has scrolled up to read earlier answers (UX spec 6).
   const lastText = state.answers.at(-1)?.text;
+  const count = state.answers.length;
+  const seen = useRef(count);
   useEffect(() => {
     const box = list.current;
     if (!box) return;
+    const asked = count > seen.current;
+    seen.current = count;
     const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
-    if (nearBottom) end.current?.scrollIntoView({ block: "end" });
-  }, [state.answers.length, lastText]);
+    if (asked || nearBottom) end.current?.scrollIntoView({ block: "end" });
+  }, [count, lastText]);
 
   const choose = (suggestion: Suggestion) => {
     void ask(suggestion.label, { suggestion });

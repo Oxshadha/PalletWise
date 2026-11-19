@@ -504,10 +504,10 @@ function hatchTexture(color: string, crossed: boolean): CanvasTexture {
 
 /**
  * The base state layer (UX spec 5): low stock and over capacity locations get a hatched plate on
- * their shelf, under the pallet, so the state stays readable around the stock and under any answer
- * highlight. Color is never the only signal: the hatch differs.
+ * top of their stock (on the shelf when empty), readable in the isometric view and under any
+ * answer highlight. Color is never the only signal: the hatch differs.
  */
-function StatePlates({ layout, states, colors }: Props) {
+function StatePlates({ layout, states, onHand, colors }: Props) {
   const kinds = [
     { state: "LOW_STOCK", token: "--pw-color-status-warning", crossed: false },
     { state: "OVER_CAPACITY", token: "--pw-color-status-critical", crossed: true },
@@ -518,6 +518,7 @@ function StatePlates({ layout, states, colors }: Props) {
         <StatePlate
           key={kind.state}
           bins={layout.bins.filter((b) => states.get(b.id) === kind.state)}
+          onHand={onHand}
           color={colors[kind.token]}
           crossed={kind.crossed}
         />
@@ -528,10 +529,12 @@ function StatePlates({ layout, states, colors }: Props) {
 
 function StatePlate({
   bins,
+  onHand,
   color,
   crossed,
 }: {
   bins: LayoutBin[];
+  onHand: Map<string, number>;
   color: string;
   crossed: boolean;
 }) {
@@ -547,11 +550,14 @@ function StatePlate({
     (dummy, i) => {
       const bin = bins[i];
       if (!bin) return;
-      dummy.position.set(bin.x, slotBase(bin) + 0.012, bin.y);
+      // On top of the stock (the cartons' height in Stock), else on the empty shelf.
+      const stocked = (onHand.get(bin.id) ?? 0) > 0;
+      const top = stocked ? 0.14 + Math.min(bin.height_m * 0.62, 1.4) + 0.012 : 0.012;
+      dummy.position.set(bin.x, slotBase(bin) + top, bin.y);
       dummy.rotation.set(-Math.PI / 2, 0, 0);
       dummy.scale.set(bin.width_m * 0.98, bin.depth_m * 0.98, 1);
     },
-    [bins],
+    [bins, onHand],
   );
   if (bins.length === 0) return null;
   return (
@@ -650,34 +656,63 @@ function HitTargets({ layout, onHand, states, onSelect }: Props) {
   );
 }
 
-/** A pin with the location code above each highlighted location, visible from any angle. */
+const MAX_LABELS = 12;
+const RANK = { info: 1, warning: 2, critical: 3 } as const;
+
+/**
+ * A pin above each highlighted location, visible from any angle. Labels stay readable: bins
+ * stacked on one rack face share one label ("B1-01-02 +1"), and with many highlights only the
+ * most severe faces are labelled; the locations list names every one (UX spec 3).
+ */
 function Pins({ highlights, bins, selectedBinId, colors }: Props) {
   const selected = selectedBinId ? bins.get(selectedBinId) : undefined;
+  const faces = useMemo(() => {
+    const byFace = new Map<
+      string,
+      { top: LayoutBin; codes: string[]; severity: Highlight["severity"] }
+    >();
+    for (const h of highlights) {
+      const bin = h.target_type === "bin" ? bins.get(h.target_id) : undefined;
+      if (!bin) continue;
+      const key = `${String(bin.x)}:${String(bin.y)}`;
+      const face = byFace.get(key);
+      if (!face) byFace.set(key, { top: bin, codes: [bin.code], severity: h.severity });
+      else {
+        face.codes.push(bin.code);
+        if (bin.z > face.top.z) face.top = bin;
+        if (RANK[h.severity] > RANK[face.severity]) face.severity = h.severity;
+      }
+    }
+    const all = [...byFace.values()].sort((a, b) => RANK[b.severity] - RANK[a.severity]);
+    return all.map((face, i) => ({ ...face, labelled: i < MAX_LABELS }));
+  }, [highlights, bins]);
   return (
     <>
-      {highlights.map((highlight) => {
-        const bin = highlight.target_type === "bin" ? bins.get(highlight.target_id) : undefined;
-        if (!bin) return null;
-        const top = bin.z + bin.height_m / 2;
-        const color = colors[SEVERITY_TOKEN[highlight.severity]];
+      {faces.map(({ top: bin, codes, severity, labelled }) => {
+        const height = bin.z + bin.height_m / 2;
+        const color = colors[SEVERITY_TOKEN[severity]];
+        const label =
+          codes.length > 1 ? `${codes.sort()[0] ?? ""} +${String(codes.length - 1)}` : bin.code;
         return (
-          <group key={highlight.target_id}>
-            <mesh position={[bin.x, top + PIN_HEIGHT / 2, bin.y]} raycast={() => null}>
+          <group key={bin.id}>
+            <mesh position={[bin.x, height + PIN_HEIGHT / 2, bin.y]} raycast={() => null}>
               <cylinderGeometry args={[0.045, 0.045, PIN_HEIGHT, 8]} />
               <meshBasicMaterial color={color} />
             </mesh>
-            <mesh position={[bin.x, top + PIN_HEIGHT, bin.y]} raycast={() => null}>
-              <sphereGeometry args={[highlight.severity === "critical" ? 0.42 : 0.32, 24, 24]} />
+            <mesh position={[bin.x, height + PIN_HEIGHT, bin.y]} raycast={() => null}>
+              <sphereGeometry args={[severity === "critical" ? 0.42 : 0.32, 24, 24]} />
               <meshBasicMaterial color={color} />
             </mesh>
-            <Html
-              position={[bin.x, top + PIN_HEIGHT + 0.8, bin.y]}
-              center
-              zIndexRange={[20, 10]}
-              pointerEvents="none"
-            >
-              <span className={`pw-pin-tag is-${highlight.severity}`}>{bin.code}</span>
-            </Html>
+            {labelled && (
+              <Html
+                position={[bin.x, height + PIN_HEIGHT + 0.8, bin.y]}
+                center
+                zIndexRange={[20, 10]}
+                pointerEvents="none"
+              >
+                <span className={`pw-pin-tag is-${severity}`}>{label}</span>
+              </Html>
+            )}
           </group>
         );
       })}
