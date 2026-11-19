@@ -26,10 +26,11 @@ from palletwise.db.connection import Pool, tenant_session
 from palletwise.policy import PolicyClient, PolicyRequest, PolicyUser
 from palletwise.semantic import locations, map_state
 from palletwise.telemetry.tracing import current_trace_id, record_policy_decision, tracer
+from palletwise.tools.catalog import BIN_CODE_PATTERN
 
 router = APIRouter(prefix="/api/sites/{site_id}", tags=["map"])
 
-BIN_CODE = r"^[A-Za-z0-9][A-Za-z0-9-]{0,31}$"
+BIN_CODE = BIN_CODE_PATTERN  # one definition, shared with get_bin_contents
 
 
 @dataclass

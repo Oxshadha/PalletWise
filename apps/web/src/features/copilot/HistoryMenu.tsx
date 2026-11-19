@@ -4,8 +4,11 @@ import { type Conversation, fetchConversation, fetchConversations } from "../../
 import { Icon } from "../../shared/ui/Icon";
 import { useWorkspace } from "../../shared/workspace/WorkspaceContext";
 
-/** Conversation history for this user and site (UX spec 6, FR-COP-11). */
-export function HistoryMenu({ onOpened }: { onOpened: () => void }) {
+/**
+ * Conversation history for this user and site (UX spec 6, FR-COP-11). Opening one first stops
+ * the answer in progress, as New does, so it cannot switch the panel back when it arrives.
+ */
+export function HistoryMenu({ stop }: { stop: () => Promise<void> }) {
   const { dispatch, siteId } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Conversation[] | null>(null);
@@ -24,11 +27,11 @@ export function HistoryMenu({ onOpened }: { onOpened: () => void }) {
     }
   };
   const openConversation = (id: string) => {
-    fetchConversation(siteId, id)
+    stop()
+      .then(() => fetchConversation(siteId, id))
       .then((detail) => {
         dispatch({ type: "conversation-loaded", conversationId: detail.id, runs: detail.runs });
         setOpen(false);
-        onOpened();
       })
       .catch(() => {
         setFailed(true);

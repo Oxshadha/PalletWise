@@ -53,6 +53,7 @@ from palletwise.llm import estimated_cost
 from palletwise.telemetry import metrics
 from palletwise.telemetry.setup import user_hash
 from palletwise.telemetry.tracing import current_trace_id, tracer
+from palletwise.tools.catalog import BIN_CODE_PATTERN
 from palletwise.tools.executor import RunContext
 
 log = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ class SuggestionIn(Strict):
 class PageContext(Strict):
     """What the user is looking at. Context for the model only, never used to authorize."""
 
-    selected_bin: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9-]{0,31}$")
+    selected_bin: str | None = Field(default=None, pattern=BIN_CODE_PATTERN)
     selected_zone: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9-]{0,31}$")
 
 
@@ -138,6 +139,16 @@ class CopilotServices:
     audit: AuditLog
     app_pool: Pool
     active: dict[UUID, "asyncio.Task[None]"] = field(default_factory=lambda: {})
+    # Run records being written; shutdown waits for them before closing the pools.
+    finishing: set["asyncio.Future[None]"] = field(default_factory=lambda: set())
+
+    async def drain(self, timeout: float) -> None:
+        """Stops active runs and waits for every run record to be written (graceful shutdown)."""
+        for task in list(self.active.values()):
+            task.cancel()
+        pending = {*self.active.values(), *self.finishing}
+        if pending:
+            await asyncio.wait(pending, timeout=timeout)
 
 
 def services(request: Request) -> CopilotServices:
@@ -389,11 +400,18 @@ async def _drive(
             run_status = "FAILED"
         latency = round((clock.monotonic() - started) * 1000)
         _observe_run(state, run_status, latency, first)
-        await asyncio.shield(
+        record = asyncio.ensure_future(
             asyncio.to_thread(_record, svc, request, meter, owner, state, run_status, latency)
         )
-        svc.active.pop(request.run.run_id, None)
-        channel.put_nowait(None)
+        svc.finishing.add(record)
+        record.add_done_callback(svc.finishing.discard)
+        try:
+            # Shielded: a second cancel (a late cancel request, the disconnect grace) cannot stop
+            # the record, and the cleanup below still runs.
+            await asyncio.shield(record)
+        finally:
+            svc.active.pop(request.run.run_id, None)
+            channel.put_nowait(None)
 
 
 FIRST_MARKERS = {"pw.result": "highlight", "TEXT_MESSAGE_CONTENT": "text"}

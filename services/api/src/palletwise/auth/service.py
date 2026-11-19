@@ -11,7 +11,7 @@ from datetime import timedelta
 from typing import Literal
 from uuid import UUID
 
-from palletwise.auth.crypto import KeyRing, Sealed, pkce_challenge, random_token, token_hash
+from palletwise.auth.crypto import KeyRing, KeyRingError, Sealed, pkce_challenge, random_token, token_hash
 from palletwise.auth.oidc import (
     IdentityProviderUnavailable,
     OidcClient,
@@ -237,15 +237,17 @@ class AuthService:
                 else:
                     result = Principal(id_hash, _identity(row)), None
             else:
-                refresh_token = self._keys.open(Sealed(locked.refresh_token, locked.key_id), id_hash)
                 try:
+                    # A removed or rotated session key: the session cannot be revalidated, so it
+                    # ends and the user signs in again (never a server error on every request).
+                    refresh_token = self._keys.open(Sealed(locked.refresh_token, locked.key_id), id_hash)
                     tokens = self._oidc.refresh(refresh_token)
                     claims = self._oidc.validate(tokens.id_token, nonce=None)
                     if claims["sub"] != locked.subject:
                         raise TokenInvalid("sub")
                     identity = identity_from_claims(claims)
-                except (TokenRejected, TokenInvalid, SignInRefused) as exc:
-                    # Disabled account, revoked session, lost role or broken claims.
+                except (KeyRingError, TokenRejected, TokenInvalid, SignInRefused) as exc:
+                    # Lost session key, disabled account, revoked session, lost role or broken claims.
                     ended_because = f"{type(exc).__name__}: {exc}"  # a reason label, never a token
                     locked.end()
                     ended_owner = (locked.tenant, locked.subject)
@@ -278,7 +280,14 @@ class AuthService:
         ended = self._store.end(id_hash)
         if ended is None:
             return
-        self._oidc.logout(self._keys.open(Sealed(ended.refresh_token, ended.key_id), id_hash))
+        try:
+            refresh_token = self._keys.open(Sealed(ended.refresh_token, ended.key_id), id_hash)
+        except KeyRingError:
+            # The local session is already gone; only the provider session cannot be ended from here.
+            log.warning("sign-out without provider logout: session key unavailable")
+            self._audit_quietly(ended.tenant, "auth.sign_out", "OK_LOCAL_ONLY", ended.subject, ended.role)
+            return
+        self._oidc.logout(refresh_token)
         self._audit_quietly(ended.tenant, "auth.sign_out", "OK", ended.subject, ended.role)
 
     def _audit_quietly(self, tenant: UUID, action: str, outcome: str, subject: str, role: str | None) -> None:

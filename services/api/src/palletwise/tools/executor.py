@@ -109,10 +109,13 @@ class RunContext:
     model: str | None = None
 
 
+StopReason = Literal["suspended", "registry_unavailable"]
+
+
 class RunStopped(Exception):
     """The run must end now (agent suspended or registry unreachable). Shown to the user."""
 
-    def __init__(self, reason: Literal["suspended", "registry_unavailable"]) -> None:
+    def __init__(self, reason: StopReason) -> None:
         super().__init__(reason)
         self.reason = reason
 
@@ -160,7 +163,7 @@ class ToolExecutor:
         with tracer.start_as_current_span(
             "tool.execute", attributes={"pw.tool.name": name, "pw.tool.layer": "semantic"}
         ) as span:
-            result, entry = self._execute(run, name, arguments, started)
+            result, entry, stop = self._execute(run, name, arguments, started)
             span.set_attribute("pw.tool.outcome", result.outcome.value)
             output = result.output
             if isinstance(output, ResultEnvelope):
@@ -175,13 +178,16 @@ class ToolExecutor:
         except Exception as exc:
             log.exception("audit append failed for tool %s; result withheld", name)
             raise AuditUnavailable from exc
+        if stop is not None:
+            raise RunStopped(stop)
         if result.outcome is Outcome.SUSPENDED:
             raise RunStopped("suspended")
         return result
 
     def _execute(
         self, run: RunContext, name: str, arguments: Mapping[str, Any], started: float
-    ) -> tuple[ToolCallResult, AuditEntry]:
+    ) -> tuple[ToolCallResult, AuditEntry, StopReason | None]:
+        """The result, its audit entry (every outcome is audited), and why the run must stop, if so."""
         spec = self._registry.get(name)
 
         def finish(
@@ -192,7 +198,7 @@ class ToolExecutor:
             decision: Decision | None = None,
             output: Any = None,
             message: str | None = None,
-        ) -> tuple[ToolCallResult, AuditEntry]:
+        ) -> tuple[ToolCallResult, AuditEntry, StopReason | None]:
             entry = AuditEntry(
                 actor_type="AGENT", action="tool.call", outcome=outcome.value, trace_id=run.trace_id,
                 site_id=run.site, user_subject=run.subject, user_role=run.role,
@@ -207,7 +213,7 @@ class ToolExecutor:
             )  # fmt: skip
             reasons = decision.reasons if decision else ()
             text = message or MESSAGES.get(outcome)
-            return ToolCallResult(outcome, name, output, text, reasons), entry
+            return ToolCallResult(outcome, name, output, text, reasons), entry, None
 
         if spec is None:
             return finish(Outcome.UNKNOWN_TOOL)
@@ -216,8 +222,10 @@ class ToolExecutor:
         try:
             agent = self._agents.load(run.tenant, run.agent_id)
         except Exception as exc:
+            # The kill switch cannot be checked: fail closed, audited, and stop the run.
             log.warning("agent registry unavailable: %s", type(exc).__name__)
-            raise RunStopped("registry_unavailable") from exc
+            result, entry, _ = finish(Outcome.ERROR, message="The copilot is unavailable.")
+            return result, entry, "registry_unavailable"
         if agent is None or not agent.active:
             return finish(Outcome.SUSPENDED, agent=agent)
 
@@ -232,10 +240,14 @@ class ToolExecutor:
         normalized = params.model_dump(mode="json")
 
         # Rate limit per user and tool, after validation so malformed calls do not count.
-        if self._limiter is not None and not self._limiter.allow(
-            run.tenant, run.subject, f"tool:{name}", spec.rate_limit
-        ):
-            return finish(Outcome.RATE_LIMITED, agent=agent, parameters=normalized)
+        if self._limiter is not None:
+            try:
+                allowed = self._limiter.allow(run.tenant, run.subject, f"tool:{name}", spec.rate_limit)
+            except Exception as exc:  # cannot count: fail closed, audited
+                log.warning("rate limiter unavailable: %s", type(exc).__name__)
+                return finish(Outcome.ERROR, agent=agent, parameters=normalized)
+            if not allowed:
+                return finish(Outcome.RATE_LIMITED, agent=agent, parameters=normalized)
 
         # 3. Policy.
         decision = self._decide(run, spec, agent)

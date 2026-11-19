@@ -410,3 +410,74 @@ def test_a_bug_is_not_retried_on_the_fallback_model() -> None:
     _, state, _, meter = run("Which bins hold the mouse?", provider, fallback="gemini-flash-fallback")
     assert state.outcome == "DECLINE" and state.error_code == "MODEL_UNAVAILABLE"
     assert {c.model for c in meter.settled} == {"gemini-flash"}
+
+
+# ---------------------------------------------------------------- step 8 review regressions
+
+
+class ScriptedGateway(FakeGateway):
+    """Fails the first call, then answers; bin contents carry their own number (41)."""
+
+    def execute(self, run: RunContext, name: str, arguments: dict[str, Any]) -> ToolCallResult:
+        self.calls.append((name, arguments))
+        if len(self.calls) == 1 and arguments.get("sku") == "bad":
+            return ToolCallResult(Outcome.VALIDATION_FAILED, name, message="Invalid arguments")
+        if name == "get_bin_contents":
+            result = contents_result().model_copy(
+                update={"rows": ({"sku": "SKU-102", "name": "Wireless Mouse", "on_hand": 41},)}
+            )
+            return ToolCallResult(Outcome.OK, name, result)
+        return ToolCallResult(Outcome.OK, name, locations_result())
+
+
+def scripted(*steps: ModelResponse) -> FunctionModel:
+    remaining = list(steps)
+
+    def fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        return remaining.pop(0) if len(remaining) > 1 else remaining[0]
+
+    return FunctionModel(fn)
+
+
+def call(tool: str, **arguments: Any) -> ModelResponse:
+    return ModelResponse(parts=[ToolCallPart(tool, arguments)])
+
+
+def text(value: str) -> ModelResponse:
+    return ModelResponse(parts=[TextPart(value)])
+
+
+def test_a_failed_call_and_the_next_call_have_different_ids() -> None:
+    model = scripted(
+        call("find_product_locations", sku="bad"),
+        call("find_product_locations", sku="SKU-102"),
+        text("SKU-102 is in A8-01-02 with 7 units."),
+    )
+    events, _, _, _ = run("Which bins hold the mouse?", FakeProvider(gemini_flash=model), ScriptedGateway())
+    ids = [e.data["tool_call_id"] for e in events if e.type == "TOOL_CALL_START"]
+    assert len(ids) == 2 and len(set(ids)) == 2
+
+
+def test_the_grounding_retry_shares_the_runs_step_budget() -> None:
+    four = [call("find_product_locations", sku="SKU-102") for _ in range(4)]
+    model = scripted(*four, text("It has 99 units."), *four, text("Still 99."))
+    _, state, gateway, _ = run("Which bins hold the mouse?", FakeProvider(gemini_flash=model))
+    assert len(gateway.calls) <= 5 and state.outcome == "ANSWER"
+
+
+def test_values_from_tools_called_in_the_retry_count_as_grounded() -> None:
+    model = scripted(
+        call("find_product_locations", sku="SKU-102"),
+        text("It has 99 units."),
+        call("get_bin_contents", bin_code="A8-01-02"),
+        text("A8-01-02 holds 41 units of SKU-102."),
+    )
+    events, _, _, _ = run("Which bins hold the mouse?", FakeProvider(gemini_flash=model), ScriptedGateway())
+    assert text_of(events) == "A8-01-02 holds 41 units of SKU-102."
+
+
+def test_a_truncated_result_never_states_the_row_limit_as_the_count() -> None:
+    from palletwise.agent.templates import template_answer
+
+    result = locations_result().model_copy(update={"truncated": True})
+    assert "more than 2 locations" in template_answer("find_product_locations", result)

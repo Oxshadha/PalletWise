@@ -66,7 +66,7 @@ export function CopilotPanel({ notReadyText }: { notReadyText: string | null }) 
           <p className="pw-muted">Ask about your warehouse, inventory, orders or risks.</p>
         </div>
         <div className="pw-panel-actions">
-          <HistoryMenu onOpened={() => undefined} />
+          <HistoryMenu stop={stop} />
           <button
             type="button"
             className="pw-button-quiet"

@@ -168,11 +168,14 @@ def test_key_ring_round_trip_and_rotation() -> None:
 def test_ciphertext_is_bound_to_its_session() -> None:
     ring = KeyRing(f"k1:{b64key()}")
     sealed = ring.seal("refresh-token", b"session-a")
-    with pytest.raises(InvalidTag):
+    # Reported as KeyRingError (so a session can end cleanly), caused by the failed GCM tag.
+    with pytest.raises(KeyRingError) as rebound:
         ring.open(sealed, b"session-b")
+    assert isinstance(rebound.value.__cause__, InvalidTag)
     tampered = Sealed(sealed.ciphertext[:-1] + bytes([sealed.ciphertext[-1] ^ 1]), "k1")
-    with pytest.raises(InvalidTag):
+    with pytest.raises(KeyRingError) as changed:
         ring.open(tampered, b"session-a")
+    assert isinstance(changed.value.__cause__, InvalidTag)
 
 
 def test_retired_key_is_reported() -> None:

@@ -38,6 +38,8 @@ from palletwise.telemetry.setup import configure_telemetry
 from palletwise.tools.catalog import v1_tools
 from palletwise.tools.executor import ToolExecutor
 
+SHUTDOWN_GRACE_SECONDS = 10.0
+
 
 class Health(BaseModel):
     ready: bool
@@ -94,8 +96,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             PolicyClient(PolicySettings()), AuditLog(app_pool), app_pool, role_pool("PW_AGENT_READ")
         )
     yield
-    for task in list(app.state.copilot.active.values()):
-        task.cancel()
+    await app.state.copilot.drain(timeout=SHUTDOWN_GRACE_SECONDS)  # records written before pools close
     close_pools()
 
 

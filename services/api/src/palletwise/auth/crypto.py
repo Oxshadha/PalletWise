@@ -11,6 +11,7 @@ import hashlib
 import secrets
 from dataclasses import dataclass
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 NONCE_BYTES = 12
@@ -78,4 +79,7 @@ class KeyRing:
         if key is None:
             raise KeyRingError(f"session key {sealed.key_id!r} is no longer configured")
         nonce, body = sealed.ciphertext[:NONCE_BYTES], sealed.ciphertext[NONCE_BYTES:]
-        return key.decrypt(nonce, body, associated).decode("utf-8")
+        try:
+            return key.decrypt(nonce, body, associated).decode("utf-8")
+        except InvalidTag as exc:  # wrong key, tampered or rebound to another session
+            raise KeyRingError("sealed value cannot be opened") from exc

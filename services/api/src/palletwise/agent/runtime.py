@@ -132,6 +132,7 @@ class RunState:
     budget_exhausted: bool = False
     input_tokens: int = 0
     output_tokens: int = 0
+    tool_calls: int = 0
 
     @property
     def entities(self) -> list[dict[str, Any]]:
@@ -476,9 +477,11 @@ class CopilotRuntime:
                     "Rewrite it using only values from the tool results.",
                     message_history=answer.all_messages(),
                     usage_limits=limits,
+                    usage=answer.usage,  # one step budget for the whole run, retry included
                 )
                 text = "" if _truncated(retry) else normalize_dashes(retry.output.strip())
-                if grounding_problems(text, results, request.question):
+                # The retry may have called tools: check against every result of the run.
+                if grounding_problems(text, [r for _, r in state.results], request.question):
                     text = ""
         except BudgetExhausted:
             text = ""
@@ -530,7 +533,9 @@ class CopilotRuntime:
         events: EventCounter,
         queue: asyncio.Queue[RunEvent | None],
     ) -> ToolCallResult:
-        call_id = f"{len(state.results) + 1}-{name}"
+        # Numbered before any await, so failed and concurrent calls never share an id.
+        state.tool_calls += 1
+        call_id = f"{state.tool_calls}-{name}"
         await queue.put(events.make("TOOL_CALL_START", tool_call_id=call_id, tool=name))
         try:
             result = await asyncio.to_thread(self._gateway.execute, request.run, name, arguments)
