@@ -125,6 +125,69 @@ class FixtureSite:
             },
         )  # fmt: skip
 
+    def order(
+        self, *, deadline: datetime | None = None, status: str = "OPEN", shipped_at: datetime | None = None
+    ) -> UUID:
+        if not hasattr(self, "_customer"):
+            self._customer = self._insert(
+                "customer",
+                {
+                    "id": uuid4(), "tenant_id": self.tenant, "code": f"CU{uuid4().hex[:6]}",
+                    "brand": "Outlet", "district": "Colombo", "dock_type": "STANDARD",
+                    "window_open": "08:00", "window_close": "18:00",
+                },
+            )  # fmt: skip
+        when = deadline or self.as_of()
+        return self._insert(
+            "outbound_order",
+            {
+                "id": uuid4(), "tenant_id": self.tenant, "site_id": self.site,
+                "order_no": f"SO-{uuid4().hex[:8]}", "customer_id": self._customer,
+                "delivery_date": when.date(), "dispatch_deadline": when,
+                "status": status, "shipped_at": shipped_at,
+            },
+        )  # fmt: skip
+
+    def line(self, order: UUID, product: UUID, qty: int, *, allocated: int = 0, picked: int = 0) -> UUID:
+        return self._insert(
+            "order_line",
+            {
+                "id": uuid4(), "tenant_id": self.tenant, "site_id": self.site, "order_id": order,
+                "line_no": self._next(), "product_id": product, "qty_ordered": qty,
+                "qty_allocated": allocated, "qty_picked": picked,
+            },
+        )  # fmt: skip
+
+    def movement(
+        self,
+        movement_type: str,
+        product: UUID,
+        qty: int,
+        at: datetime,
+        *,
+        from_bin: UUID | None = None,
+        to_bin: UUID | None = None,
+        line: UUID | None = None,
+        reason: str | None = None,
+    ) -> None:
+        self._insert(
+            "movement",
+            {
+                "id": uuid4(), "tenant_id": self.tenant, "site_id": self.site, "movement_type": movement_type,
+                "product_id": product, "qty": qty, "from_bin_id": from_bin, "to_bin_id": to_bin,
+                "occurred_at": at, "order_line_id": line, "reason_code": reason,
+            },
+        )  # fmt: skip
+
+    def pick(
+        self, product: UUID, qty: int, at: datetime, from_bin: UUID, staging: UUID, *, cancelled: bool = False
+    ) -> UUID:
+        """A pick for its own one-line order, so each pick can be tied to an order status."""
+        order = self.order(status="CANCELLED" if cancelled else "PICKED")
+        line = self.line(order, product, qty, allocated=qty, picked=qty)
+        self.movement("PICK", product, qty, at, from_bin=from_bin, to_bin=staging, line=line)
+        return line
+
     # ------------------------------------------------------------ reading as the copilot does
 
     def as_of(self) -> datetime:
