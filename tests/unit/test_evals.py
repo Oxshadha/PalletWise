@@ -11,7 +11,7 @@ from evals.runner import f1, forbidden_violations, params_match
 
 
 def test_sets_load_with_unique_ids_and_known_categories() -> None:
-    for name in ("core", "adversarial", "regression"):
+    for name in ("core", "adversarial", "regression", "operations"):
         cases, digest = load_set(name)
         assert len(digest) == 64
         assert all(c.category in CATEGORIES for c in cases)
@@ -19,6 +19,23 @@ def test_sets_load_with_unique_ids_and_known_categories() -> None:
     adversarial, _ = load_set("adversarial")
     assert len(core) >= 30
     assert len(adversarial) >= 10
+    operations, _ = load_set("operations")
+    personas = {c.question for c in operations}
+    # Every personas question except the festival one (Slice 2 acceptance, step 7).
+    assert {
+        "Which items are running low on stock?",
+        "Which items need replenishment before today's first dispatch window?",
+        "Which of today's orders are at risk?",
+        "Which outlet orders are delayed?",
+        "Show me the top 5 fastest-moving items.",
+        "Which items have not moved in the last 30 days?",
+        "Which zones have the highest stock levels?",
+        "Where are we close to capacity?",
+        "Are slow movers sitting in the fast-pick zone?",
+        "How many days of cover do we have for the beverages category?",
+        "Of those, which are in zone B?",
+        "Show only the ones worth more than 50,000.",
+    } <= personas
 
 
 def test_model_path_tool_cases_carry_gold_params() -> None:

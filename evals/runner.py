@@ -9,7 +9,7 @@ from contextlib import ExitStack
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from evals.cases import Case
 from evals.environment import EvalEnv, RunTrace
@@ -29,8 +29,9 @@ from palletwise import clock
 from palletwise.agent import fast_path
 from palletwise.agent.guardrails import grounding_problems
 from palletwise.agent.runtime import CARD_OUTCOMES, RuntimeConfig, data_block, model_view
-from palletwise.contracts.results import ResultEnvelope
+from palletwise.contracts.results import ResultEnvelope, WorkingSet
 from palletwise.llm import DisabledProvider, LLMProvider
+from palletwise.tools.catalog import v1_tools
 from palletwise.tools.executor import Outcome, RunContext
 
 GOLDEN_DIR = Path(__file__).with_name("golden")
@@ -91,8 +92,29 @@ def _norm(value: Any) -> str:
     return " ".join(str(value).lower().split())
 
 
+def _value_match(expected: Any, actual: Any) -> bool:
+    """Gold values are a minimum: a dict matches when each gold key matches, a list when each gold
+    item matches some actual item, numbers by value, text ignoring case and spacing. So a query
+    request matches on what the case is about (its measures, filters, scope) and may carry more."""
+    if isinstance(expected, dict):
+        return isinstance(actual, dict) and all(
+            k in actual and _value_match(v, actual[k])
+            for k, v in expected.items()  # pyright: ignore[reportUnknownVariableType]
+        )
+    if isinstance(expected, list):
+        return isinstance(actual, list) and all(
+            any(_value_match(e, a) for a in actual)  # pyright: ignore[reportUnknownVariableType]
+            for e in expected  # pyright: ignore[reportUnknownVariableType]
+        )
+    if isinstance(expected, bool) or isinstance(actual, bool):
+        return expected is actual
+    if isinstance(expected, int | float) and isinstance(actual, int | float):
+        return float(expected) == float(actual)
+    return _norm(actual) == _norm(expected)
+
+
 def params_match(gold: dict[str, Any], actual: dict[str, Any], allowed: set[str]) -> bool:
-    """Every gold key with an equal value, and nothing unknown (evals spec 6, parameter accuracy).
+    """Every gold key with a matching value, and nothing unknown (evals spec 6, parameter accuracy).
 
     A free-text product query matches when one contains the other's words, because people and
     models phrase names differently ("USB-C cables" and "USB-C cable").
@@ -106,9 +128,25 @@ def params_match(gold: dict[str, Any], actual: dict[str, Any], allowed: set[str]
             left, right = set(_norm(expected).split()), set(_norm(actual[key]).split())
             if not (left <= right or right <= left or len(left & right) >= max(1, len(left) - 1)):
                 return False
-        elif _norm(actual[key]) != _norm(expected):
+        elif not _value_match(expected, actual[key]):
             return False
     return True
+
+
+def tool_fields(tool: str | None) -> set[str]:
+    """A tool's own input fields (with aliases): any other parameter is unknown (evals spec 6)."""
+    for t in v1_tools():
+        if t.name == tool:
+            fields = t.input_model.model_fields
+            return set(fields) | {f.alias for f in fields.values() if f.alias}
+    return set()
+
+
+def highlights_scored(case: Case) -> bool:
+    """A case scores highlights when it names a reference: "none" means the answer must highlight
+    nothing; no reference means highlights are not part of this case (for example a category-level
+    answer that may or may not list products)."""
+    return case.gold.outcome == "ANSWER" and case.gold.highlights_ref is not None
 
 
 def forbidden_violations(forbidden: Iterable[str], tools: list[str], text: str) -> list[str]:
@@ -142,7 +180,7 @@ def f1(gold: list[str], got: list[str]) -> float:
     return 2 * precision * recall / (precision + recall)
 
 
-def _run_context(env: EvalEnv, role: str) -> RunContext:
+def _run_context(env: EvalEnv, role: str, working_set: WorkingSet | None = None) -> RunContext:
     return RunContext(
         run_id=uuid4(),
         trace_id=uuid4().hex,
@@ -152,6 +190,23 @@ def _run_context(env: EvalEnv, role: str) -> RunContext:
         sites=(env.site,),
         site=env.site,
         model=None,
+        working_set=working_set,
+    )
+
+
+def _working_set_of(tool: str, envelope: ResultEnvelope) -> WorkingSet:
+    """The working set the conversation store would keep from this result (semantic spec 7.5)."""
+    ids: dict[str, list[UUID]] = {"product": [], "bin": [], "zone": []}
+    for entity in envelope.entities:
+        if entity.type in ids:
+            ids[entity.type].append(entity.id)
+    return WorkingSet(
+        run_id=uuid4(),
+        tool=tool,
+        created_at=clock.wall_now(),
+        products=tuple(ids["product"]),
+        bins=tuple(ids["bin"]),
+        zones=tuple(ids["zone"]),
     )
 
 
@@ -161,18 +216,32 @@ def _run_context(env: EvalEnv, role: str) -> RunContext:
 def deterministic(env: EvalEnv, cases: list[Case]) -> list[CaseResult]:
     """Routing, the gold tool through the real executor, golden highlights, and model-free declines."""
     executor = env.executor()
+    by_id = {c.id: c for c in cases}
     results: list[CaseResult] = []
     with env.api(DisabledProvider()) as api:
         for role in ("warehouse_manager", "admin"):
             if any(c.role == role for c in cases):
                 api.sign_in(role)
                 for case in (c for c in cases if c.role == role):
-                    results.append(_deterministic_case(env, executor, api, case))
+                    results.append(_deterministic_case(env, executor, api, case, by_id))
     order = {c.id: i for i, c in enumerate(cases)}
     return sorted(results, key=lambda r: order[r.case])
 
 
-def _deterministic_case(env: EvalEnv, executor: Any, api: Any, case: Case) -> CaseResult:
+def _follow_up_working_set(
+    env: EvalEnv, executor: Any, case: Case, by_id: dict[str, Case]
+) -> WorkingSet | None:
+    """For a follow-up, the working set its first question's gold tool leaves behind."""
+    first = by_id.get(case.follows) if case.follows else None
+    if first is None or first.gold.tool is None:
+        return None
+    call = executor.execute(_run_context(env, first.role), first.gold.tool, first.gold.call)
+    return _working_set_of(first.gold.tool, call.output) if call.outcome is Outcome.OK else None
+
+
+def _deterministic_case(
+    env: EvalEnv, executor: Any, api: Any, case: Case, by_id: dict[str, Case]
+) -> CaseResult:
     checks: list[Check] = []
     gold = case.gold
 
@@ -190,7 +259,8 @@ def _deterministic_case(env: EvalEnv, executor: Any, api: Any, case: Case) -> Ca
 
     # 2. The gold tool with the gold parameters through the real executor (policy, audit, tracing).
     if gold.tool:
-        call = executor.execute(_run_context(env, case.role), gold.tool, dict(gold.params))
+        working_set = _follow_up_working_set(env, executor, case, by_id)
+        call = executor.execute(_run_context(env, case.role, working_set), gold.tool, gold.call)
         if call.outcome is not Outcome.OK:
             checks.append(Check("tool", False, f"{call.outcome.value}: {call.message}"))
         else:
@@ -324,10 +394,14 @@ def _score_run(env: EvalEnv, case: Case, trace: RunTrace, number: int) -> dict[s
     tool, arguments = _first_data_tool(trace)
     arguments.pop("tool", None)
     arguments.pop("resolved_product", None)
-    allowed = {"sku", "product_query", "bin_code"}
-    golden = read_golden(env, gold.highlights_ref) if gold.highlights_ref else []
+    arguments.pop("working_set_from", None)  # provenance the runtime adds, not a parameter
+    allowed = tool_fields(tool)
     got = highlight_codes(env, (e["result"] for e in trace.of("pw.result")))
-    highlight_f1 = f1(golden, got) if gold.outcome == "ANSWER" else None
+    highlight_f1 = (
+        f1(read_golden(env, gold.highlights_ref), got)  # type: ignore[arg-type]
+        if highlights_scored(case)
+        else None
+    )
     violations = forbidden_violations(gold.forbidden, trace.tools, trace.text)
     finished = trace.of("RUN_FINISHED")
     text_source = finished[0].get("text_source") if finished else None

@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
 
-    names = args.sets or ["core", "adversarial"]
+    names = args.sets or ["core", "adversarial", "operations"]
     cases, hashes = [], {}
     for name in names:
         found, digest = load_set(name)

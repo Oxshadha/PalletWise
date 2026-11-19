@@ -133,3 +133,29 @@ def test_every_template_renders_a_grounded_answer_without_a_model(
     assert text and text != "Here is the result."
     assert not any(d in text for d in (chr(0x2013), chr(0x2014)))
     assert grounding_problems(text, [result], "") == [], text
+
+
+def test_a_zone_flagged_for_over_capacity_locations_is_not_called_close_to_capacity() -> None:
+    """Browser review: "close to capacity at 6.2 percent" for a zone flagged only because it holds
+    over-capacity locations. The answer says why the zone is flagged."""
+    from datetime import UTC, datetime
+
+    from palletwise.contracts.results import Evidence, ResultEnvelope, ResultStatus
+    from palletwise.semantic import rules
+
+    evidence = Evidence(as_of=datetime(2026, 4, 1, 0, 30, tzinfo=UTC), time_zone="Asia/Colombo",
+                        settings_version_id=None, data_as_of=None, freshness=(), how_computed=())  # fmt: skip
+    rows = (
+        {"zone_code": "D", "zone_name": "Chilled", "utilization_pct": 6.2, "over_capacity_bins": 1},
+        {"zone_code": "B", "zone_name": "Reserve", "utilization_pct": 4.1, "over_capacity_bins": 2},
+    )
+    result = ResultEnvelope(
+        status=ResultStatus.OK, columns=rules.HOTSPOT_COLUMNS, rows=rows, evidence=evidence,
+        normalized_request={"tool": "get_capacity_hotspots"},
+    )  # fmt: skip
+    text = templates.template_answer("get_capacity_hotspots", result)
+    assert "close to capacity" not in text
+    assert text == (
+        "2 zones need attention for capacity. Zone D (Chilled) has 1 location over capacity, "
+        "while the zone as a whole is at 6.2 percent."
+    )

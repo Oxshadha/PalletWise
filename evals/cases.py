@@ -28,11 +28,18 @@ OUTCOMES = {"ANSWER", "NO_RESULTS", "DECLINE", "STALE", "DENIED"}
 class Gold:
     path: str | None
     tool: str | None
-    params: dict[str, Any]
+    params: dict[str, Any]  # the minimum the chosen call must match (evals spec 6)
     outcome: str
     highlights_ref: str | None
     facts: tuple[str, ...]
     forbidden: tuple[str, ...]
+    # The complete request the deterministic gate executes, when `params` is only the minimum a
+    # query must match (for example its filters and scope, whatever measure the model picks).
+    run_params: dict[str, Any] | None = None
+
+    @property
+    def call(self) -> dict[str, Any]:
+        return dict(self.run_params if self.run_params is not None else self.params)
 
 
 @dataclass(frozen=True)
@@ -59,7 +66,7 @@ def _case(raw: dict[str, Any], set_name: str, line: int) -> Case:
     if unknown := set(raw) - allowed:
         raise CaseError(f"{where}: unknown fields {sorted(unknown)}")
     gold = raw.get("gold") or {}
-    gold_allowed = {"path", "tool", "params", "outcome", "highlights_ref", "facts", "forbidden"}
+    gold_allowed = {"path", "tool", "params", "run_params", "outcome", "highlights_ref", "facts", "forbidden"}
     if unknown := set(gold) - gold_allowed:
         raise CaseError(f"{where}: unknown gold fields {sorted(unknown)}")
     if raw.get("category") not in CATEGORIES:
@@ -87,6 +94,7 @@ def _case(raw: dict[str, Any], set_name: str, line: int) -> Case:
             highlights_ref=gold.get("highlights_ref"),
             facts=tuple(str(f) for f in gold.get("facts") or ()),
             forbidden=tuple(str(f) for f in gold.get("forbidden") or ()),
+            run_params=dict(gold["run_params"]) if gold.get("run_params") is not None else None,
         ),
     )
 

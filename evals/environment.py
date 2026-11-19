@@ -56,11 +56,14 @@ class EvalEnv:
     reader: psycopg.Connection  # pw_eval_reader, for reference queries
     opa_url: str
     dataset_version: str = DATASET_VERSION
+    # Highlight target ids to stable codes: bins by code, zones as "zone:<code>" (evals/reference.py).
     bin_codes: dict[str, str] = field(default_factory=lambda: {})
 
     def __post_init__(self) -> None:
         rows = self.superuser.execute(
-            "SELECT id, code FROM pw.bin WHERE site_id = %s", (self.site,)
+            "SELECT id, code FROM pw.bin WHERE site_id = %s"
+            " UNION ALL SELECT id, 'zone:' || code FROM pw.zone WHERE site_id = %s",
+            (self.site, self.site),
         ).fetchall()
         self.bin_codes = {str(i): c for i, c in rows}
 

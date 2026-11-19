@@ -163,7 +163,9 @@ GET_ZONE_SUMMARY = _rule_tool(
 GET_CAPACITY_HOTSPOTS = _rule_tool(
     "get_capacity_hotspots",
     "Where the warehouse is close to capacity: zones at or above the capacity threshold (90 percent "
-    "by default) or with any location over capacity. Highlights those zones and locations.",
+    "by default) or with any location over capacity. Highlights those zones and locations. Say "
+    "which reason applies to each zone: a zone flagged only for locations over capacity is not close "
+    "to capacity as a whole.",
     NoInput,
     "inventory.read",
     lambda ctx, _: rules.capacity_hotspots(ctx.conn, ctx.site),

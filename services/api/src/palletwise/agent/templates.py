@@ -87,17 +87,24 @@ def _slow_in_prime(result: ResultEnvelope) -> str:
 
 def _zone_summary(result: ResultEnvelope) -> str:
     r = _first(result)
-    return f"Zone {r['zone_code']} holds the most stock, with {r['on_hand']} units on hand."
+    return (
+        f"Zone {r['zone_code']} ({r['zone_name']}) holds the most stock, with {r['on_hand']} units on hand."
+    )
 
 
 def _capacity(result: ResultEnvelope) -> str:
+    """Says why each zone is flagged: a zone with locations over capacity is not "close to
+    capacity" as a whole (the browser review found "close to capacity at 6.2 percent")."""
     r, n = _first(result), result.row_count
     over = r["over_capacity_bins"]
-    tail = f", with {over} {_plural(over, 'location', 'locations')} over capacity" if over else ""
-    return (
-        f"{_how_many(result)} {_plural(n, 'zone is', 'zones are')} close to capacity. Zone "
-        f"{r['zone_code']} is at {r['utilization_pct']} percent{tail}."
+    zone = f"Zone {r['zone_code']} ({r['zone_name']})"
+    detail = (
+        f"{zone} has {over} {_plural(over, 'location', 'locations')} over capacity, while the zone as a "
+        f"whole is at {r['utilization_pct']} percent"
+        if over
+        else f"{zone} is at {r['utilization_pct']} percent of its capacity"
     )
+    return f"{_how_many(result)} {_plural(n, 'zone needs', 'zones need')} attention for capacity. {detail}."
 
 
 def _delayed(result: ResultEnvelope) -> str:

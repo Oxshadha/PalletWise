@@ -1,0 +1,9 @@
+{
+ "ref": "get_zone_summary",
+ "dataset_version": "sim-v1-seed42-14d",
+ "locations": [
+  "zone:A",
+  "zone:B",
+  "zone:C"
+ ]
+}
