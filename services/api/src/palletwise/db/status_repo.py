@@ -33,3 +33,21 @@ def site_status(conn: psycopg.Connection, tenant_id: UUID, site_id: UUID) -> Sit
     return SiteStatus(
         code=row[0], name=row[1], data_status=row[2], data_status_detail=row[3], sim_time=row[4]
     )
+
+
+@dataclass(frozen=True, slots=True)
+class SiteSummary:
+    id: UUID
+    code: str
+    name: str
+
+
+def site_summaries(
+    conn: psycopg.Connection, tenant_id: UUID, site_ids: tuple[UUID, ...]
+) -> list[SiteSummary]:
+    """The given sites that exist in the tenant, in code order."""
+    with tenant_transaction(conn, tenant_id):
+        rows = conn.execute(
+            "SELECT id, code, name FROM pw.site WHERE id = ANY(%s) ORDER BY code", (list(site_ids),)
+        ).fetchall()
+    return [SiteSummary(*row) for row in rows]

@@ -70,3 +70,41 @@ class SimulationSettings(BaseSettings):
 DEMO_TENANT_ID = UUID("0193a000-0000-7000-8000-000000000001")
 DEMO_SITE_ID = UUID("0193a000-0000-7000-8000-000000000002")
 DEMO_CONNECTOR_ID = UUID("0193a000-0000-7000-8000-000000000003")
+
+
+class OidcSettings(BaseSettings):
+    """The API as an OIDC client of Keycloak (identity spec 2).
+
+    The browser reaches Keycloak at the public URL; the API calls it at the internal URL.
+    Both serve the same realm, and tokens carry the public URL as their issuer.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="PW_OIDC_", extra="ignore")
+
+    public_url: str = "http://localhost:8180/realms/palletwise"
+    internal_url: str = "http://keycloak:8080/realms/palletwise"
+    client_id: str = "palletwise-bff"
+    client_secret: str = Field(repr=False)
+    http_timeout_seconds: float = 5.0
+
+
+class SessionSettings(BaseSettings):
+    """Browser sessions (identity spec 3)."""
+
+    model_config = SettingsConfigDict(env_prefix="PW_SESSION_", extra="ignore")
+
+    # Comma-separated "key_id:base64 32-byte key" pairs; the first encrypts, all decrypt.
+    keys: str = Field(repr=False)
+    idle_minutes: int = 30
+    absolute_hours: int = 12
+    # Matches the Keycloak access token lifetime, so revocation takes effect within it.
+    revalidate_seconds: int = 300
+    login_ttl_minutes: int = 10
+
+
+class WebSettings(BaseSettings):
+    """Where the browser reaches PalletWise; used for redirects and the Origin check."""
+
+    model_config = SettingsConfigDict(env_prefix="PW_", extra="ignore")
+
+    public_origin: str = "http://localhost:8080"

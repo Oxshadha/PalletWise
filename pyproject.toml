@@ -80,7 +80,7 @@ name = "Nothing imports the API layer"
 type = "forbidden"
 source_modules = [
   "palletwise.agent", "palletwise.llm", "palletwise.tools", "palletwise.semantic",
-  "palletwise.db", "palletwise.workflow", "palletwise.ingest", "palletwise.evaluator",
+  "palletwise.auth", "palletwise.db", "palletwise.workflow", "palletwise.ingest", "palletwise.evaluator",
   "palletwise.simadmin", "palletwise.contracts", "palletwise.policy",
   "palletwise.telemetry", "palletwise.clock", "palletwise.settings",
 ]
@@ -97,7 +97,7 @@ name = "Only palletwise.db (and the semantic DSL compiler) touch database driver
 type = "forbidden"
 allow_indirect_imports = "True"  # callers use palletwise.db; they never import a driver
 source_modules = [
-  "palletwise.api", "palletwise.agent", "palletwise.llm", "palletwise.tools",
+  "palletwise.api", "palletwise.auth", "palletwise.agent", "palletwise.llm", "palletwise.tools",
   "palletwise.workflow", "palletwise.ingest", "palletwise.evaluator", "palletwise.simadmin",
   "palletwise.contracts", "palletwise.policy", "palletwise.telemetry", "palletwise.clock",
   "palletwise.settings",

@@ -30,10 +30,16 @@ class _FakePool:
 
 def test_site_status_is_404_before_the_site_exists(monkeypatch: pytest.MonkeyPatch) -> None:
     from palletwise.api import app as api
+    from palletwise.api.security import require_session
+    from palletwise.auth.principal import Identity, Principal
 
+    site = uuid.uuid4()
+    principal = Principal(b"x" * 32, Identity("u", "warehouse_manager", uuid.uuid4(), (site,), "U"))
     monkeypatch.setattr(api, "role_pool", lambda _prefix: _FakePool())
     monkeypatch.setattr(api.status_repo, "site_status", lambda *_args, **_kw: None)  # pyright: ignore[reportUnknownLambdaType]
-    response = TestClient(api.app).get("/api/sites/current/status")
+    app = api.create_app()
+    app.dependency_overrides[require_session] = lambda: principal
+    response = TestClient(app).get(f"/api/sites/{site}/status")
     assert response.status_code == 404
 
 

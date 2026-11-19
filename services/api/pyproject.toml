@@ -11,6 +11,9 @@ dependencies = [
   "psycopg[binary,pool]",
   "alembic",
   "sqlalchemy",
+  "pyjwt[crypto]",
+  "httpx",
+  "cryptography",
 ]
 
 [project.scripts]
