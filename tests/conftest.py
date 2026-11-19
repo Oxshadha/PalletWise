@@ -93,3 +93,19 @@ def opa_url() -> Generator[str]:
             assert time.monotonic() < deadline, "OPA did not start"
             time.sleep(0.5)
         yield url
+
+
+@pytest.fixture(scope="session")
+def connect_session(database: dict[str, Any]) -> Generator[Callable[[str], psycopg.Connection]]:
+    """Like connect_as, for session- and module-scoped fixtures; closed at the end of the run."""
+    opened: list[psycopg.Connection] = []
+
+    def _connect(role: str) -> psycopg.Connection:
+        password = "postgres" if role == "postgres" else ROLE_PASSWORDS[role]
+        conn = psycopg.connect(dsn(database["settings"], role, password))
+        opened.append(conn)
+        return conn
+
+    yield _connect
+    for conn in opened:
+        conn.close()

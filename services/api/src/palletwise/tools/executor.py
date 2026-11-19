@@ -217,7 +217,7 @@ class ToolExecutor:
 
         # 4. Handler, as pw_agent_read, bound to the session's tenant.
         try:
-            with tenant_session(self._read_pool, run.tenant) as conn:
+            with tenant_session(self._read_pool, run.tenant, read_snapshot=True) as conn:
                 output = spec.handler(ToolContext(conn, run.tenant, run.site), params)
         except Exception:
             log.exception("tool %s failed", name)

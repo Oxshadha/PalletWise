@@ -15,6 +15,7 @@ dependencies = [
   "httpx",
   "cryptography",
   "opentelemetry-api",
+  "pyyaml",
 ]
 
 [project.scripts]

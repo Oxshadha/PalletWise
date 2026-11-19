@@ -75,8 +75,23 @@ Pool = ConnectionPool
 Connection = psycopg.Connection
 
 
+READ_STATEMENT_TIMEOUT = "3s"  # semantic spec 7.4
+
+
 @contextmanager
-def tenant_session(pool: ConnectionPool, tenant_id: UUID) -> Generator[psycopg.Connection]:
-    """A pooled connection with one transaction bound to the tenant."""
-    with pool.connection() as conn, tenant_transaction(conn, tenant_id):
+def tenant_session(
+    pool: ConnectionPool, tenant_id: UUID, *, read_snapshot: bool = False
+) -> Generator[psycopg.Connection]:
+    """A pooled connection with one transaction bound to the tenant.
+
+    `read_snapshot` makes it a read-only REPEATABLE READ transaction with a statement timeout:
+    every statement sees one snapshot, so the site time and the stock read in one tool call
+    describe the same moment even while the simulator advances (semantic spec 2, 7.4).
+    """
+    with pool.connection() as conn, conn.transaction():
+        if read_snapshot:
+            # Must be the first statement of the transaction.
+            conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            conn.execute("SELECT set_config('statement_timeout', %s, true)", (READ_STATEMENT_TIMEOUT,))
+        conn.execute("SELECT set_config('app.tenant_id', %s, true)", (str(tenant_id),))
         yield conn
