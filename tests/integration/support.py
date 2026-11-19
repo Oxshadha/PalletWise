@@ -23,6 +23,7 @@ def bootstrap_run(
     connector: UUID,
     run: UUID,
     history_days: int = HISTORY_DAYS,
+    site_code: str = "PLG",
 ) -> None:
     site_repo.bootstrap_site(
         connect_as("pw_sim_admin"),
@@ -31,7 +32,7 @@ def bootstrap_run(
             tenant_code=f"t-{tenant.hex[:8]}",
             tenant_name="Test",
             site_id=site,
-            site_code="PLG",
+            site_code=site_code,
             site_name="Test site",
             region_code="LK",
             time_zone="Asia/Colombo",
@@ -68,10 +69,13 @@ def load_site(connect_as: Connect, tenant: UUID) -> tuple[UUID, UUID, UUID]:
 
 
 def provision_site(
-    connect_as: Connect, tenant: UUID | None = None, site: UUID | None = None
+    connect_as: Connect, tenant: UUID | None = None, site: UUID | None = None, site_code: str = "PLG"
 ) -> tuple[UUID, UUID]:
-    """Creates a tenant and an empty site through the simulation admin path (idempotent per id)."""
+    """Creates a tenant and an empty site through the simulation admin path (idempotent per id).
+
+    Site codes are unique per tenant: a second site in the same tenant needs its own code.
+    """
     tenant, site = tenant or uuid4(), site or uuid4()
     if status_repo.site_status(connect_as("pw_sim_admin"), tenant, site) is None:
-        bootstrap_run(connect_as, tenant, site, uuid4(), uuid4(), history_days=1)
+        bootstrap_run(connect_as, tenant, site, uuid4(), uuid4(), history_days=1, site_code=site_code)
     return tenant, site

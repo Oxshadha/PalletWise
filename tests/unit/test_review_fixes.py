@@ -84,3 +84,15 @@ def test_simadmin_wait_times_out(monkeypatch: pytest.MonkeyPatch, building_admin
     monkeypatch.setattr(simadmin.clock, "monotonic", lambda: next(ticks))
     with pytest.raises(TimeoutError):
         simadmin.SimAdmin.wait_for_load(admin, run)
+
+
+def test_access_log_never_records_query_strings() -> None:
+    import logging
+
+    from palletwise.telemetry.logs import DropQueryStrings
+
+    record = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d', (
+        "1.2.3.4:5", "GET", "/api/auth/callback?state=s3cret&code=c0de", "1.1", 302), None)  # fmt: skip
+    DropQueryStrings().filter(record)
+    message = record.getMessage()
+    assert "/api/auth/callback" in message and "s3cret" not in message and "c0de" not in message

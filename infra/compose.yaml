@@ -145,6 +145,9 @@ services:
   api:
     <<: *python
     command: ["uvicorn", "palletwise.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    volumes:
+      # The key file stays outside the repository; /dev/null when not configured.
+      - ${GCP_SA_FILE:-/dev/null}:/run/secrets/gcp-service-account.json:ro
     environment:
       <<: *db-env
       PW_APP_USER: pw_app
@@ -159,6 +162,13 @@ services:
       PW_OPA_URL: http://opa:8181
       PW_AGENT_READ_USER: pw_agent_read
       PW_AGENT_READ_PASSWORD: ${PW_AGENT_READ_PASSWORD}
+      PW_MEMORY_USER: pw_memory
+      PW_MEMORY_PASSWORD: ${PW_MEMORY_PASSWORD}
+      # Gemini on Vertex AI (optional). Without a project and key file the copilot uses path B.
+      PW_LLM_PROJECT: ${GCP_PROJECT_ID:-}
+      PW_LLM_LOCATION: ${PW_LLM_LOCATION:-global}
+      PW_LLM_CREDENTIALS_FILE: /run/secrets/gcp-service-account.json
+      PYDANTIC_AI_NO_BANNER: "1"
     healthcheck:
       <<: *health-python
     depends_on:

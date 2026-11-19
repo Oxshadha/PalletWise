@@ -18,6 +18,10 @@ from palletwise.settings import OidcSettings, WebSettings
 log = logging.getLogger(__name__)
 
 ALGORITHMS = ["RS256"]
+COPILOT_AUDIENCE = "palletwise-copilot"
+# RFC 8693 identifiers, not credentials.
+TOKEN_EXCHANGE = "urn:ietf:params:oauth:grant-type:token-exchange"  # noqa: S105
+ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"  # noqa: S105
 LEEWAY_SECONDS = 30
 CALLBACK_PATH = "/api/auth/callback"
 
@@ -168,6 +172,57 @@ class OidcClient:
             client_id=self._settings.client_id,
             nonce=nonce,
         )
+
+    def exchange_for_copilot(self, subject_token: str) -> str:
+        """RFC 8693 token exchange for a token with the copilot audience (identity spec 5).
+
+        The `copilot-audience` scope is optional on the client, so only this call gets it.
+        """
+        try:
+            response = self._http.post(
+                "/protocol/openid-connect/token",
+                data={
+                    "grant_type": TOKEN_EXCHANGE,
+                    "subject_token": subject_token,
+                    "subject_token_type": ACCESS_TOKEN_TYPE,
+                    "requested_token_type": ACCESS_TOKEN_TYPE,
+                    "audience": COPILOT_AUDIENCE,
+                    # openid stays in the requested scope: Keycloak keeps the exchange's scope on
+                    # the client session, and without openid the next refresh has no ID token.
+                    "scope": "openid copilot-audience",
+                },
+            )
+        except httpx.HTTPError as exc:
+            raise IdentityProviderUnavailable("token endpoint not reachable") from exc
+        if response.status_code >= 500:
+            raise IdentityProviderUnavailable(f"token endpoint HTTP {response.status_code}")
+        if response.status_code != 200:
+            error = response.json().get("error", "unknown") if response.content else "unknown"
+            raise TokenRejected(str(error))
+        token = response.json().get("access_token")
+        if not isinstance(token, str):
+            raise TokenRejected("missing access_token")
+        return token
+
+    def validate_copilot_token(self, token: str, *, subject: str) -> dict[str, Any]:
+        """Issuer, signature, audience palletwise-copilot, azp this client, and the same user."""
+        try:
+            claims: dict[str, Any] = jwt.decode(
+                token,
+                self._signing_key(token),
+                algorithms=ALGORITHMS,
+                audience=COPILOT_AUDIENCE,
+                issuer=self.issuer,
+                leeway=LEEWAY_SECONDS,
+                options={"require": ["exp", "iat", "iss", "aud", "sub", "azp"]},
+            )
+        except jwt.InvalidTokenError as exc:
+            raise TokenInvalid(type(exc).__name__) from exc
+        if claims["azp"] != self._settings.client_id:
+            raise TokenInvalid("azp")
+        if claims["sub"] != subject:
+            raise TokenInvalid("sub")
+        return claims
 
     def close(self) -> None:
         self._http.close()

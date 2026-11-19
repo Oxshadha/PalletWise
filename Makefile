@@ -7,6 +7,7 @@ COMPOSE := docker compose --env-file infra/images.env --env-file .env -f infra/c
 check-env:
 	@test -f .env || { echo "Missing .env. Create it with: cp .env.example .env  (then replace every change-me value)"; exit 1; }
 	@! grep -q "change-me" .env || { echo ".env still contains change-me values. Replace them before starting."; exit 1; }
+	@! grep -qE '^GCP_SA_FILE=[^/]' .env || { echo "GCP_SA_FILE must be an absolute path (Compose resolves relative paths from infra/)."; exit 1; }
 
 up: check-env
 	$(COMPOSE) up -d --build --wait

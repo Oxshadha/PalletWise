@@ -117,3 +117,23 @@ class PolicySettings(BaseSettings):
 
     url: str = "http://opa:8181"
     timeout_seconds: float = 2.0
+
+
+class LlmSettings(BaseSettings):
+    """Gemini on Vertex AI (agent spec 5). Without credentials the copilot runs on path B."""
+
+    model_config = SettingsConfigDict(env_prefix="PW_LLM_", extra="ignore")
+
+    enabled: bool = True
+    project: str | None = None
+    # Newer Gemini models are served from the global endpoint only.
+    location: str = "global"
+    credentials_file: str | None = None
+    # Logical names (agent registry) to provider model ids.
+    models: dict[str, str] = {
+        "gemini-flash": "gemini-3.8-flash",
+        "gemini-flash-lite": "gemini-3.5-flash-lite",
+        "gemini-flash-fallback": "gemini-3.5-flash",
+    }
+    request_timeout_seconds: float = 15.0
+    run_timeout_seconds: float = 45.0

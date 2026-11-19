@@ -37,6 +37,16 @@ class LoginFailed(Exception):
         self.reason: LoginFailure = reason
 
 
+class DelegationRefused(Exception):
+    """The identity provider would not let the copilot act for this user; the run is denied."""
+
+
+@dataclass(frozen=True, slots=True)
+class Delegation:
+    subject: str
+    client: str
+
+
 class SessionEnded(Exception):
     """The session no longer exists or lost its access; the caller answers 401."""
 
@@ -184,6 +194,21 @@ class AuthService:
             return self._refresh(id_hash, force=False)[0]
         return Principal(id_hash, _identity(row))
 
+    def delegate_to_copilot(self, principal: Principal) -> Delegation:
+        """Fresh user token by refresh, then token exchange (identity spec 5). Any failure denies.
+
+        Keycloak issues no `act` claim (identity spec 5, delegation claim), so the acting agent is
+        recorded by the caller from the registry; here the exchanged token proves that this
+        client obtained a copilot token for this same user.
+        """
+        try:
+            exchanged = self._oidc.exchange_for_copilot(self.fresh_access_token(principal))
+            claims = self._oidc.validate_copilot_token(exchanged, subject=principal.identity.subject)
+        except (TokenRejected, TokenInvalid) as exc:
+            log.warning("copilot delegation refused: %s", exc)
+            raise DelegationRefused from exc
+        return Delegation(subject=str(claims["sub"]), client=str(claims["azp"]))
+
     def fresh_access_token(self, principal: Principal) -> str:
         """A new user access token by server-side refresh, e.g. before token exchange."""
         _, access_token = self._refresh(principal.session_hash, force=True)
@@ -221,7 +246,7 @@ class AuthService:
                     identity = identity_from_claims(claims)
                 except (TokenRejected, TokenInvalid, SignInRefused) as exc:
                     # Disabled account, revoked session, lost role or broken claims.
-                    ended_because = type(exc).__name__
+                    ended_because = f"{type(exc).__name__}: {exc}"  # a reason label, never a token
                     locked.end()
                     ended_owner = (locked.tenant, locked.subject)
                 else:

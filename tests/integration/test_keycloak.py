@@ -79,7 +79,7 @@ def keycloak(tmp_path_factory: pytest.TempPathFactory) -> Generator[str]:
         container = container.with_env(key, value)
     with container:
         base = f"http://{container.get_container_host_ip()}:{container.get_exposed_port(8080)}"
-        deadline = time.monotonic() + 180
+        deadline = time.monotonic() + 300  # a cold start on a busy machine can take minutes
         while True:
             try:
                 if httpx.get(f"{base}/realms/palletwise").status_code in (200, 403):
@@ -111,7 +111,9 @@ class Browser:
 
     def request(self, method: str, url: str, **kw: Any) -> httpx.Response:
         header = "; ".join(f"{k}={v}" for k, v in self.cookies.items())
-        response = httpx.request(method, url, headers={"Cookie": header}, **kw)
+        response = httpx.request(
+            method, url, headers={"Cookie": header}, timeout=30, **kw
+        )  # first page renders slowly
         for cookie in response.headers.get_list("set-cookie"):
             name, value = cookie.split(";")[0].split("=", 1)
             self.cookies[name] = value
@@ -283,3 +285,14 @@ def test_copilot_audience_only_in_the_token_exchange(keycloak: str, app: TestCli
     token = claims(exchanged.json()["access_token"])
     assert token["azp"] == "palletwise-bff" and "palletwise-copilot" in token["aud"]
     assert token["sub"] == principal.identity.subject and "act" not in token
+
+
+def test_delegation_can_repeat_and_the_session_survives(app: TestClient) -> None:
+    """Every copilot run delegates; the next refresh must still revalidate the session."""
+    sign_in(app)
+    auth: AuthService = app.app.state.auth  # type: ignore[attr-defined]
+    principal = auth.authenticate(app.cookies[SESSION_COOKIE])
+    for _ in range(3):
+        delegation = auth.delegate_to_copilot(principal)
+        assert delegation.subject == principal.identity.subject and delegation.client == "palletwise-bff"
+    assert app.get("/api/me").status_code == 200

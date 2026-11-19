@@ -13,7 +13,6 @@ The model gets short, fixed messages for failures, never exception text or polic
 
 import json
 import logging
-import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -22,6 +21,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
 
+from palletwise import clock
 from palletwise.db.agent_repo import AgentRecord, AgentRegistry
 from palletwise.db.audit_repo import AuditEntry, AuditLog
 from palletwise.db.connection import Connection, Pool, tenant_session
@@ -40,6 +40,11 @@ class Outcome(StrEnum):
     DENIED = "DENIED"
     ERROR = "ERROR"
     SUSPENDED = "SUSPENDED"
+    RATE_LIMITED = "RATE_LIMITED"
+
+
+class RateLimit(Protocol):
+    def allow(self, tenant: UUID, subject: str, key: str, per_minute: int) -> bool: ...
 
 
 class ToolOutput(Protocol):
@@ -64,6 +69,7 @@ class ToolSpec[I: BaseModel, O: ToolOutput]:
     scope: str
     side_effect: Literal["read", "propose"]
     handler: Callable[[ToolContext, I], O]
+    rate_limit: int = 30  # calls per user per minute (agent spec 4)
 
     def __post_init__(self) -> None:
         # Unknown arguments must fail, not be ignored (evals spec: unexpected parameters).
@@ -126,6 +132,7 @@ MESSAGES = {
     Outcome.UNKNOWN_TOOL: "No tool with that name exists.",
     Outcome.DENIED: "This action is not permitted for this user.",
     Outcome.ERROR: "The tool failed. Do not retry with the same arguments.",
+    Outcome.RATE_LIMITED: "Too many requests for this tool. Try again in a minute.",
 }
 
 
@@ -137,15 +144,17 @@ class ToolExecutor:
         policy: PolicyClient,
         audit: AuditLog,
         read_pool: Pool,
+        limiter: RateLimit | None = None,
     ) -> None:
         self._registry = registry
         self._agents = agents
         self._policy = policy
         self._audit = audit
         self._read_pool = read_pool
+        self._limiter = limiter
 
     def execute(self, run: RunContext, name: str, arguments: Mapping[str, Any]) -> ToolCallResult:
-        started = time.perf_counter()
+        started = clock.monotonic()
         with tracer.start_as_current_span("tool.execute", attributes={"pw.tool.name": name}) as span:
             result, entry = self._execute(run, name, arguments, started)
             span.set_attribute("pw.tool.outcome", result.outcome.value)
@@ -182,7 +191,7 @@ class ToolExecutor:
                 decision=None if decision is None else ("ALLOW" if decision.allow else "DENY"),
                 deny_reasons=decision.reasons if decision and decision.reasons else None,
                 row_count=output.row_count if output is not None else None,
-                latency_ms=round((time.perf_counter() - started) * 1000),
+                latency_ms=round((clock.monotonic() - started) * 1000),
             )  # fmt: skip
             reasons = decision.reasons if decision else ()
             text = message or MESSAGES.get(outcome)
@@ -209,6 +218,12 @@ class ToolExecutor:
             )
             return finish(Outcome.VALIDATION_FAILED, agent=agent, message=f"Invalid arguments: {problems}")
         normalized = params.model_dump(mode="json")
+
+        # Rate limit per user and tool, after validation so malformed calls do not count.
+        if self._limiter is not None and not self._limiter.allow(
+            run.tenant, run.subject, f"tool:{name}", spec.rate_limit
+        ):
+            return finish(Outcome.RATE_LIMITED, agent=agent, parameters=normalized)
 
         # 3. Policy.
         decision = self._decide(run, spec, agent)

@@ -16,6 +16,8 @@ dependencies = [
   "cryptography",
   "opentelemetry-api",
   "pyyaml",
+  "pydantic-ai-slim[google]",
+  "sse-starlette",
 ]
 
 [project.scripts]

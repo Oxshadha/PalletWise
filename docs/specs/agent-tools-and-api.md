@@ -311,6 +311,19 @@ State-changing endpoints (`approve`, `reject`, `acknowledge`, `cancel`, `feedbac
 | Client disconnect cancels the run within the grace period | 2 |
 | Every suggestion rule executes successfully on fixtures | 2 |
 
+## 14a. Conversation store (added in Slice 1, for review)
+
+CWM 11.3 names a `pw_memory` role for "conversation tables (other spec)", but no spec defined them. Slice 1 adds the minimum the copilot needs:
+
+| Table | Holds | Notes |
+|---|---|---|
+| `pw.conversation` | id, tenant, site, owner subject, title (first question, 60 characters), created, updated | per user, tenant and site (UX spec 6) |
+| `pw.copilot_run` | one row per question: sequence, question, path, status (`RUNNING`, `COMPLETED`, `CANCELLED`, `FAILED`), card outcome, answer text, result envelopes with highlights and evidence, suggestions, the working set, trace id, agent and prompt version, cancel flag | a reopened conversation restores answers and evidence; old highlights are shown as historical |
+| `pw.run_feedback` | rating, comment, trace id | one per run, the latest wins (FR-COP-14) |
+
+- Written and read only by `pw_memory`. RLS checks the tenant **and** the owner subject (`app.user_subject`, set per transaction like the tenant), so one user can never read another user's conversations, even through a bug in the API (FR-COP-11). No delete grant: retention is a later job (NFR-PRV-03).
+- Usage, budget and rate limits are written by `pw_app` through owner functions: `pw.model_usage`, `pw.agent_budget_day` (`reserve_budget`, `settle_budget`), `pw.rate_window` (`rate_limit_hit`, fixed one-minute windows per user and key).
+
 ## 15. Decisions for review
 
 | # | Decision |
@@ -333,3 +346,4 @@ State-changing endpoints (`approve`, `reject`, `acknowledge`, `cancel`, `feedbac
 | 2026-11-18 | First draft. |
 | 2026-11-18 | Revision 2 after review: three answer paths; pre-check order with data readiness; kill switch per tool call; advisory classifier; bounded history in the data block; numeric grounding rules including numbers from the question; proposal drafting with deterministic source, destination and quantity and revalidating insert; approval contract; run stream reliability and disconnect cancellation; site stream as invalidation hints; central reason and severity table; validated suggestions mapped to real tools; error contract; server-side masking wording; removed `threshold_pct`; mutually exclusive tool inputs. |
 | 2026-11-19 | Slice 1 step 3 findings (no design change): `tools.executor` order is kill switch (registry read per call), argument validation (input models must forbid unknown fields, checked at registration), policy, handler as `pw_agent_read` in a tenant-bound transaction, audit for every outcome. Registry or policy unreachable: the run stops or the call is denied. The per-tool rate limit is implemented with the input guardrails in step 5. |
+| 2026-11-19 | Slice 1 step 5 findings: (1) Models verified on the project: `gemini-3.8-flash` (primary) is served only from the Vertex `global` location; there is no 3.8 Flash-Lite, so path A and the classifier use `gemini-3.5-flash-lite`, and the fallback is `gemini-3.5-flash`. The registry keeps logical names; the provider maps them. (2) `RUN_FINISHED` carries the final path and card outcome, because a run that starts on path A falls back to B when wording fails grounding or the budget is used up. (3) Run and tool rate limits are per user per minute in PostgreSQL (20 runs, 30 calls per tool), so they hold across API instances. (4) A cancel request sets a flag that the instance running the answer checks every second, so cancel works across instances; a client disconnect cancels after 10 seconds. (5) Estimated cost uses `llm/model_prices.yaml` until versioned settings exist. (6) The advisory input classifier is not built yet; it arrives with the injection evaluation cases in Slice 2, and deterministic boundaries already cover every permission. (7) Conversation store defined in section 14a. |

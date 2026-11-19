@@ -1,0 +1,20 @@
+# Fast path router (agent spec 3.2, paths A and B): deterministic patterns that choose a tool
+# without the model. A question routes only when exactly one rule matches with exactly one
+# identifier; anything else goes to the model path.
+version: 1
+
+identifiers:
+  sku: '\bSKU-\d{1,6}\b'
+  bin: '\b[A-Z]\d{1,2}-\d{2}-\d{2}\b|\b[A-Z]-[A-Z]\d{2}\b'
+
+rules:
+  - name: product_location
+    tool: find_product_locations
+    identifier: sku
+    argument: sku
+    words: [where, stored, store, location, locations, located, find, kept, keep]
+  - name: bin_contents
+    tool: get_bin_contents
+    identifier: bin
+    argument: bin_code
+    words: [what, contents, content, inside, holds, hold, contain, contains, stored, in]

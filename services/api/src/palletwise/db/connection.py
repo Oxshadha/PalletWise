@@ -80,7 +80,7 @@ READ_STATEMENT_TIMEOUT = "3s"  # semantic spec 7.4
 
 @contextmanager
 def tenant_session(
-    pool: ConnectionPool, tenant_id: UUID, *, read_snapshot: bool = False
+    pool: ConnectionPool, tenant_id: UUID, *, read_snapshot: bool = False, subject: str | None = None
 ) -> Generator[psycopg.Connection]:
     """A pooled connection with one transaction bound to the tenant.
 
@@ -94,4 +94,6 @@ def tenant_session(
             conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
             conn.execute("SELECT set_config('statement_timeout', %s, true)", (READ_STATEMENT_TIMEOUT,))
         conn.execute("SELECT set_config('app.tenant_id', %s, true)", (str(tenant_id),))
+        if subject is not None:  # tables owned by one user (conversations) also check the subject
+            conn.execute("SELECT set_config('app.user_subject', %s, true)", (subject,))
         yield conn
