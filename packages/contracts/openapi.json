@@ -1029,13 +1029,18 @@
               }
             ],
             "title": "Sim Time"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
           }
         },
         "required": [
           "code",
           "name",
           "data_status",
-          "sim_time"
+          "sim_time",
+          "time_zone"
         ],
         "title": "SiteStatusOut",
         "type": "object"
@@ -1114,6 +1119,45 @@
           "arguments"
         ],
         "title": "SuggestionIn",
+        "type": "object"
+      },
+      "SuggestionOut": {
+        "properties": {
+          "arguments": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Arguments",
+            "type": "object"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "tool",
+          "arguments"
+        ],
+        "title": "SuggestionOut",
         "type": "object"
       },
       "ValidationError": {
@@ -1551,6 +1595,32 @@
           }
         },
         "summary": "Feedback",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/copilot/starters": {
+      "get": {
+        "description": "Starter suggestions for an empty conversation (UX spec 6): only built capabilities.",
+        "operationId": "starters_api_copilot_starters_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SuggestionOut"
+                  },
+                  "title": "Response Starters Api Copilot Starters Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Starters",
         "tags": [
           "copilot"
         ]

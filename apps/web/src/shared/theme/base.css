@@ -15,7 +15,16 @@ body {
   font-weight: var(--pw-font-weight-body);
   font-size: var(--pw-font-size-md);
   line-height: var(--pw-line-height-body);
+  font-optical-sizing: auto;
+  font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
+}
+
+body {
+  /* A soft glow behind the frosted cards. */
+  background:
+    radial-gradient(60rem 40rem at 70% 10%, var(--pw-color-canvas-glow), transparent 70%),
+    var(--pw-color-background);
 }
 
 h1,
@@ -28,10 +37,13 @@ h3 {
 
 h1 {
   font-size: var(--pw-font-size-2xl);
+  font-weight: var(--pw-font-weight-light);
+  letter-spacing: var(--pw-letter-spacing-display);
 }
 
 h2 {
   font-size: var(--pw-font-size-xl);
+  letter-spacing: var(--pw-letter-spacing-heading);
 }
 
 h3 {

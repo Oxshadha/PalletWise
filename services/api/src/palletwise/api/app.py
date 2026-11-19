@@ -39,6 +39,7 @@ class SiteStatusOut(BaseModel):
     name: str
     data_status: str
     sim_time: datetime | None
+    time_zone: str
 
 
 def build_auth_service() -> AuthService:
@@ -112,7 +113,13 @@ def site_status(
         site = status_repo.site_status(conn, principal.tenant, site_id)
     if site is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
-    return SiteStatusOut(code=site.code, name=site.name, data_status=site.data_status, sim_time=site.sim_time)
+    return SiteStatusOut(
+        code=site.code,
+        name=site.name,
+        data_status=site.data_status,
+        sim_time=site.sim_time,
+        time_zone=site.time_zone,
+    )
 
 
 def create_app(

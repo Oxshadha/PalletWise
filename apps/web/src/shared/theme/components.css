@@ -1,0 +1,335 @@
+/* Shared interface primitives (UX spec 1, 8). Tokens only. */
+
+a {
+  color: var(--pw-color-accent-text);
+}
+
+:focus-visible {
+  outline: 3px solid var(--pw-color-focus-ring);
+  outline-offset: 2px;
+}
+
+.pw-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.pw-muted {
+  color: var(--pw-color-text-muted);
+}
+
+.pw-block {
+  display: block;
+}
+
+.pw-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pw-space-4);
+  min-height: 0;
+  padding: var(--pw-space-5);
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-lg);
+  background: var(--pw-color-glass);
+  backdrop-filter: blur(var(--pw-blur-glass));
+  box-shadow: var(--pw-shadow-card);
+}
+
+/* A quiet card inside a panel: list groups, zone lists, answer bodies. */
+.pw-card-soft {
+  padding: var(--pw-space-4);
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-md);
+  background: var(--pw-color-surface);
+}
+
+.pw-eyebrow {
+  margin: 0;
+  color: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-xs);
+  font-weight: var(--pw-font-weight-navigation);
+  letter-spacing: var(--pw-letter-spacing-label);
+}
+
+.pw-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--pw-space-4);
+}
+
+.pw-panel-header h2 {
+  font-size: var(--pw-font-size-lg);
+  font-weight: var(--pw-font-weight-heading);
+}
+
+.pw-panel-header p {
+  margin: var(--pw-space-1) 0 0;
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-panel-actions {
+  display: flex;
+  gap: var(--pw-space-2);
+  align-items: flex-start;
+}
+
+.pw-button,
+.pw-button-quiet,
+.pw-chip,
+.pw-icon-button,
+.pw-link-button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.pw-button {
+  padding: var(--pw-space-2) var(--pw-space-4);
+  border: 0;
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-accent-strong);
+  color: var(--pw-color-text-on-accent);
+  font-weight: var(--pw-font-weight-navigation);
+}
+
+.pw-button-quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pw-space-2);
+  padding: var(--pw-space-2) var(--pw-space-4);
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-surface);
+  color: var(--pw-color-text-primary);
+  font-size: var(--pw-font-size-sm);
+  font-weight: var(--pw-font-weight-navigation);
+  box-shadow: 0 1px 2px var(--pw-color-glass-border);
+}
+
+.pw-button-quiet[aria-pressed="true"] {
+  border-color: var(--pw-color-accent);
+  background: var(--pw-color-accent-soft);
+}
+
+.pw-button:disabled,
+.pw-button-quiet:disabled,
+.pw-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.pw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pw-space-2);
+  padding: var(--pw-space-2) var(--pw-space-3);
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-accent-soft);
+  color: var(--pw-color-accent-text);
+  font-size: var(--pw-font-size-sm);
+  font-weight: var(--pw-font-weight-navigation);
+}
+
+.pw-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pw-space-2);
+}
+
+.pw-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-glass);
+  color: var(--pw-color-text-primary);
+  backdrop-filter: blur(var(--pw-blur-glass));
+  box-shadow: var(--pw-shadow-card);
+}
+
+.pw-link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pw-color-accent-text);
+  text-decoration: underline;
+  text-align: left;
+}
+
+.pw-segmented {
+  display: flex;
+  gap: var(--pw-space-1);
+  padding: var(--pw-space-1);
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-glass);
+}
+
+.pw-segmented button {
+  border: 0;
+  border-radius: var(--pw-radius-pill);
+  padding: var(--pw-space-1) var(--pw-space-3);
+  background: transparent;
+  color: var(--pw-color-text-muted);
+  font: inherit;
+  font-size: var(--pw-font-size-sm);
+  font-weight: var(--pw-font-weight-navigation);
+  cursor: pointer;
+}
+
+.pw-segmented button[aria-pressed="true"] {
+  background: var(--pw-color-surface);
+  color: var(--pw-color-text-primary);
+  box-shadow: var(--pw-shadow-card);
+}
+
+.pw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-table th,
+.pw-table td {
+  padding: var(--pw-space-2) var(--pw-space-2);
+  border-bottom: 1px solid var(--pw-color-glass-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.pw-table thead th {
+  color: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-xs);
+  font-weight: var(--pw-font-weight-navigation);
+  letter-spacing: var(--pw-letter-spacing-label);
+}
+
+.pw-table tbody tr:last-child th,
+.pw-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.pw-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pw-table .pw-num {
+  text-align: right;
+}
+
+.pw-kpi {
+  font-weight: var(--pw-font-weight-navigation);
+}
+
+/* Large light numbers, as in the display type. */
+.pw-figure {
+  font-size: var(--pw-font-size-kpi);
+  font-weight: var(--pw-font-weight-kpi);
+  letter-spacing: var(--pw-letter-spacing-display);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.pw-notice {
+  margin: 0;
+  padding: var(--pw-space-2) var(--pw-space-3);
+  border-radius: var(--pw-radius-sm);
+  background: var(--pw-color-accent-soft);
+}
+
+/* ---------------------------------------------------------------- hover and press layer
+   Every control answers the pointer: a 1px step up on hover, a 1px sink and slight scale on press.
+   Fine pointers only for hover; keyboard focus shows the ring. Nothing resizes or glows. */
+.pw-button,
+.pw-button-quiet,
+.pw-chip,
+.pw-icon-button,
+.pw-send,
+.pw-nav button,
+.pw-segmented button,
+.pw-location,
+.pw-avatar {
+  transition:
+    transform var(--pw-motion-out) var(--pw-ease),
+    background-color var(--pw-motion-out) var(--pw-ease),
+    border-color var(--pw-motion-out) var(--pw-ease),
+    color var(--pw-motion-out) var(--pw-ease),
+    box-shadow var(--pw-motion-out) var(--pw-ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pw-button:not(:disabled):hover,
+  .pw-button-quiet:not(:disabled):hover,
+  .pw-chip:not(:disabled):hover,
+  .pw-icon-button:hover,
+  .pw-send:not(:disabled):hover,
+  .pw-location:hover,
+  .pw-avatar:hover {
+    transform: translateY(-1px);
+    transition-duration: var(--pw-motion-in);
+  }
+
+  .pw-button:not(:disabled):hover,
+  .pw-send:not(:disabled):hover {
+    background: color-mix(in srgb, var(--pw-color-accent-strong) 86%, var(--pw-color-text-primary));
+  }
+
+  .pw-button-quiet:not(:disabled):hover,
+  .pw-icon-button:hover,
+  .pw-location:hover {
+    border-color: var(--pw-color-accent);
+  }
+
+  .pw-chip:not(:disabled):hover {
+    border-color: var(--pw-color-accent);
+    background: var(--pw-color-surface);
+  }
+
+  .pw-nav button:not([aria-pressed="true"]):hover,
+  .pw-segmented button:not([aria-pressed="true"]):hover {
+    color: var(--pw-color-text-primary);
+  }
+}
+
+.pw-button:not(:disabled):active,
+.pw-button-quiet:not(:disabled):active,
+.pw-chip:not(:disabled):active,
+.pw-icon-button:active,
+.pw-send:not(:disabled):active,
+.pw-location:active,
+.pw-avatar:active {
+  transform: translateY(1px) scale(0.985);
+  transition-duration: var(--pw-motion-press);
+}
+
+/* A new answer settles in once when it arrives (never on scroll). */
+@keyframes pw-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.pw-enter {
+  animation: pw-enter var(--pw-motion-enter) var(--pw-ease-enter) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

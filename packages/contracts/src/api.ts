@@ -140,6 +140,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/copilot/starters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Starters
+         * @description Starter suggestions for an empty conversation (UX spec 6): only built capabilities.
+         */
+        get: operations["starters_api_copilot_starters_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -664,6 +684,8 @@ export interface components {
             name: string;
             /** Sim Time */
             sim_time: string | null;
+            /** Time Zone */
+            time_zone: string;
         };
         /** StreamFreshness */
         StreamFreshness: {
@@ -677,6 +699,17 @@ export interface components {
         };
         /** SuggestionIn */
         SuggestionIn: {
+            /** Arguments */
+            arguments: {
+                [key: string]: string | number | boolean | null;
+            };
+            /** Label */
+            label: string;
+            /** Tool */
+            tool: string;
+        };
+        /** SuggestionOut */
+        SuggestionOut: {
             /** Arguments */
             arguments: {
                 [key: string]: string | number | boolean | null;
@@ -991,6 +1024,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    starters_api_copilot_starters_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuggestionOut"][];
                 };
             };
         };

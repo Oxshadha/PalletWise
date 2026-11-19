@@ -1,0 +1,242 @@
+/* Copilot panel and answer cards (UX spec 6, 7). Tokens only. */
+
+.pw-copilot {
+  min-width: 0;
+}
+
+.pw-conversation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pw-space-6);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.pw-copilot-title {
+  display: flex;
+  align-items: center;
+  gap: var(--pw-space-2);
+}
+
+.pw-sparkle {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-accent-strong);
+  color: var(--pw-color-text-on-accent);
+}
+
+.pw-empty-state {
+  display: grid;
+  gap: var(--pw-space-5);
+  align-content: center;
+  min-height: 60%;
+  padding: var(--pw-space-6) var(--pw-space-2);
+}
+
+.pw-greeting {
+  margin: 0;
+  font-size: var(--pw-font-size-xl);
+  font-weight: var(--pw-font-weight-light);
+  letter-spacing: var(--pw-letter-spacing-display);
+  line-height: var(--pw-line-height-heading);
+}
+
+.pw-turn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pw-space-2);
+}
+
+.pw-question {
+  align-self: flex-end;
+  max-width: 85%;
+  margin: 0;
+  padding: var(--pw-space-2) var(--pw-space-4);
+  border-radius: var(--pw-radius-md) var(--pw-radius-md) var(--pw-radius-sm) var(--pw-radius-md);
+  background: var(--pw-color-accent-strong);
+  color: var(--pw-color-text-on-accent);
+  font-size: var(--pw-font-size-sm);
+  white-space: pre-wrap;
+}
+
+.pw-answer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pw-space-3);
+  padding: var(--pw-space-5);
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-md);
+  background: var(--pw-color-surface);
+  box-shadow: 0 1px 2px var(--pw-color-glass-border);
+}
+
+.pw-answer.is-active {
+  box-shadow:
+    0 0 0 2px var(--pw-color-accent-soft),
+    var(--pw-shadow-card);
+}
+
+/* The headline leads (NFR-UX-03): larger and lighter than the evidence below it. */
+.pw-answer-text {
+  font-size: var(--pw-font-size-lg);
+  font-weight: var(--pw-font-weight-body);
+  letter-spacing: var(--pw-letter-spacing-heading);
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.pw-answer-error {
+  padding: var(--pw-space-2) var(--pw-space-3);
+  border-left: 4px solid var(--pw-color-status-critical);
+}
+
+.pw-answer-error p {
+  margin: 0;
+}
+
+.pw-outcome,
+.pw-historical {
+  margin: 0;
+  font-size: var(--pw-font-size-sm);
+  font-weight: var(--pw-font-weight-navigation);
+  color: var(--pw-color-text-muted);
+}
+
+.pw-historical {
+  padding: var(--pw-space-1) var(--pw-space-2);
+  border: 1px dashed var(--pw-color-border);
+  border-radius: var(--pw-radius-sm);
+}
+
+.pw-answer-table {
+  overflow-x: auto;
+}
+
+/* Codes, quantities and times never break across lines; the table scrolls instead. */
+.pw-answer-table .pw-table th,
+.pw-answer-table .pw-table td {
+  white-space: nowrap;
+}
+
+.pw-how summary {
+  cursor: pointer;
+  color: var(--pw-color-accent-text);
+}
+
+.pw-how ul {
+  margin: var(--pw-space-2) 0 0;
+  padding-left: var(--pw-space-6);
+  color: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-freshness {
+  margin: 0;
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pw-space-2);
+}
+
+.pw-feedback-form {
+  display: grid;
+  gap: var(--pw-space-2);
+  width: 100%;
+}
+
+.pw-feedback-form textarea {
+  width: 100%;
+  padding: var(--pw-space-2) var(--pw-space-3);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-md);
+  background: var(--pw-color-surface);
+  color: var(--pw-color-text-primary);
+  font: inherit;
+  resize: vertical;
+}
+
+.pw-composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--pw-space-2);
+  align-items: center;
+  padding: var(--pw-space-2) var(--pw-space-2) var(--pw-space-2) var(--pw-space-4);
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-lg);
+  background: var(--pw-color-surface);
+  box-shadow: var(--pw-shadow-card);
+}
+
+.pw-composer textarea {
+  width: 100%;
+  border: 0;
+  color: var(--pw-color-text-primary);
+  font: inherit;
+  padding: var(--pw-space-2) 0;
+  background: transparent;
+  resize: none;
+}
+
+.pw-composer textarea:focus-visible {
+  outline: none;
+}
+
+.pw-composer:focus-within {
+  box-shadow: 0 0 0 3px var(--pw-color-focus-ring);
+}
+
+.pw-send {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 0;
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-accent-strong);
+  color: var(--pw-color-text-on-accent);
+  cursor: pointer;
+}
+
+.pw-send:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pw-counter {
+  grid-column: 1 / -1;
+  font-size: var(--pw-font-size-xs);
+}
+
+.pw-history {
+  position: relative;
+}
+
+.pw-history-list {
+  position: absolute;
+  right: 0;
+  z-index: 2;
+  width: 20rem;
+  max-height: 22rem;
+  overflow: auto;
+  margin-top: var(--pw-space-2);
+  padding: var(--pw-space-3);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-md);
+  background: var(--pw-color-surface);
+  box-shadow: var(--pw-shadow-popover);
+}
+
+.pw-history-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--pw-space-2);
+}

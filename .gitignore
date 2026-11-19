@@ -42,3 +42,7 @@ test-results/
 
 # Original design files; the repository keeps copies in docs/design and apps/web/public/brand.
 UI/
+
+# Third-party Claude skill (Leonxlnx/taste-skill, MIT), installed locally, not vendored
+.claude/skills/design-taste-frontend/
+.taste-skill/

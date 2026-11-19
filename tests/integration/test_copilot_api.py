@@ -554,3 +554,17 @@ def test_map_endpoints_are_site_scoped_and_fail_closed(env: Env) -> None:
         (env.site.tenant,),
     ).fetchone()
     assert denied == (["policy_unavailable"],)
+
+
+def test_starters_come_from_the_server_and_only_name_built_tools(env: Env) -> None:
+    env.sign_in()
+    starters = env.client.get("/api/copilot/starters").json()
+    assert starters == [
+        {
+            "label": "Where is SKU-102 stored?",
+            "tool": "find_product_locations",
+            "arguments": {"sku": "SKU-102"},
+        }
+    ]
+    status = env.client.get(f"/api/sites/{env.site.site}/status").json()
+    assert status["time_zone"] == "Asia/Colombo"

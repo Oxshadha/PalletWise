@@ -8,9 +8,8 @@
  * system) is resolved by public/theme-init.js before the first paint.
  */
 
-@import "@fontsource/inter/400.css";
-@import "@fontsource/inter/500.css";
-@import "@fontsource/inter/600.css";
+/* Inter Variable with the optical size axis: the display cut at large sizes, every weight. */
+@import "@fontsource-variable/inter/opsz.css";
 
 :root {
   /* ---- Brand palette (product owner) */
@@ -18,6 +17,31 @@
   --pw-color-surface: #ffffff;
   --pw-color-text-primary: #092a66;
   --pw-color-accent: #0875ed;
+  /* Accent for normal-size text and links (UX spec 8, option a): 4.5:1 on every light surface. */
+  --pw-color-accent-text: #0662cc;
+  /* Fill for buttons that carry text: white labels reach 4.5:1. The accent stays for icons and outlines. */
+  --pw-color-accent-strong: #0662cc;
+  /* Frosted glass surfaces over the canvas, and a deep panel for emphasis. */
+  --pw-color-glass: rgb(255 255 255 / 0.72);
+  --pw-color-glass-border: rgb(9 42 102 / 0.07);
+  --pw-color-canvas-glow: rgb(8 117 237 / 0.06);
+  --pw-color-panel-strong: #0b2a66;
+  --pw-color-text-on-strong: #f4f7fc;
+  /* Isometric warehouse model. */
+  --pw-color-map-slab: #ffffff;
+  --pw-color-map-slab-side: #d9e1ec;
+  --pw-color-map-floor-line: #c4cfde;
+  --pw-color-map-rack: #b8c5d8;
+  --pw-color-map-carton: #d4ab7f;
+  --pw-color-map-carton-alt: #4f8ff0;
+  /* Realistic warehouse materials: concrete, aisle paint, racking steel, pallet wood, walls, docks. */
+  --pw-color-map-floor: #e9edf2;
+  --pw-color-map-aisle-paint: #e8b923;
+  --pw-color-map-upright: #2c5aa8;
+  --pw-color-map-beam: #e8792b;
+  --pw-color-map-pallet: #b88b5a;
+  --pw-color-map-wall: #f6f8fb;
+  --pw-color-map-dock: #3d4a5c;
   --pw-color-secondary: #8abafb;
 
   /* ---- Derived roles (proposed from the mockups; adjust freely) */
@@ -33,40 +57,55 @@
   --pw-color-status-critical: #c62828;
   --pw-color-status-success: #15803d;
 
-  /* ---- Typography */
-  --pw-font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* ---- Typography: light display type for titles and numbers, quiet small labels */
+  --pw-font-family: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pw-font-weight-light: 300;
   --pw-font-weight-body: 400;
   --pw-font-weight-navigation: 500;
-  --pw-font-weight-kpi: 500;
-  --pw-font-weight-heading: 600;
+  --pw-font-weight-kpi: 300;
+  --pw-font-weight-heading: 500;
   --pw-font-weight-heading-strong: 600;
+  --pw-letter-spacing-display: -0.035em;
+  --pw-letter-spacing-heading: -0.015em;
+  --pw-letter-spacing-label: 0.01em;
 
-  --pw-font-size-xs: 0.75rem; /* 12px captions */
+  --pw-font-size-xs: 0.8125rem; /* 13px labels: nothing smaller (taste-skill type rules) */
   --pw-font-size-sm: 0.875rem; /* 14px secondary text */
-  --pw-font-size-md: 1rem; /* 16px body */
-  --pw-font-size-lg: 1.25rem; /* 20px card titles */
-  --pw-font-size-xl: 1.75rem; /* 28px section headings */
-  --pw-font-size-2xl: 2.25rem; /* 36px page headings */
-  --pw-font-size-kpi: 2rem; /* 32px KPI numbers */
+  --pw-font-size-md: 1rem; /* 16px text people read */
+  --pw-font-size-lg: 1.125rem; /* 18px card titles */
+  --pw-font-size-xl: 1.5rem; /* 24px section headings */
+  --pw-font-size-2xl: 2.5rem; /* 40px page title (display) */
+  --pw-font-size-kpi: 2.25rem; /* 36px numbers */
   --pw-line-height-body: 1.5;
-  --pw-line-height-heading: 1.2;
+  --pw-line-height-heading: 1.15;
 
   /* ---- Spacing (4px base) */
   --pw-space-1: 0.25rem;
   --pw-space-2: 0.5rem;
   --pw-space-3: 0.75rem;
   --pw-space-4: 1rem;
+  --pw-space-5: 1.25rem;
   --pw-space-6: 1.5rem;
   --pw-space-8: 2rem;
   --pw-space-12: 3rem;
 
-  /* ---- Shape and depth (from the mockups: soft cards, pill toggles) */
-  --pw-radius-sm: 0.5rem;
-  --pw-radius-md: 0.75rem;
-  --pw-radius-lg: 1.25rem;
+  /* ---- Shape and depth: frosted cards, generous radii, very soft shadows */
+  --pw-radius-sm: 0.625rem;
+  --pw-radius-md: 1rem;
+  --pw-radius-lg: 1.5rem;
   --pw-radius-pill: 999px;
-  --pw-shadow-card: 0 1px 2px rgb(9 42 102 / 0.04), 0 8px 24px rgb(9 42 102 / 0.06);
-  --pw-shadow-popover: 0 12px 32px rgb(9 42 102 / 0.14);
+  --pw-shadow-card: 0 1px 1px rgb(9 42 102 / 0.03), 0 12px 40px rgb(9 42 102 / 0.07);
+  --pw-shadow-popover: 0 16px 48px rgb(9 42 102 / 0.16);
+  --pw-blur-glass: 18px;
+
+  /* ---- Motion: one ease-out curve, no bounce; only transform, opacity and colour move. */
+  --pw-motion-in: 150ms;
+  --pw-motion-out: 120ms;
+  --pw-motion-press: 90ms;
+  --pw-motion-panel: 200ms;
+  --pw-motion-enter: 320ms;
+  --pw-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --pw-ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
 
   /* ---- Brand assets */
   --pw-logo: url("/brand/logo-light.png");
@@ -81,6 +120,26 @@
   --pw-color-surface: #111c32;
   --pw-color-text-primary: #f4f7fc;
   --pw-color-accent: #0875ed;
+  --pw-color-accent-text: #8abafb;
+  --pw-color-accent-strong: #0662cc;
+  --pw-color-glass: rgb(17 28 50 / 0.72);
+  --pw-color-glass-border: rgb(255 255 255 / 0.08);
+  --pw-color-canvas-glow: rgb(8 117 237 / 0.12);
+  --pw-color-panel-strong: #0e2f6e;
+  --pw-color-text-on-strong: #f4f7fc;
+  --pw-color-map-slab: #1a2742;
+  --pw-color-map-slab-side: #0f192d;
+  --pw-color-map-floor-line: #2c3b5c;
+  --pw-color-map-rack: #3a4b70;
+  --pw-color-map-carton: #a7835d;
+  --pw-color-map-carton-alt: #3c7fe6;
+  --pw-color-map-floor: #1d2a44;
+  --pw-color-map-aisle-paint: #c99a12;
+  --pw-color-map-upright: #4a7ad1;
+  --pw-color-map-beam: #d86b22;
+  --pw-color-map-pallet: #8f6b45;
+  --pw-color-map-wall: #26355a;
+  --pw-color-map-dock: #0e1628;
   --pw-color-secondary: #64748b;
 
   --pw-color-text-muted: #a9b6cc;

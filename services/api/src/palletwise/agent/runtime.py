@@ -238,6 +238,9 @@ class CopilotRuntime:
         self._run_timeout = run_timeout
         self._tool_names = frozenset(t.name for t in registry)
 
+    def starters(self) -> list[Suggestion]:
+        return [s for s in STARTERS if s.tool in self._tool_names]
+
     def system_prompt(self, version: str) -> str:
         return (PROMPTS / f"{version}.md").read_text(encoding="utf-8")
 

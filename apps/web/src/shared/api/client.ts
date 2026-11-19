@@ -1,10 +1,54 @@
 import type { components } from "@palletwise/contracts";
 
-export type SiteStatus = components["schemas"]["SiteStatusOut"];
-export type Me = components["schemas"]["MeOut"];
+type Schemas = components["schemas"];
+export type SiteStatus = Schemas["SiteStatusOut"];
+export type Me = Schemas["MeOut"];
+export type Layout = Schemas["LayoutOut"];
+export type LayoutBin = Schemas["BinOut"];
+export type MapState = Schemas["MapStateOut"];
+export type ResultEnvelope = Schemas["ResultEnvelope"];
+export type Highlight = Schemas["Highlight"];
+export type Conversation = Schemas["ConversationOut"];
+export type ConversationDetail = Schemas["ConversationDetailOut"];
+export type RunRecord = Schemas["RunOut"];
+export type RunRequest = Schemas["RunIn"];
+export type Starter = Schemas["SuggestionOut"];
 
 /** Thrown when the session is missing or has ended; the shell sends the user to sign in. */
 export class SignedOut extends Error {}
+
+/** A refused request with the API's problem details (agent spec 12.1). */
+export class ApiProblem extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+    readonly traceId: string | null,
+  ) {
+    super(message);
+  }
+}
+
+interface ProblemBody {
+  code?: string;
+  detail?: string;
+  trace_id?: string;
+}
+
+export async function problemFrom(response: Response): Promise<ApiProblem> {
+  let body: ProblemBody = {};
+  try {
+    body = (await response.json()) as ProblemBody;
+  } catch {
+    /* not a problem document */
+  }
+  return new ApiProblem(
+    response.status,
+    body.code ?? "ERROR",
+    body.detail ?? "The request could not be completed.",
+    body.trace_id ?? null,
+  );
+}
 
 /** Starts sign-in at the API (BFF). The browser never handles tokens. */
 export function signIn(): void {
@@ -21,15 +65,60 @@ export async function signOut(): Promise<void> {
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, signal ? { signal } : {});
   if (response.status === 401) throw new SignedOut();
-  if (!response.ok) throw new Error(`Request failed: ${String(response.status)}`);
+  if (!response.ok) throw await problemFrom(response);
   return (await response.json()) as T;
 }
 
-export function fetchMe(signal?: AbortSignal): Promise<Me> {
-  return getJson<Me>("/api/me", signal);
+async function post(path: string, body?: unknown): Promise<void> {
+  const init: RequestInit = { method: "POST" };
+  if (body !== undefined) {
+    init.headers = { "Content-Type": "application/json" };
+    init.body = JSON.stringify(body);
+  }
+  const response = await fetch(path, init);
+  if (response.status === 401) throw new SignedOut();
+  if (!response.ok) throw await problemFrom(response);
 }
 
-/** Reads a site's data status. Types come from the generated API contract. */
-export function fetchSiteStatus(siteId: string, signal?: AbortSignal): Promise<SiteStatus> {
-  return getJson<SiteStatus>(`/api/sites/${encodeURIComponent(siteId)}/status`, signal);
-}
+const site = (siteId: string) => `/api/sites/${encodeURIComponent(siteId)}`;
+const query = (siteId: string) => `site_id=${encodeURIComponent(siteId)}`;
+
+export const fetchMe = (signal?: AbortSignal) => getJson<Me>("/api/me", signal);
+
+export const fetchSiteStatus = (siteId: string, signal?: AbortSignal) =>
+  getJson<SiteStatus>(`${site(siteId)}/status`, signal);
+
+export const fetchLayout = (siteId: string, signal?: AbortSignal) =>
+  getJson<Layout>(`${site(siteId)}/layout`, signal);
+
+export const fetchMapState = (siteId: string, signal?: AbortSignal) =>
+  getJson<MapState>(`${site(siteId)}/map-state`, signal);
+
+export const fetchBinDetails = (siteId: string, code: string, signal?: AbortSignal) =>
+  getJson<ResultEnvelope>(`${site(siteId)}/bins/${encodeURIComponent(code)}`, signal);
+
+export const fetchConversations = (siteId: string, signal?: AbortSignal) =>
+  getJson<Conversation[]>(`/api/copilot/conversations?${query(siteId)}`, signal);
+
+export const fetchConversation = (siteId: string, id: string, signal?: AbortSignal) =>
+  getJson<ConversationDetail>(
+    `/api/copilot/conversations/${encodeURIComponent(id)}?${query(siteId)}`,
+    signal,
+  );
+
+export const fetchStarters = (signal?: AbortSignal) =>
+  getJson<Starter[]>("/api/copilot/starters", signal);
+
+export const cancelRun = (siteId: string, runId: string) =>
+  post(`/api/copilot/runs/${encodeURIComponent(runId)}/cancel?${query(siteId)}`);
+
+export const sendFeedback = (
+  siteId: string,
+  runId: string,
+  rating: "HELPFUL" | "NOT_HELPFUL",
+  comment?: string,
+) =>
+  post(`/api/copilot/runs/${encodeURIComponent(runId)}/feedback?${query(siteId)}`, {
+    rating,
+    comment: comment ?? null,
+  });

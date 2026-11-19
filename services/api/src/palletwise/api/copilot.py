@@ -475,6 +475,19 @@ async def feedback(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+class SuggestionOut(BaseModel):
+    label: str
+    tool: str
+    arguments: dict[str, str | int | bool | None]
+
+
+@router.get("/starters", response_model=list[SuggestionOut])
+async def starters(principal: CurrentPrincipal, svc: Services) -> Any:
+    """Starter suggestions for an empty conversation (UX spec 6): only built capabilities."""
+    del principal  # signed-in users only; the list is the same for everyone
+    return [SuggestionOut(label=s.label, tool=s.tool, arguments=s.arguments) for s in svc.runtime.starters()]
+
+
 # ---------------------------------------------------------------- history
 
 
