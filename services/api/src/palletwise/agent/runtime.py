@@ -6,9 +6,11 @@ and writes short answer text; highlights, numbers and suggestions come from the 
 """
 
 import asyncio
+import contextvars
+import functools
 import json
 import logging
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -170,7 +172,18 @@ class MeteredModel(WrapperModel):
     ) -> ModelResponse:
         cap = (model_settings or {}).get("max_tokens") or DEFAULT_MAX_OUTPUT
         estimate = _estimate_tokens(messages) + cap  # input plus the most the call may output
-        if not await asyncio.to_thread(self._meter.reserve, estimate):
+        reservation = _in_thread(self._meter.reserve, estimate)
+        try:
+            reserved = await asyncio.shield(reservation)
+        except asyncio.CancelledError:
+            # Cancelled while reserving: the reservation may still land; release it when it does.
+            reservation.add_done_callback(
+                lambda done: _release_if_reserved(
+                    done, self._meter, estimate, self._call(0, 0, 0, clock.monotonic(), "ERROR")
+                )
+            )
+            raise
+        if not reserved:
             self._state.budget_exhausted = True
             raise BudgetExhausted
         started = clock.monotonic()
@@ -189,15 +202,16 @@ class MeteredModel(WrapperModel):
                 response = await super().request(messages, model_settings, model_request_parameters)
             except BaseException:
                 span.set_attribute("pw.model.outcome", "ERROR")
-                # Shielded: a second cancel during cleanup must not skip releasing the reservation.
+                # Submitted to a thread at once and shielded: neither a second cancel nor the event
+                # loop shutting down can skip releasing the reservation.
                 failed = self._call(0, 0, 0, started, "ERROR")
-                await asyncio.shield(asyncio.to_thread(self._meter.settle, estimate, failed))
+                await asyncio.shield(_in_thread(self._meter.settle, estimate, failed))
                 raise
             usage = response.usage
             self._state.input_tokens += usage.input_tokens
             self._state.output_tokens += usage.output_tokens
             call = self._call(usage.input_tokens, usage.output_tokens, usage.cache_read_tokens, started, "OK")
-            cost = await asyncio.shield(asyncio.to_thread(self._meter.settle, estimate, call))
+            cost = await asyncio.shield(_in_thread(self._meter.settle, estimate, call))
             span.set_attribute("pw.model.outcome", "OK")
             span.set_attribute("gen_ai.usage.input_tokens", usage.input_tokens)
             span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens)
@@ -225,6 +239,20 @@ def _last_prompt(messages: list[ModelMessage]) -> str:
 
 def _response_text(response: ModelResponse) -> str:
     return " ".join(str(getattr(p, "content", "")) for p in response.parts)[:4000]
+
+
+def _in_thread[T](fn: Callable[..., T], *args: Any) -> "asyncio.Future[T]":
+    """Runs `fn` in the default thread pool, submitted now (asyncio.to_thread submits only when its
+    coroutine first runs, which a cancel or loop shutdown can prevent). Context is preserved."""
+    context = contextvars.copy_context()
+    return asyncio.get_running_loop().run_in_executor(None, functools.partial(context.run, fn, *args))
+
+
+def _release_if_reserved(
+    reservation: "asyncio.Future[bool]", meter: ModelMeter, estimate: int, call: ModelCall
+) -> None:
+    if not reservation.cancelled() and reservation.exception() is None and reservation.result():
+        asyncio.get_running_loop().run_in_executor(None, meter.settle, estimate, call)
 
 
 def _truncated(result: Any) -> bool:
