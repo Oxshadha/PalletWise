@@ -559,13 +559,13 @@ def test_map_endpoints_are_site_scoped_and_fail_closed(env: Env) -> None:
 def test_starters_come_from_the_server_and_only_name_built_tools(env: Env) -> None:
     env.sign_in()
     starters = env.client.get("/api/copilot/starters").json()
-    assert starters == [
-        {
-            "label": "Where is SKU-102 stored?",
-            "tool": "find_product_locations",
-            "arguments": {"sku": "SKU-102"},
-        }
-    ]
+    assert starters[0] == {
+        "label": "Where is SKU-102 stored?",
+        "tool": "find_product_locations",
+        "arguments": {"sku": "SKU-102"},
+    }
+    built = {t.name for t in v1_tools()}
+    assert len(starters) == 4 and all(s["tool"] in built for s in starters)
     status = env.client.get(f"/api/sites/{env.site.site}/status").json()
     assert status["time_zone"] == "Asia/Colombo"
 
@@ -731,3 +731,17 @@ def test_a_simulation_reset_invalidates_earlier_working_sets(env: Env) -> None:
     finally:
         env.db.execute("UPDATE pw.simulation_run SET status = 'ENDED' WHERE id = %s", (reset,))
         env.db.execute("UPDATE pw.simulation_run SET status = 'ACTIVE' WHERE id = %s", (current[0],))
+
+
+def test_a_persona_question_is_answered_on_the_fast_path_without_a_model(env: Env) -> None:
+    env.sign_in(subject="fast-path")
+    status, _, events = env.ask("Which items are running low on stock?")
+    assert status == 200 and events[0]["path"] == "B"
+    [result] = of_type(events, "pw.result")
+    assert result["result"]["normalized_request"]["tool"] == "get_low_stock"
+    finished = of_type(events, "RUN_FINISHED")[0]
+    text = answer(events)
+    if result["result"]["status"] == "OK":
+        assert finished["outcome"] == "ANSWER" and "at or below the minimum" in text
+        assert {h["reason"] for h in result["result"]["highlights"]} == {"low_stock"}
+    assert not any(d in text for d in ("\u2013", "\u2014"))
