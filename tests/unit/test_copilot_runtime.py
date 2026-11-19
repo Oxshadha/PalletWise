@@ -481,3 +481,40 @@ def test_a_truncated_result_never_states_the_row_limit_as_the_count() -> None:
 
     result = locations_result().model_copy(update={"truncated": True})
     assert "more than 2 locations" in template_answer("find_product_locations", result)
+
+
+@pytest.mark.parametrize("yields", [0, 1, 2, 3, 4, 5])
+def test_a_reservation_is_released_even_if_cancelled_twice_and_the_loop_stops(yields: int) -> None:
+    """The CI failure: the run's cleanup cancels a model call a second time while it releases its
+    reservation, then the event loop shuts down. The release must still happen."""
+    from pydantic_ai.messages import ModelRequest, UserPromptPart
+    from pydantic_ai.models import ModelRequestParameters
+
+    from palletwise.agent.runtime import MeteredModel
+    from palletwise.llm import ResolvedModel
+
+    entered = asyncio.Event()
+
+    async def slow(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        entered.set()
+        await asyncio.sleep(30)
+        return ModelResponse(parts=[TextPart("late")])
+
+    meter = FakeMeter()
+    metered = MeteredModel(
+        ResolvedModel(FunctionModel(slow), "gemini-flash", "test"), meter, "AGENT", RunState()
+    )
+
+    async def scenario() -> None:
+        call = asyncio.create_task(
+            metered.request([ModelRequest(parts=[UserPromptPart("hi")])], None, ModelRequestParameters())
+        )
+        await entered.wait()
+        call.cancel()
+        for _ in range(yields):  # the call reaches its cleanup after some loop steps
+            await asyncio.sleep(0)
+        call.cancel()  # a second cancel, as cancel scopes in the model client do
+        # Return at once: asyncio.run cancels every task that has not started yet.
+
+    asyncio.run(scenario())
+    assert meter.reserved == 0 and [c.outcome for c in meter.settled] == ["ERROR"]
