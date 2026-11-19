@@ -16,7 +16,7 @@ from evals.measure import (
     pct,
     stages,
 )
-from evals.runner import config_names, run_order
+from evals.runner import config_names, run_order, typed_result
 from palletwise.agent.runtime import RuntimeConfig
 
 # ---------------------------------------------------------------- facts
@@ -200,3 +200,30 @@ def test_a_run_the_provider_mostly_rejected_is_invalid_not_a_measurement() -> No
     )
     assert invalid_reason({"rejected_calls": 1, "calls": 100}) is None
     assert invalid_reason({"rejected_calls": 0, "calls": 0}) is None
+
+
+def test_a_streamed_decimal_is_still_a_number_for_grounding() -> None:
+    """The first valid baseline flagged "51811.20" as unsupported: the decimal reached the eval as
+    a JSON string. The runtime had checked it against the real value."""
+    from datetime import UTC, datetime
+    from decimal import Decimal
+
+    from palletwise.agent.guardrails import grounding_problems
+    from palletwise.contracts.results import Column, Evidence, ResultEnvelope, ResultStatus
+
+    evidence = Evidence(as_of=datetime(2026, 4, 1, tzinfo=UTC), time_zone="Asia/Colombo",
+                        settings_version_id=None, data_as_of=None, freshness=(), how_computed=())  # fmt: skip
+    result = ResultEnvelope(
+        status=ResultStatus.OK,
+        columns=(
+            Column(key="sku", label="SKU", type="text"),
+            Column(key="stock_value", label="Value", type="number"),
+        ),
+        rows=({"sku": "SKU-233", "stock_value": Decimal("51811.20")},),
+        evidence=evidence,
+        normalized_request={"tool": "query_inventory"},
+    )
+    text = "SKU-233 has a stock value of 51811.20."
+    assert grounding_problems(text, [result], "") == []
+    streamed = result.model_dump(mode="json")
+    assert grounding_problems(text, [typed_result(streamed)], "") == []

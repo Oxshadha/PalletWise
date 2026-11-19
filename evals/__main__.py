@@ -17,6 +17,7 @@ from evals.runner import (
     compare,
     config_names,
     deterministic,
+    git_sha,
     write_golden,
     write_model_report,
     write_report,
@@ -37,6 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
 
+    sha = git_sha()  # at the start: a commit made during a long run must not relabel it
     names = args.sets or ["core", "adversarial", "operations"]
     cases, hashes = [], {}
     for name in names:
@@ -62,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
             failed = [r for r in results if not r.passed]
             status = "pass" if not failed else "fail"
             paths = write_report(
-                "deterministic", hashes, env, results, status=status, directory=args.report_dir
+                "deterministic", hashes, env, results, status=status, directory=args.report_dir, sha=sha
             )
             print(
                 f"deterministic gate: {status.upper()}, {len(results) - len(failed)} of {len(results)}"
@@ -83,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
             entries,
             model_info={"models": llm.models, "location": llm.location, "runs": args.runs},
             directory=args.report_dir,
+            sha=sha,
         )
         for name, entry in zip(config_names(configs), entries, strict=True):
             print(f"model gate [{name}]: {entry.status.upper()}")

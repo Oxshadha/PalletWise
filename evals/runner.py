@@ -7,6 +7,7 @@ import subprocess
 from collections.abc import Callable, Iterable, Sequence
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass, field
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID, uuid4
@@ -385,8 +386,22 @@ def _grounding_violations(case: Case, trace: RunTrace, text_source: str | None) 
     """Unsupported numbers or identifiers in the text the user saw. Fixed messages carry none."""
     if text_source not in ("model", "template"):
         return []
-    results = [ResultEnvelope.model_validate(e["result"]) for e in trace.of("pw.result")]
+    results = [typed_result(e["result"]) for e in trace.of("pw.result")]
     return grounding_problems(trace.text, results, case.question)
+
+
+def typed_result(payload: dict[str, Any]) -> ResultEnvelope:
+    """A streamed result with its numbers as numbers again: decimals travel as JSON strings, and
+    grounding counts only numeric values, so without this every decimal in an answer would look
+    unsupported (found by the first valid baseline: "51811.20" flagged, though the runtime had
+    checked it against the real value)."""
+    envelope = ResultEnvelope.model_validate(payload)
+    numeric = {c.key for c in envelope.columns if c.type in ("integer", "number")}
+    rows = tuple(
+        {k: (Decimal(v) if k in numeric and isinstance(v, str) else v) for k, v in row.items()}
+        for row in envelope.rows
+    )
+    return envelope.model_copy(update={"rows": rows})
 
 
 def _score_run(env: EvalEnv, case: Case, trace: RunTrace, number: int) -> dict[str, Any]:
@@ -549,16 +564,25 @@ def _calls_by_stage(calls: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 # ---------------------------------------------------------------- reports (evals spec 7)
 
 
-def _git_sha() -> str:
+def git_sha() -> str:
+    """The commit the code under evaluation came from, read when a run starts (a commit made
+    during a long run must not relabel it), marked "+dirty" when tracked files have changes."""
     try:
-        return subprocess.run(
+        sha = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607 - git from PATH, report metadata only
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"],  # noqa: S607 - as above
             capture_output=True,
             text=True,
             check=True,
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
+    return f"{sha}+dirty" if dirty else sha
 
 
 def write_report(
@@ -571,10 +595,11 @@ def write_report(
     metrics: dict[str, Any] | None = None,
     model_info: dict[str, Any] | None = None,
     directory: Path = REPORTS_DIR,
+    sha: str | None = None,
 ) -> tuple[Path, Path]:
     directory.mkdir(parents=True, exist_ok=True)
     stamp = clock.wall_now().strftime("%Y-%m-%d")
-    sha = _git_sha()
+    sha = sha or git_sha()
     base = directory / f"{stamp}-{sha}-{level}"
     report = {
         "level": level,
@@ -670,11 +695,12 @@ def write_model_report(
     *,
     model_info: dict[str, Any],
     directory: Path = REPORTS_DIR,
+    sha: str | None = None,
 ) -> tuple[Path, Path]:
     """One report for one configuration, or a comparison of several on the same cases."""
     directory.mkdir(parents=True, exist_ok=True)
     stamp = clock.wall_now().strftime("%Y-%m-%d")
-    sha = _git_sha()
+    sha = sha or git_sha()
     suffix = "model" if len(entries) == 1 else "compare-" + "-vs-".join(e.name for e in entries)
     base = directory / f"{stamp}-{sha}-{suffix}"
     report = {
