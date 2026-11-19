@@ -41,7 +41,8 @@ test-results/
 *.sqlite
 
 # Original design files; the repository keeps copies in docs/design and apps/web/public/brand.
-UI/
+# Anchored to the root: on a case-insensitive file system a bare UI/ also matched src/shared/ui/.
+/UI/
 
 # Third-party Claude skill (Leonxlnx/taste-skill, MIT), installed locally, not vendored
 .claude/skills/design-taste-frontend/

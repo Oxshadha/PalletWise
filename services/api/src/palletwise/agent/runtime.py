@@ -189,13 +189,15 @@ class MeteredModel(WrapperModel):
                 response = await super().request(messages, model_settings, model_request_parameters)
             except BaseException:
                 span.set_attribute("pw.model.outcome", "ERROR")
-                await asyncio.to_thread(self._meter.settle, estimate, self._call(0, 0, 0, started, "ERROR"))
+                # Shielded: a second cancel during cleanup must not skip releasing the reservation.
+                failed = self._call(0, 0, 0, started, "ERROR")
+                await asyncio.shield(asyncio.to_thread(self._meter.settle, estimate, failed))
                 raise
             usage = response.usage
             self._state.input_tokens += usage.input_tokens
             self._state.output_tokens += usage.output_tokens
             call = self._call(usage.input_tokens, usage.output_tokens, usage.cache_read_tokens, started, "OK")
-            cost = await asyncio.to_thread(self._meter.settle, estimate, call)
+            cost = await asyncio.shield(asyncio.to_thread(self._meter.settle, estimate, call))
             span.set_attribute("pw.model.outcome", "OK")
             span.set_attribute("gen_ai.usage.input_tokens", usage.input_tokens)
             span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens)
