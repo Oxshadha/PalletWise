@@ -9,6 +9,7 @@ import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Literal
+from uuid import UUID
 
 from palletwise.auth.crypto import KeyRing, Sealed, pkce_challenge, random_token, token_hash
 from palletwise.auth.oidc import (
@@ -19,8 +20,10 @@ from palletwise.auth.oidc import (
     TokenSet,
 )
 from palletwise.auth.principal import Identity, Principal, Role, SignInRefused, identity_from_claims
+from palletwise.db.audit_repo import AuditEntry, AuditLog
 from palletwise.db.session_repo import SessionRecord, SessionRow, SessionStore, TenantNotProvisioned
 from palletwise.settings import SessionSettings
+from palletwise.telemetry.tracing import current_trace_id
 
 log = logging.getLogger(__name__)
 
@@ -82,11 +85,12 @@ class LoginResult:
 
 class AuthService:
     def __init__(
-        self, oidc: OidcClient, keys: KeyRing, settings: SessionSettings, store: SessionStore
+        self, oidc: OidcClient, keys: KeyRing, settings: SessionSettings, store: SessionStore, audit: AuditLog
     ) -> None:
         self._oidc = oidc
         self._keys = keys
         self._store = store
+        self._audit = audit
         self.settings = settings
         self._idle = timedelta(minutes=settings.idle_minutes)
         self._absolute = timedelta(hours=settings.absolute_hours)
@@ -128,7 +132,24 @@ class AuthService:
             # Do not leave a signed-in identity provider session behind a refused sign-in.
             self._oidc.logout(tokens.refresh_token)
             raise _login_failure(exc) from exc
+        # Sign-in is an audited action (NFR-AUD-03): no audit entry, no session.
+        try:
+            self._audit_session_event(identity.tenant, "auth.sign_in", "OK", identity.subject, identity.role)
+        except Exception as exc:
+            log.exception("sign-in audit failed; refusing the sign-in")
+            self._store.end(token_hash(session_id))
+            self._oidc.logout(tokens.refresh_token)
+            raise LoginFailed("unavailable") from exc
         return LoginResult(session_id, attempt.return_to)
+
+    def _audit_session_event(
+        self, tenant: UUID, action: str, outcome: str, subject: str, role: str | None
+    ) -> None:
+        self._audit.append(
+            tenant,
+            AuditEntry(actor_type="USER", action=action, outcome=outcome, trace_id=current_trace_id(),
+                       user_subject=subject, user_role=role),
+        )  # fmt: skip
 
     def _create_session(self, session_id: str, identity: Identity, tokens: TokenSet) -> None:
         id_hash = token_hash(session_id)
@@ -178,6 +199,7 @@ class AuthService:
         kept, but the request fails: access is never granted without revalidation.
         """
         ended_because: str | None = None
+        ended_owner: tuple[UUID, str] | None = None  # tenant and subject, for the audit entry
         result: tuple[Principal, str | None] | None = None
         with self._store.locked(id_hash, self._revalidate) as locked:
             if locked is None:
@@ -201,14 +223,24 @@ class AuthService:
                     # Disabled account, revoked session, lost role or broken claims.
                     ended_because = type(exc).__name__
                     locked.end()
+                    ended_owner = (locked.tenant, locked.subject)
                 else:
                     record = self._record(identity, tokens, id_hash)
                     if locked.store_refresh(record):
                         result = Principal(id_hash, identity), tokens.access_token
                     else:
                         ended_because = "tenant changed"
+                        ended_owner = (locked.tenant, locked.subject)
         if result is None:
             log.info("session ended at revalidation: %s", ended_because)
+            if ended_owner is not None:
+                self._audit_quietly(
+                    ended_owner[0],
+                    "auth.session_ended",
+                    f"REVALIDATION_{ended_because}",
+                    ended_owner[1],
+                    None,
+                )
             raise SessionEnded
         return result
 
@@ -219,5 +251,14 @@ class AuthService:
             return
         id_hash = token_hash(session_id)
         ended = self._store.end(id_hash)
-        if ended is not None:
-            self._oidc.logout(self._keys.open(Sealed(*ended), id_hash))
+        if ended is None:
+            return
+        self._oidc.logout(self._keys.open(Sealed(ended.refresh_token, ended.key_id), id_hash))
+        self._audit_quietly(ended.tenant, "auth.sign_out", "OK", ended.subject, ended.role)
+
+    def _audit_quietly(self, tenant: UUID, action: str, outcome: str, subject: str, role: str | None) -> None:
+        """For events where access is being removed: a failed audit must not keep it alive."""
+        try:
+            self._audit_session_event(tenant, action, outcome, subject, role)
+        except Exception:
+            log.exception("audit failed for %s", action)

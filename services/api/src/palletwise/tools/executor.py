@@ -1,0 +1,252 @@
+"""tools.executor: the only way a tool handler runs (agent spec 4, 6, 7; baseline 4).
+
+Every call, in order:
+1. kill switch: the agent registry row is read fresh; not active stops the run;
+2. arguments validated against the tool's input model (unknown fields refused);
+3. policy decision from OPA (user role and agent scopes, tenant and site); unreachable denies;
+4. the handler runs as `pw_agent_read` inside a transaction bound to the session's tenant;
+5. one audit entry, whatever the outcome. If the audit cannot be written, the result is
+   withheld: nothing leaves the executor unaudited.
+
+The model gets short, fixed messages for failures, never exception text or policy internals.
+"""
+
+import json
+import logging
+import time
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import Any, Literal, Protocol
+from uuid import UUID
+
+from pydantic import BaseModel, ValidationError
+
+from palletwise.db.agent_repo import AgentRecord, AgentRegistry
+from palletwise.db.audit_repo import AuditEntry, AuditLog
+from palletwise.db.connection import Connection, Pool, tenant_session
+from palletwise.policy import Decision, PolicyAgent, PolicyClient, PolicyRequest, PolicyUser
+from palletwise.telemetry.tracing import tracer
+
+log = logging.getLogger(__name__)
+
+MAX_AUDITED_ARGUMENTS = 2_000  # characters of raw, unvalidated arguments kept in the audit
+
+
+class Outcome(StrEnum):
+    OK = "OK"
+    UNKNOWN_TOOL = "UNKNOWN_TOOL"
+    VALIDATION_FAILED = "VALIDATION_FAILED"
+    DENIED = "DENIED"
+    ERROR = "ERROR"
+    SUSPENDED = "SUSPENDED"
+
+
+class ToolOutput(Protocol):
+    @property
+    def row_count(self) -> int: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ToolContext:
+    """What a handler may use: a read-only connection with the tenant already bound."""
+
+    conn: Connection
+    tenant: UUID
+    site: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class ToolSpec[I: BaseModel, O: ToolOutput]:
+    name: str
+    description: str
+    input_model: type[I]
+    scope: str
+    side_effect: Literal["read", "propose"]
+    handler: Callable[[ToolContext, I], O]
+
+    def __post_init__(self) -> None:
+        # Unknown arguments must fail, not be ignored (evals spec: unexpected parameters).
+        if self.input_model.model_config.get("extra") != "forbid":
+            raise ValueError(f"tool {self.name}: input model must forbid extra fields")
+
+
+class ToolRegistry:
+    def __init__(self, tools: Iterable[ToolSpec[Any, Any]]) -> None:
+        self._tools: dict[str, ToolSpec[Any, Any]] = {}
+        for tool in tools:
+            if tool.name in self._tools:
+                raise ValueError(f"tool {tool.name} registered twice")
+            self._tools[tool.name] = tool
+
+    def get(self, name: str) -> ToolSpec[Any, Any] | None:
+        return self._tools.get(name)
+
+    def __iter__(self) -> Any:
+        return iter(self._tools.values())
+
+
+@dataclass(frozen=True, slots=True)
+class RunContext:
+    """One copilot run on behalf of one signed-in user. Identity comes from the session."""
+
+    run_id: UUID
+    trace_id: str
+    subject: str
+    role: str
+    tenant: UUID
+    sites: tuple[UUID, ...]
+    site: UUID
+    agent_id: str = "copilot"
+    model: str | None = None
+
+
+class RunStopped(Exception):
+    """The run must end now (agent suspended or registry unreachable). Shown to the user."""
+
+    def __init__(self, reason: Literal["suspended", "registry_unavailable"]) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+class AuditUnavailable(Exception):
+    """The audit entry could not be written, so the call's result is withheld."""
+
+
+@dataclass(frozen=True, slots=True)
+class ToolCallResult:
+    outcome: Outcome
+    tool: str
+    output: Any = None
+    message: str | None = None  # for the model when the call did not succeed
+    reasons: tuple[str, ...] = field(default=())
+
+
+MESSAGES = {
+    Outcome.UNKNOWN_TOOL: "No tool with that name exists.",
+    Outcome.DENIED: "This action is not permitted for this user.",
+    Outcome.ERROR: "The tool failed. Do not retry with the same arguments.",
+}
+
+
+class ToolExecutor:
+    def __init__(
+        self,
+        registry: ToolRegistry,
+        agents: AgentRegistry,
+        policy: PolicyClient,
+        audit: AuditLog,
+        read_pool: Pool,
+    ) -> None:
+        self._registry = registry
+        self._agents = agents
+        self._policy = policy
+        self._audit = audit
+        self._read_pool = read_pool
+
+    def execute(self, run: RunContext, name: str, arguments: Mapping[str, Any]) -> ToolCallResult:
+        started = time.perf_counter()
+        with tracer.start_as_current_span("tool.execute", attributes={"pw.tool.name": name}) as span:
+            result, entry = self._execute(run, name, arguments, started)
+            span.set_attribute("pw.tool.outcome", result.outcome.value)
+        try:
+            self._audit.append(run.tenant, entry)
+        except Exception as exc:
+            log.exception("audit append failed for tool %s; result withheld", name)
+            raise AuditUnavailable from exc
+        if result.outcome is Outcome.SUSPENDED:
+            raise RunStopped("suspended")
+        return result
+
+    def _execute(
+        self, run: RunContext, name: str, arguments: Mapping[str, Any], started: float
+    ) -> tuple[ToolCallResult, AuditEntry]:
+        spec = self._registry.get(name)
+
+        def finish(
+            outcome: Outcome,
+            *,
+            agent: AgentRecord | None = None,
+            parameters: Any = None,
+            decision: Decision | None = None,
+            output: Any = None,
+            message: str | None = None,
+        ) -> tuple[ToolCallResult, AuditEntry]:
+            entry = AuditEntry(
+                actor_type="AGENT", action="tool.call", outcome=outcome.value, trace_id=run.trace_id,
+                site_id=run.site, user_subject=run.subject, user_role=run.role,
+                agent_id=run.agent_id, agent_version=agent.version if agent else None,
+                model=run.model, prompt_version=agent.prompt_version if agent else None,
+                run_id=run.run_id, scope=spec.scope if spec else None, tool=name,
+                parameters=parameters if parameters is not None else _raw_arguments(arguments),
+                decision=None if decision is None else ("ALLOW" if decision.allow else "DENY"),
+                deny_reasons=decision.reasons if decision and decision.reasons else None,
+                row_count=output.row_count if output is not None else None,
+                latency_ms=round((time.perf_counter() - started) * 1000),
+            )  # fmt: skip
+            reasons = decision.reasons if decision else ()
+            text = message or MESSAGES.get(outcome)
+            return ToolCallResult(outcome, name, output, text, reasons), entry
+
+        if spec is None:
+            return finish(Outcome.UNKNOWN_TOOL)
+
+        # 1. Kill switch, read at call time so a suspension stops the run at its next step.
+        try:
+            agent = self._agents.load(run.tenant, run.agent_id)
+        except Exception as exc:
+            log.warning("agent registry unavailable: %s", type(exc).__name__)
+            raise RunStopped("registry_unavailable") from exc
+        if agent is None or not agent.active:
+            return finish(Outcome.SUSPENDED, agent=agent)
+
+        # 2. Arguments.
+        try:
+            params = spec.input_model.model_validate(dict(arguments))
+        except ValidationError as exc:
+            problems = "; ".join(
+                f"{'.'.join(map(str, e['loc'])) or 'input'}: {e['msg']}" for e in exc.errors()
+            )
+            return finish(Outcome.VALIDATION_FAILED, agent=agent, message=f"Invalid arguments: {problems}")
+        normalized = params.model_dump(mode="json")
+
+        # 3. Policy.
+        decision = self._decide(run, spec, agent)
+        if not decision.allow:
+            return finish(Outcome.DENIED, agent=agent, parameters=normalized, decision=decision)
+
+        # 4. Handler, as pw_agent_read, bound to the session's tenant.
+        try:
+            with tenant_session(self._read_pool, run.tenant) as conn:
+                output = spec.handler(ToolContext(conn, run.tenant, run.site), params)
+        except Exception:
+            log.exception("tool %s failed", name)
+            return finish(Outcome.ERROR, agent=agent, parameters=normalized, decision=decision)
+        return finish(Outcome.OK, agent=agent, parameters=normalized, decision=decision, output=output)
+
+    def _decide(self, run: RunContext, spec: ToolSpec[Any, Any], agent: AgentRecord) -> Decision:
+        request = PolicyRequest(
+            user=PolicyUser(run.subject, run.role, str(run.tenant), tuple(str(s) for s in run.sites)),
+            action=spec.name,
+            scope=spec.scope,
+            resource_tenant=str(run.tenant),
+            resource_site=str(run.site),
+            agent=PolicyAgent(agent.id, agent.version, agent.status, agent.allowed_scopes),
+        )
+        with tracer.start_as_current_span(
+            "policy.decision", attributes={"pw.policy.scope": spec.scope}
+        ) as span:
+            decision = self._policy.decide(request)
+            span.set_attribute("pw.policy.allow", decision.allow)
+        return decision
+
+
+def _raw_arguments(arguments: Mapping[str, Any]) -> Any:
+    """Unvalidated arguments as audited: JSON-safe and bounded in size."""
+    try:
+        text = json.dumps(dict(arguments), default=str, sort_keys=True)
+    except (TypeError, ValueError):
+        return {"unserializable": True}
+    if len(text) > MAX_AUDITED_ARGUMENTS:
+        return {"truncated": text[:MAX_AUDITED_ARGUMENTS]}
+    return json.loads(text)

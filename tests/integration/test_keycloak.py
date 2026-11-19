@@ -28,6 +28,7 @@ from palletwise.api.security import SESSION_COOKIE
 from palletwise.auth.crypto import KeyRing
 from palletwise.auth.oidc import OidcClient
 from palletwise.auth.service import AuthService
+from palletwise.db.audit_repo import AuditLog
 from palletwise.db.connection import role_pool
 from palletwise.db.session_repo import SessionStore
 from palletwise.settings import DEMO_SITE_ID, DEMO_TENANT_ID, OidcSettings, SessionSettings, WebSettings
@@ -149,7 +150,13 @@ def app(
         WebSettings(public_origin=ORIGIN),
     )
     sessions = SessionSettings(keys="k1:" + base64.b64encode(os.urandom(32)).decode())
-    auth = AuthService(oidc, KeyRing(sessions.keys), sessions, SessionStore(role_pool("PW_APP")))
+    auth = AuthService(
+        oidc,
+        KeyRing(sessions.keys),
+        sessions,
+        SessionStore(role_pool("PW_APP")),
+        AuditLog(role_pool("PW_APP")),
+    )
     return TestClient(create_app(auth, WebSettings(public_origin=ORIGIN)), base_url=ORIGIN)
 
 

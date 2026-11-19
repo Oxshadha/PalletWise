@@ -65,9 +65,18 @@ def _touch(
     )
 
 
-def _end(conn: psycopg.Connection, id_hash: bytes) -> tuple[bytes, str] | None:
+@dataclass(frozen=True, slots=True)
+class EndedSession:
+    refresh_token: bytes
+    key_id: str
+    subject: str
+    role: str
+    tenant: UUID
+
+
+def _end(conn: psycopg.Connection, id_hash: bytes) -> EndedSession | None:
     row = conn.execute("SELECT * FROM pw.end_session(%s)", (id_hash,)).fetchone()
-    return (row[0], row[1]) if row else None
+    return EndedSession(*row) if row else None
 
 
 class LockedSession:
@@ -92,8 +101,8 @@ class LockedSession:
         ).fetchone()
         return bool(row and row[0])
 
-    def end(self) -> None:
-        _end(self._conn, self._id_hash)
+    def end(self) -> EndedSession | None:
+        return _end(self._conn, self._id_hash)
 
 
 class SessionStore:
@@ -127,8 +136,8 @@ class SessionStore:
         with self._pool.connection() as conn:
             return _touch(conn, id_hash, idle, revalidate)
 
-    def end(self, id_hash: bytes) -> tuple[bytes, str] | None:
-        """Deletes the session and returns its sealed refresh token and key id."""
+    def end(self, id_hash: bytes) -> EndedSession | None:
+        """Deletes the session; returns its sealed refresh token and owner."""
         with self._pool.connection() as conn:
             return _end(conn, id_hash)
 

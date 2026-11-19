@@ -108,3 +108,12 @@ class WebSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PW_", extra="ignore")
 
     public_origin: str = "http://localhost:8080"
+
+
+class PolicySettings(BaseSettings):
+    """The OPA decision endpoint (identity spec 6). Unreachable means deny."""
+
+    model_config = SettingsConfigDict(env_prefix="PW_OPA_", extra="ignore")
+
+    url: str = "http://opa:8181"
+    timeout_seconds: float = 2.0

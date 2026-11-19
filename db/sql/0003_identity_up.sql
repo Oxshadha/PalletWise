@@ -142,14 +142,14 @@ BEGIN
 END $$;
 
 -- Ends a session and returns its encrypted refresh token, so the caller can end the session
--- at the identity provider too.
+-- at the identity provider too, and who it belonged to, for the audit entry.
 CREATE FUNCTION pw.end_session(p_id_hash bytea)
-RETURNS TABLE (refresh_token bytea, key_id text)
+RETURNS TABLE (refresh_token bytea, key_id text, subject text, role text, tenant_id uuid)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pw, pg_temp
 AS $$
 BEGIN
   RETURN QUERY DELETE FROM pw.web_session s WHERE s.id_hash = p_id_hash
-               RETURNING s.refresh_token, s.key_id;
+               RETURNING s.refresh_token, s.key_id, s.subject, s.role, s.tenant_id;
 END $$;
 
 -- ------------------------------------------------------------ grants

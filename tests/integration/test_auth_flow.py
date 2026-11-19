@@ -28,6 +28,7 @@ from palletwise.api.security import LOGIN_COOKIE, SESSION_COOKIE
 from palletwise.auth.crypto import KeyRing, pkce_challenge, token_hash
 from palletwise.auth.oidc import OidcClient
 from palletwise.auth.service import AuthService
+from palletwise.db.audit_repo import AuditLog
 from palletwise.db.connection import role_pool
 from palletwise.db.session_repo import SessionStore
 from palletwise.settings import OidcSettings, SessionSettings, WebSettings
@@ -169,7 +170,13 @@ def env(database: dict[str, Any], connect_as: Connect) -> Generator[Env]:
         transport=httpx.MockTransport(idp.handle),
     )  # fmt: skip
     sessions = SessionSettings(keys="k1:" + base64.b64encode(os.urandom(32)).decode())
-    auth = AuthService(oidc, KeyRing(sessions.keys), sessions, SessionStore(role_pool("PW_APP")))
+    auth = AuthService(
+        oidc,
+        KeyRing(sessions.keys),
+        sessions,
+        SessionStore(role_pool("PW_APP")),
+        AuditLog(role_pool("PW_APP")),
+    )
     client = TestClient(create_app(auth, WebSettings(public_origin=ORIGIN)), base_url=ORIGIN)
     db = connect_as("postgres")
     db.autocommit = True
@@ -452,6 +459,21 @@ def test_state_changing_request_needs_our_origin(env: Env, headers: dict[str, st
     env.sign_in(env.user())
     assert env.client.post("/api/auth/logout", headers=headers).status_code == 403
     assert env.session_count() == 1
+
+
+def test_sign_in_and_sign_out_are_audited(env: Env) -> None:
+    subject = env.user()
+    env.sign_in(subject)
+    env.client.post("/api/auth/logout", headers={"Origin": ORIGIN})
+    rows = env.db.execute(  # superuser: RLS does not apply, so filter by tenant
+        "SELECT action, outcome, actor_type, user_subject, user_role FROM pw.audit_event"
+        " WHERE tenant_id = %s ORDER BY seq",
+        (env.tenant,),
+    ).fetchall()
+    assert rows == [
+        ("auth.sign_in", "OK", "USER", subject, "warehouse_manager"),
+        ("auth.sign_out", "OK", "USER", subject, "warehouse_manager"),
+    ]
 
 
 def test_sign_out_ends_both_sessions(env: Env) -> None:

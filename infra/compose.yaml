@@ -156,12 +156,16 @@ services:
       PW_OIDC_CLIENT_ID: palletwise-bff
       PW_OIDC_CLIENT_SECRET: ${KC_BFF_CLIENT_SECRET}
       PW_SESSION_KEYS: ${PW_SESSION_KEYS}
+      PW_OPA_URL: http://opa:8181
+      PW_AGENT_READ_USER: pw_agent_read
+      PW_AGENT_READ_PASSWORD: ${PW_AGENT_READ_PASSWORD}
     healthcheck:
       <<: *health-python
     depends_on:
       migrate: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
       keycloak: { condition: service_healthy }
+      opa: { condition: service_healthy }
 
   keycloak:
     image: ${KEYCLOAK_IMAGE}

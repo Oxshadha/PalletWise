@@ -15,6 +15,7 @@ from palletwise.auth.crypto import KeyRing
 from palletwise.auth.oidc import OidcClient
 from palletwise.auth.service import AuthService
 from palletwise.db import status_repo
+from palletwise.db.audit_repo import AuditLog
 from palletwise.db.connection import close_pools, role_pool
 from palletwise.db.session_repo import SessionStore
 from palletwise.settings import OidcSettings, SessionSettings, WebSettings
@@ -36,7 +37,8 @@ def build_auth_service() -> AuthService:
     web = WebSettings()
     sessions = SessionSettings()  # pyright: ignore[reportCallIssue]
     oidc = OidcClient(OidcSettings(), web)  # pyright: ignore[reportCallIssue]
-    return AuthService(oidc, KeyRing(sessions.keys), sessions, SessionStore(role_pool("PW_APP")))
+    pool = role_pool("PW_APP")
+    return AuthService(oidc, KeyRing(sessions.keys), sessions, SessionStore(pool), AuditLog(pool))
 
 
 @asynccontextmanager

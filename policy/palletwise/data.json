@@ -1,0 +1,23 @@
+{
+  "role_scopes": {
+    "warehouse_manager": [
+      "inventory.read",
+      "orders.read",
+      "proposal.create",
+      "proposal.approve",
+      "proposal.reject"
+    ],
+    "admin": [
+      "inventory.read",
+      "orders.read",
+      "admin.users.read",
+      "admin.agents.manage",
+      "admin.settings.manage",
+      "admin.audit.read",
+      "admin.usage.read",
+      "admin.simulation.control"
+    ]
+  },
+  "agent_forbidden_scopes": ["proposal.approve", "proposal.reject"],
+  "agent_forbidden_scope_prefixes": ["admin."]
+}

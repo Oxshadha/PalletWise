@@ -68,3 +68,15 @@ def tenant_transaction(conn: psycopg.Connection, tenant_id: UUID) -> Generator[p
     with conn.transaction():
         conn.execute("SELECT set_config('app.tenant_id', %s, true)", (str(tenant_id),))
         yield conn
+
+
+# Names for code outside palletwise.db, which never imports a driver (baseline 4.1).
+Pool = ConnectionPool
+Connection = psycopg.Connection
+
+
+@contextmanager
+def tenant_session(pool: ConnectionPool, tenant_id: UUID) -> Generator[psycopg.Connection]:
+    """A pooled connection with one transaction bound to the tenant."""
+    with pool.connection() as conn, tenant_transaction(conn, tenant_id):
+        yield conn

@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 COMPOSE := docker compose --env-file infra/images.env --env-file .env -f infra/compose.yaml
 
-.PHONY: up down logs ps reset-data lint lint-py lint-web test test-unit test-integration contracts golden check-env
+.PHONY: up down logs ps reset-data lint lint-py lint-web test test-unit test-integration test-policy contracts golden check-env
 
 check-env:
 	@test -f .env || { echo "Missing .env. Create it with: cp .env.example .env  (then replace every change-me value)"; exit 1; }
@@ -44,7 +44,7 @@ lint-web:
 	pnpm --filter @palletwise/web typecheck
 	pnpm --filter @palletwise/contracts typecheck
 
-test: test-unit test-integration
+test: test-unit test-integration test-policy
 	pnpm --filter @palletwise/web test
 
 test-unit:
@@ -52,6 +52,10 @@ test-unit:
 
 test-integration:
 	uv run pytest tests/integration -q
+
+# OPA policy tests with the pinned OPA image (CI uses the setup-opa action).
+test-policy:
+	docker run --rm -v "$(CURDIR)/policy:/policy:ro" "$$(grep -E '^OPA_IMAGE=' infra/images.env | cut -d= -f2-)" test /policy
 
 contracts:
 	uv run python scripts/export_openapi.py packages/contracts/openapi.json
