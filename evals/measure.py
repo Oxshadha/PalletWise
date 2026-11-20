@@ -153,6 +153,9 @@ class Gate:
     metric: str  # a key path into the metrics, such as "latency.model.first_headline_p95"
     op: str  # ">=" or "<=" or "=="
     threshold: float
+    # A reported gate is measured and shown against its limit but does not decide the run
+    # (product owner, 2026-11-20: cost is reported; quality and latency gate).
+    blocking: bool = True
 
 
 GATES: tuple[Gate, ...] = (
@@ -170,7 +173,7 @@ GATES: tuple[Gate, ...] = (
     Gate("latency", "latency.model.complete_p95", "<=", 8.0),
     Gate("latency", "latency.fast.first_highlight_p95", "<=", 1.0),
     Gate("latency", "latency.fast.complete_p95", "<=", 3.0),
-    Gate("cost", "cost.per_answer_p95_usd", "<=", 0.003),
+    Gate("cost", "cost.per_answer_p95_usd", "<=", 0.003, blocking=False),
 )
 
 
@@ -195,12 +198,15 @@ def check_gates(metrics: dict[str, Any]) -> list[dict[str, Any]]:
             verdict = "pass" if value <= gate.threshold else "fail"
         else:
             verdict = "pass" if value == gate.threshold else "fail"
+        if verdict == "fail" and not gate.blocking:
+            verdict = "over limit (reported)"
         out.append({**gate.__dict__, "value": value, "verdict": verdict})
     return out
 
 
 def combined_status(gates: list[dict[str, Any]]) -> str:
-    """Pass only when no gate fails, in any group (ADR 0001: no trading one for another)."""
+    """Pass only when no blocking gate fails, in any group (ADR 0001: no trading one for another).
+    Reported gates (cost) are shown with their limit and never decide the status."""
     failing = [g["metric"] for g in gates if g["verdict"] == "fail"]
     missing = [g["metric"] for g in gates if g["verdict"] == "no data"]
     if failing:

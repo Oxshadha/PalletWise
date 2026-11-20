@@ -167,6 +167,21 @@ Required facts become a hard gate at 100 percent, replacing "reported" in evals 
   - wording that drops a fact;
   - wording that arrives after the deadline.
 
+## Amendment, 2026-11-20 (product owner)
+
+After the baseline (`docs/quality/eval-reports/2026-11-19-410f457-compare-baseline-a-vs-baseline-b.md`:
+quality passes except required facts, the model path fails every latency milestone, cost p95
+0.009 to 0.010 USD per answer), the product owner decided that **today's cost is acceptable** and that
+the work focuses on **quality and latency**. Cost is a business lever to reduce later.
+
+- The cost limit (NFR-CST-03, 0.003 USD p95 per answer) stays **measured and reported** in every
+  evaluation, with every model call counted as in section 5, but it **no longer blocks** a run. The
+  combined status is decided by the quality and latency gates.
+- The runtime changes are ordered by their effect on quality and latency: live progress, headline
+  first (with a better query headline), hedged tool-choice calls, then the wording model, which is
+  kept if it improves latency without lowering quality, whatever its cost effect.
+- Hedging still counts the losing call's cost, so the report shows what latency costs.
+
 ## Status
 
 Accepted, 2026-11-19, by the product owner, with the conditions above. Implementation is gated on the

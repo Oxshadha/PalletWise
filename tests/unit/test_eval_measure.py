@@ -148,11 +148,21 @@ def passing_metrics() -> dict:  # type: ignore[type-arg]
     }
 
 
-def test_all_three_groups_must_pass_together() -> None:
+def test_quality_and_latency_must_pass_together() -> None:
     metrics = passing_metrics()
     assert combined_status(check_gates(metrics)) == "pass"
-    metrics["cost"]["per_answer_p95_usd"] = 0.0031
-    assert combined_status(check_gates(metrics)) == "fail: cost.per_answer_p95_usd"
+    metrics["latency"]["model"]["complete_p95"] = 8.1
+    assert combined_status(check_gates(metrics)) == "fail: latency.model.complete_p95"
+
+
+def test_cost_is_reported_against_its_limit_but_does_not_decide() -> None:
+    """Product owner, 2026-11-20: cost is measured and reported; quality and latency gate."""
+    metrics = passing_metrics()
+    metrics["cost"]["per_answer_p95_usd"] = 0.0099
+    gates = check_gates(metrics)
+    cost = next(g for g in gates if g["metric"] == "cost.per_answer_p95_usd")
+    assert cost["verdict"] == "over limit (reported)" and not cost["blocking"]
+    assert combined_status(gates) == "pass"
 
 
 def test_facts_below_100_percent_fail_quality() -> None:
@@ -175,7 +185,7 @@ def test_the_gates_are_the_approved_ones() -> None:
     assert by_metric["latency.model.first_highlight_p95"] == ("<=", 3.0)
     assert by_metric["latency.model.first_headline_p95"] == ("<=", 4.0)
     assert by_metric["latency.model.complete_p95"] == ("<=", 8.0)
-    assert by_metric["cost.per_answer_p95_usd"] == ("<=", 0.003)
+    assert by_metric["cost.per_answer_p95_usd"] == ("<=", 0.003)  # reported, not blocking
     assert by_metric["facts_present"] == (">=", 1.0)
     assert by_metric["grounding_violations"] == ("==", 0)
 

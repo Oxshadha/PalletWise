@@ -198,7 +198,7 @@
 |---|---|---|---|
 | NFR-CST-01 | Must | Token usage and estimated cost are recorded per request, user, tool and model. | Recorded token totals reconcile with provider-reported usage within 5 percent. |
 | NFR-CST-02 | Must | The agent's daily token budget is enforced. When it is reached, the copilot falls back to fast path answers and says so. | Test with a low budget. |
-| NFR-CST-03 | Must | Estimated model cost per answer p95 at most 0.003 USD, a fixed hard limit. Every model call of the answer counts, including fallback, hedged, discarded and cancelled calls; a call cancelled before usage is reported is charged an upper bound (ADR 0001). | Gated in the model evaluation run together with quality and latency. |
+| NFR-CST-03 | Should | Estimated model cost per answer p95 at most 0.003 USD, measured and reported in every evaluation (not blocking since 2026-11-20, ADR 0001 amendment). Every model call of the answer counts, including fallback, hedged, discarded and cancelled calls; a call cancelled before usage is reported is charged an upper bound (ADR 0001). | Reported in every model evaluation run beside the quality and latency gates. |
 
 ### 3.8 Observability (OBS)
 
@@ -251,3 +251,4 @@ Resolved: Q1, what happens to an approved proposal in v1. Decision (2026-11-18):
 | 2026-11-18 | Q1 resolved: human-approved execution against the simulator in v1. Added FR-PRP-09 to FR-PRP-14 and FR-SIM-08, extended FR-PRP-03 states. |
 | 2026-11-18 | Review round: SUBMITTED meaning and expiry trigger (FR-PRP-03), cycle-count validation (FR-PRP-09), unknown-outcome reconciliation (FR-PRP-10), cycle-count responsibility (FR-PRP-14), settings versioning (FR-ADM-04), kill-switch precedence (FR-ADM-03), estimated cost (FR-ADM-06, NFR-CST-01), working-set rules (FR-COP-06), answer feedback (FR-COP-14), map state layering (FR-MAP-03), score normalization (FR-EXC-02), per-day ramp (FR-FES-02), projection rules (FR-FES-05), clock consistency (FR-SIM-09), least-privilege roles for propose tools (NFR-SEC-04), wider isolation tests (NFR-SEC-03), audit retention segments (NFR-AUD-04), measurement conditions (NFR-PERF-07), Vertex-available model comparison (NFR-QLT-03), screen sizes (NFR-UX-04). |
 | 2026-11-19 | ADR 0001 (balanced answer runtime), approved by the product owner: NFR-PERF-02 replaces "first text p95 at most 2 s" with four independent milestones (first progress, first map highlights, first headline, complete answer); new NFR-CST-03, a 0.003 USD p95 cost limit per answer. |
+| 2026-11-20 | Product owner: today's cost is acceptable; quality and latency gate. NFR-CST-03 becomes Should, measured and reported, not blocking (ADR 0001 amendment). |
