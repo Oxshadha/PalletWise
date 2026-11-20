@@ -834,3 +834,59 @@ def test_the_agent_thinking_level_comes_from_the_configuration() -> None:
     assert runtime().agent_settings().get("thinking") == "low"
     minimal = runtime(RuntimeConfig(agent_thinking="minimal")).agent_settings()
     assert minimal.get("thinking") == "minimal" and minimal.get("max_tokens") == DEFAULT_MAX_OUTPUT
+
+
+# ---------------------------------------------------------------- answer deadline and late wording
+
+
+def test_a_product_name_with_a_number_is_grounded_when_quoted() -> None:
+    """Eval finding: "Soda Water 1.5L Value Pack" made a template answer look ungrounded."""
+    from palletwise.agent.guardrails import grounding_problems
+
+    result = contents_result().model_copy(
+        update={"rows": ({"sku": "SKU-229", "name": "Soda Water 1.5L Value Pack", "on_hand": 352},)}
+    )
+    assert grounding_problems("SKU-229 (Soda Water 1.5L Value Pack) has 352 on hand.", [result], "") == []
+    assert grounding_problems("SKU-229 has 353 on hand.", [result], "") == ["number 353"]
+
+
+def deadline_run(
+    model: FunctionModel, config: RuntimeConfig, run_timeout: float = 10
+) -> tuple[list[RunEvent], RunState, FakeMeter]:
+    meter, state = FakeMeter(), RunState()
+    runtime = CopilotRuntime(
+        v1_tools(), FakeGateway(), FakeProvider(gemini_flash=model), run_timeout=run_timeout, config=config
+    )
+
+    async def collect() -> list[RunEvent]:
+        return [e async for e in runtime.run(request("Which bins hold the wireless mouse?"), meter, state)]
+
+    return asyncio.run(collect()), state, meter
+
+
+def test_a_run_that_times_out_after_its_result_answers_with_the_template() -> None:
+    """Eval finding: the data was in and the headline shown, then the run timed out with an error."""
+    events, state, _ = deadline_run(slow_tool_then_say("late", 5.0), RuntimeConfig(), run_timeout=0.3)
+    assert "RUN_ERROR" not in types(events) and state.outcome == "ANSWER"
+    assert text_of(events) == TEMPLATE and state.text_source == "template"
+
+
+def test_wording_later_than_the_answer_deadline_gives_way_to_the_template() -> None:
+    config = RuntimeConfig(headline_first=True, headline_after_s=0.05, answer_deadline_s=0.2)
+    events, state, meter = deadline_run(slow_tool_then_say("SKU-102 is in A8-01-02.", 5.0), config)
+    assert text_of(events) == TEMPLATE and state.text_source == "template" and state.outcome == "ANSWER"
+    assert [c.outcome for c in meter.settled][-1] == "CANCELLED"  # the late call is still charged
+    assert meter.reserved == 0
+
+
+def test_the_answer_deadline_waits_for_a_result_before_it_applies() -> None:
+    async def slow_choice(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if not any(isinstance(p, ToolReturnPart) for m in messages for p in getattr(m, "parts", [])):
+            await asyncio.sleep(0.4)  # past the deadline, with no result yet
+            return ModelResponse(parts=[ToolCallPart("find_product_locations", {"sku": "SKU-102"})])
+        await asyncio.sleep(5.0)
+        return ModelResponse(parts=[TextPart("late")])
+
+    config = RuntimeConfig(answer_deadline_s=0.1)
+    events, state, _ = deadline_run(FunctionModel(slow_choice), config)
+    assert state.outcome == "ANSWER" and text_of(events) == TEMPLATE  # answered once the result came

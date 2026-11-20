@@ -10,7 +10,7 @@ import contextvars
 import functools
 import json
 import logging
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -131,6 +131,10 @@ class RuntimeConfig:
     # ready this long after the run started, and model wording is shown only with the key facts.
     headline_first: bool = False
     headline_after_s: float = 3.0
+    # Answer deadline (ADR 0001 section 6): once a result is in and this long has passed since the
+    # run started, the run finishes with the result's template answer instead of waiting for the
+    # model's wording. None: wait for the model (the baseline).
+    answer_deadline_s: float | None = None
 
     def __post_init__(self) -> None:
         unbuilt = [
@@ -145,6 +149,8 @@ class RuntimeConfig:
             raise ValueError("headline_after_s must be more than 0")
         if self.hedge_after_s is not None and self.hedge_after_s <= 0:
             raise ValueError("hedge_after_s must be more than 0")
+        if self.answer_deadline_s is not None and self.answer_deadline_s <= 0:
+            raise ValueError("answer_deadline_s must be more than 0")
         if unbuilt:
             raise ValueError(f"runtime choices not built yet: {', '.join(unbuilt)}")
 
@@ -157,6 +163,7 @@ class RuntimeConfig:
             "parallel_tools": self.parallel_tools,
             "headline_first": self.headline_first,
             "headline_after_s": self.headline_after_s if self.headline_first else None,
+            "answer_deadline_s": self.answer_deadline_s,
         }
 
 
@@ -526,7 +533,18 @@ class CopilotRuntime:
             except _Stopped as stop:
                 await fail(stop.code, stop.message)
             except TimeoutError:
-                await fail("TIMEOUT", "The answer took too long. Please try again.")
+                last = state.results[-1] if state.results else None
+                if last is not None and not state.answered:
+                    # The data is in; only the wording was late. Answer with the result's template
+                    # (grounded, every key fact) instead of discarding it with an error.
+                    log.info("run timed out after its result; answering with the template")
+                    tool, result = last
+                    await self._finish(
+                        state, events, queue, templates.template_answer(tool, result),
+                        card_outcome(result), tool, result, source="template",
+                    )  # fmt: skip
+                else:
+                    await fail("TIMEOUT", "The answer took too long. Please try again.")
             except Exception:
                 # Anything unexpected ends the run cleanly; details stay in the log and trace.
                 log.exception("copilot run failed")
@@ -581,7 +599,11 @@ class CopilotRuntime:
         if lite is not None:
             await self._status(events, queue, "writing")
             try:
-                text = await self._word(request, route.tool, result, lite, meter, state)
+                text = await self._until_deadline(
+                    state, self._word(request, route.tool, result, lite, meter, state)
+                )
+            except _PastDeadline:
+                text = None
             except BudgetExhausted:
                 text = f"{templates.template_answer(route.tool, result)} {BUDGET_TEXT}"
             except Exception:
@@ -689,25 +711,31 @@ class CopilotRuntime:
         )
         prompt = self._user_prompt(request)
         try:
-            answer = await agent.run(prompt, usage_limits=limits)
+            answer = await self._until_deadline(state, agent.run(prompt, usage_limits=limits))
             text = "" if _truncated(answer) else normalize_dashes(answer.output.strip())
             results = [r for _, r in state.results]
             problems = grounding_problems(text, results, request.question)
             if problems:
                 metrics.guardrail_triggers.labels(kind="grounding").inc()
                 log.info("answer not grounded, regenerating: %s", problems)
-                retry = await agent.run(
-                    f"Your answer used values not in the tool results ({', '.join(problems)}). "
-                    "Rewrite it using only values from the tool results.",
-                    message_history=answer.all_messages(),
-                    usage_limits=limits,
-                    usage=answer.usage,  # one step budget for the whole run, retry included
+                retry = await self._until_deadline(
+                    state,
+                    agent.run(
+                        f"Your answer used values not in the tool results ({', '.join(problems)}). "
+                        "Rewrite it using only values from the tool results.",
+                        message_history=answer.all_messages(),
+                        usage_limits=limits,
+                        usage=answer.usage,  # one step budget for the whole run, retry included
+                    ),
                 )
                 text = "" if _truncated(retry) else normalize_dashes(retry.output.strip())
                 # The retry may have called tools: check against every result of the run.
                 if grounding_problems(text, [r for _, r in state.results], request.question):
                     text = ""
         except BudgetExhausted:
+            text = ""
+        except _PastDeadline:
+            log.info("answer deadline passed with a result in; answering with the template")
             text = ""
         except UsageLimitExceeded:
             log.info("run stopped at the step limit")
@@ -800,6 +828,24 @@ class CopilotRuntime:
 
     # ------------------------------------------------------------ headline first (ADR 0001 section 6)
 
+    async def _until_deadline[T](self, state: RunState, work: Awaitable[T]) -> T:
+        """Awaits model work, unless the answer deadline passes while a result is in: then the work
+        is cancelled (its model calls are still charged) and _PastDeadline is raised, so the run
+        finishes with the result's template answer."""
+        task = asyncio.ensure_future(work)
+        limit = self.config.answer_deadline_s
+        try:
+            while limit is not None and not task.done():
+                remaining = state.started + limit - clock.monotonic()
+                if remaining <= 0 and state.results:
+                    raise _PastDeadline
+                await asyncio.wait({task}, timeout=remaining if remaining > 0 else 0.1)
+            return await task
+        finally:
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
     def _drops_key_facts(self, tool: str, result: ResultEnvelope, text: str) -> bool:
         """Model wording that leaves out a key fact of its result is not shown; the template,
         which states every key fact, is shown instead (no retry: a retry costs a round trip)."""
@@ -890,6 +936,10 @@ class CopilotRuntime:
             else [s for s in STARTERS if s.tool in self._tool_names]
         )
         await queue.put(events.make("pw.suggestions", suggestions=[s.as_json() for s in state.suggestions]))
+
+
+class _PastDeadline(Exception):
+    """The answer deadline passed with a result in: answer with its template (ADR 0001 section 6)."""
 
 
 class _Stopped(Exception):

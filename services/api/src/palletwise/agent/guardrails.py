@@ -4,6 +4,7 @@ These are boundaries, not judgments: they never grant a permission, and the outp
 only decide whether model text may be shown or must be replaced by the template answer.
 """
 
+import contextlib
 import re
 import unicodedata
 from collections.abc import Iterable
@@ -82,6 +83,12 @@ def _allowed_numbers(results: Iterable[ResultEnvelope], question: str) -> set[De
                     allowed.add(d)
                 elif isinstance(value, datetime):
                     allowed |= _time_parts(value, result.evidence.time_zone)
+                elif isinstance(value, str):
+                    # A number inside a name or code ("Soda Water 1.5L Value Pack") is quoted from
+                    # the data, not stated as a quantity; without this, quoting the name fails.
+                    for token in _numbers_in(value):
+                        with contextlib.suppress(InvalidOperation):
+                            allowed.add(_parse(token))
         # The parameters the tool ran with ("the last 30 days", "top 5") are facts of the answer.
         for value in result.normalized_request.values():
             if (d := _decimal(value)) is not None:

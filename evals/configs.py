@@ -15,6 +15,11 @@ CONFIGS: dict[str, RuntimeConfig] = {
     # ADR 0001 change 5 on top: the fallback model starts alongside a primary that has not answered
     # in 4 s (about the healthy p95 of a model call), and the first good response wins.
     "headline-hedged": RuntimeConfig(name="headline-hedged", headline_first=True, hedge_after_s=4.0),
+    # The answer deadline of ADR 0001 section 6 on top: 7 s after the question, with a result in,
+    # the template answer is final unless the model's wording has arrived (target: 8 s p95).
+    "fast-answer": RuntimeConfig(
+        name="fast-answer", headline_first=True, hedge_after_s=4.0, answer_deadline_s=7.0
+    ),
     # ADR 0001 change 4 on top: minimal thinking for the agent, kept only if tool and parameter
     # accuracy hold.
     "headline-hedged-minimal": RuntimeConfig(
