@@ -11,7 +11,7 @@ from palletwise.contracts.results import ResultEnvelope, ResultStatus
 
 MAX_LISTED = 3
 # In the wording cache key: bump when a template or a key fact changes meaning.
-TEMPLATES_VERSION = "templates.v4"
+TEMPLATES_VERSION = "templates.v6"
 
 
 def _plural(count: int, one: str, many: str) -> str:
@@ -180,6 +180,9 @@ def _query(result: ResultEnvelope) -> str:
         )
         return f"In total: {values}."
     measure = next((c for c in result.columns[1:] if c.type in ("integer", "number")), None)
+    if n == 1 and measure is not None and not result.truncated:
+        r = result.rows[0]  # one row reads as a statement: "Beverages: days of cover 12.2."
+        return f"{r[first.key]}: {measure.label.lower()} {r[measure.key]}."
     one, many = QUERY_NOUNS.get(first.key, ("row", "rows"))
     if measure is None:
         listed = ", ".join(str(r[first.key]) for r in result.rows[:MAX_LISTED])
@@ -247,6 +250,8 @@ def key_facts(tool: str, result: ResultEnvelope) -> tuple[str, ...]:
                 facts = []
             elif result.columns[0].type in ("integer", "number"):
                 facts = [str(r[result.columns[0].key])]  # totals: the first measure's value
+            elif result.row_count == 1 and not result.truncated:
+                facts = [str(r[result.columns[0].key])]  # one row: its name; no count to state
             else:
                 facts = [_how_many(result), str(r[result.columns[0].key])]
         case _:
@@ -258,4 +263,5 @@ def template_answer(tool: str, result: ResultEnvelope) -> str:
     """The answer for a result: its message for every non-OK status, else the tool template."""
     if result.status is not ResultStatus.OK or tool not in TEMPLATES:
         return result.message or "Here is the result."
-    return TEMPLATES[tool](result)
+    text = TEMPLATES[tool](result)
+    return text[:1].upper() + text[1:]  # "More than 20 products found", never a lowercase start

@@ -166,3 +166,51 @@ def test_a_zone_flagged_for_over_capacity_locations_is_not_called_close_to_capac
         "while the zone as a whole is at 4.1 percent."
     )
     assert templates.key_facts("get_capacity_hotspots", result) == ("Chilled", "Reserve", "over capacity")
+
+
+def test_a_template_answer_starts_with_a_capital_letter() -> None:
+    """Browser check: "more than 20 products found, led by ..." for a result at the row limit."""
+    from datetime import UTC, datetime
+
+    from palletwise.contracts.results import Column, Evidence, ResultEnvelope, ResultStatus
+
+    evidence = Evidence(as_of=datetime(2026, 4, 1, 0, 30, tzinfo=UTC), time_zone="Asia/Colombo",
+                        settings_version_id=None, data_as_of=None, freshness=(), how_computed=())  # fmt: skip
+    result = ResultEnvelope(
+        status=ResultStatus.OK,
+        columns=(
+            Column(key="product", label="Product", type="text"),
+            Column(key="stock_value", label="Stock value", type="number"),
+        ),
+        rows=tuple({"product": f"SKU-{100 + i}", "stock_value": 60000 + i} for i in range(20)),
+        truncated=True,
+        evidence=evidence,
+        normalized_request={"tool": "query_inventory"},
+    )  # fmt: skip
+    assert templates.template_answer("query_inventory", result).startswith("More than 20 products found")
+
+
+def test_a_one_row_query_reads_as_a_statement() -> None:
+    """Browser check: "1 category found, led by Beverages (days of cover 12.2)."."""
+    from datetime import UTC, datetime
+
+    from palletwise.contracts.results import Column, Evidence, ResultEnvelope, ResultStatus
+
+    evidence = Evidence(as_of=datetime(2026, 4, 1, 0, 30, tzinfo=UTC), time_zone="Asia/Colombo",
+                        settings_version_id=None, data_as_of=None, freshness=(), how_computed=())  # fmt: skip
+    result = ResultEnvelope(
+        status=ResultStatus.OK,
+        columns=(
+            Column(key="category", label="Category", type="text"),
+            Column(key="days_of_cover", label="Days of cover", type="number"),
+        ),
+        rows=({"category": "Beverages", "days_of_cover": 12.2},),
+        evidence=evidence,
+        normalized_request={"tool": "query_inventory"},
+    )
+    text = templates.template_answer("query_inventory", result)
+    assert text == "Beverages: days of cover 12.2."
+    from palletwise.agent.guardrails import facts_missing
+
+    assert templates.key_facts("query_inventory", result) == ("Beverages",)
+    assert facts_missing(templates.key_facts("query_inventory", result), text) == []
