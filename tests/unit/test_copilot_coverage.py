@@ -133,6 +133,11 @@ def test_every_template_renders_a_grounded_answer_without_a_model(
     assert text and text != "Here is the result."
     assert not any(d in text for d in (chr(0x2013), chr(0x2014)))
     assert grounding_problems(text, [result], "") == [], text
+    # The headline-first fallback relies on this: a template states all of its own key facts.
+    from palletwise.agent.guardrails import facts_missing
+
+    facts = templates.key_facts(tool, result)
+    assert facts and facts_missing(facts, text) == [], (facts, text)
 
 
 def test_a_zone_flagged_for_over_capacity_locations_is_not_called_close_to_capacity() -> None:
@@ -157,5 +162,7 @@ def test_a_zone_flagged_for_over_capacity_locations_is_not_called_close_to_capac
     assert "close to capacity" not in text
     assert text == (
         "2 zones need attention for capacity. Zone D (Chilled) has 1 location over capacity, "
-        "while the zone as a whole is at 6.2 percent."
+        "while the zone as a whole is at 6.2 percent. Zone B (Reserve) has 2 locations over capacity, "
+        "while the zone as a whole is at 4.1 percent."
     )
+    assert templates.key_facts("get_capacity_hotspots", result) == ("Chilled", "Reserve", "over capacity")

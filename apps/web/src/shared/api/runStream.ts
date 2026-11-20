@@ -22,6 +22,7 @@ export type RunEvent = Base &
     | { type: "TOOL_CALL_START"; tool_call_id: string; tool: string }
     | { type: "TOOL_CALL_END"; tool_call_id: string; tool: string; outcome: string }
     | { type: "pw.status"; stage: string; label: string }
+    | { type: "pw.headline"; text: string }
     | { type: "pw.result"; tool_call_id: string; result: ResultEnvelope }
     | { type: "TEXT_MESSAGE_START"; message_id: string }
     | { type: "TEXT_MESSAGE_CONTENT"; message_id: string; delta: string }

@@ -137,3 +137,29 @@ def grounding_problems(text: str, results: list[ResultEnvelope], question: str) 
         if identifier.upper() not in known:
             problems.append(f"identifier {identifier}")
     return problems
+
+
+# ---------------------------------------------------------------- required facts (ADR 0001 section 4)
+
+_GROUPED = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?")
+_DECIMAL = re.compile(r"\d+\.\d+")
+
+
+def _plain_number(match: re.Match[str]) -> str:
+    value = match.group(0).replace(",", "")
+    if "." in value:
+        value = value.rstrip("0").rstrip(".")
+    return value
+
+
+def normalize_fact_text(text: str) -> str:
+    """Case, spacing and number formatting normalized: "1,419,241.20", "1419241.2" and
+    "1419241.20" read the same. Identifiers such as SKU-102 and units are left as written."""
+    lowered = " ".join(str(text).lower().split())
+    return _DECIMAL.sub(_plain_number, _GROUPED.sub(_plain_number, lowered))
+
+
+def facts_missing(facts: Iterable[str], text: str) -> list[str]:
+    """The required facts the text does not state (shared by the runtime and the evaluation)."""
+    body = normalize_fact_text(text)
+    return [f for f in facts if normalize_fact_text(f) not in body]

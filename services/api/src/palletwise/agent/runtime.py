@@ -28,7 +28,7 @@ from pydantic_ai.settings import ModelSettings
 from palletwise import clock
 from palletwise.agent import fast_path, progress, templates
 from palletwise.agent.events import EventCounter, RunEvent
-from palletwise.agent.guardrails import grounding_problems, normalize_dashes
+from palletwise.agent.guardrails import facts_missing, grounding_problems, normalize_dashes
 from palletwise.agent.suggestions import STARTERS, Suggestion, suggest
 from palletwise.contracts.results import ResultEnvelope, ResultStatus
 from palletwise.llm import LLMProvider, ResolvedModel
@@ -125,7 +125,10 @@ class RuntimeConfig:
     agent_thinking: Literal["low"] = "low"
     hedge_after_s: float | None = None  # hedged tool-choice calls; None: off
     parallel_tools: bool = False
+    # Headline first (ADR 0001 section 6): the template headline is sent when the answer is not
+    # ready this long after the run started, and model wording is shown only with the key facts.
     headline_first: bool = False
+    headline_after_s: float = 3.0
 
     def __post_init__(self) -> None:
         unbuilt = [
@@ -134,12 +137,13 @@ class RuntimeConfig:
                 ("wording_model", self.wording_model),
                 ("hedge_after_s", self.hedge_after_s),
                 ("parallel_tools", self.parallel_tools or None),
-                ("headline_first", self.headline_first or None),
             )
             if value is not None
         ]
         if self.agent_thinking != "low":
             unbuilt.append("agent_thinking")
+        if self.headline_after_s <= 0:
+            raise ValueError("headline_after_s must be more than 0")
         if unbuilt:
             raise ValueError(f"runtime choices not built yet: {', '.join(unbuilt)}")
 
@@ -151,6 +155,7 @@ class RuntimeConfig:
             "hedge_after_s": self.hedge_after_s,
             "parallel_tools": self.parallel_tools,
             "headline_first": self.headline_first,
+            "headline_after_s": self.headline_after_s if self.headline_first else None,
         }
 
 
@@ -187,6 +192,12 @@ class RunState:
     input_tokens: int = 0
     output_tokens: int = 0
     tool_calls: int = 0
+    # Headline first: when the run started, the headline sent before the answer (at most one), the
+    # task that will send it, and whether the final answer has been written.
+    started: float = 0.0
+    headline: str | None = None
+    headline_task: "asyncio.Task[None] | None" = None
+    answered: bool = False
 
     @property
     def entities(self) -> list[dict[str, Any]]:
@@ -417,6 +428,7 @@ class CopilotRuntime:
     async def run(self, request: RunRequest, meter: ModelMeter, state: RunState) -> AsyncIterator[RunEvent]:
         """The run's events in order. Raises CancelledError when the run is cancelled."""
         events = EventCounter()
+        state.started = clock.monotonic()
         route = self._route(request)
         lite = self._provider.model(LITE_MODEL) if route else None
         primary = None if route else self._provider.model(request.agent.primary_model)
@@ -451,6 +463,8 @@ class CopilotRuntime:
                 log.exception("copilot run failed")
                 await fail("INTERNAL", "Something went wrong. Please try again.")
             finally:
+                if state.headline_task is not None and not state.headline_task.done():
+                    state.headline_task.cancel()
                 await queue.put(None)
 
         task = asyncio.create_task(work())
@@ -503,6 +517,8 @@ class CopilotRuntime:
                 text = f"{templates.template_answer(route.tool, result)} {BUDGET_TEXT}"
             except Exception:
                 log.warning("wording model failed; using the template", exc_info=True)
+            if text and self._drops_key_facts(route.tool, result, text):
+                text = None
             if text is None or state.budget_exhausted:
                 state.path = "B"
         await self._finish(state, events, queue, text or templates.template_answer(route.tool, result),
@@ -628,6 +644,8 @@ class CopilotRuntime:
             text = ""
 
         last = state.results[-1] if state.results else None
+        if text and last is not None and self._drops_key_facts(last[0], last[1], text):
+            text = ""
         if text and last is not None:
             await self._finish(
                 state, events, queue, text, card_outcome(last[1]), last[0], last[1], source="model"
@@ -700,7 +718,48 @@ class CopilotRuntime:
                 events.make("pw.result", tool_call_id=call_id, result=envelope.model_dump(mode="json"))
             )
         await self._status(events, queue, "reviewing")
+        if self.config.headline_first and result.outcome is Outcome.OK:
+            self._schedule_headline(state, events, queue, name, result.output)
         return result
+
+    # ------------------------------------------------------------ headline first (ADR 0001 section 6)
+
+    def _drops_key_facts(self, tool: str, result: ResultEnvelope, text: str) -> bool:
+        """Model wording that leaves out a key fact of its result is not shown; the template,
+        which states every key fact, is shown instead (no retry: a retry costs a round trip)."""
+        if not self.config.headline_first:
+            return False
+        missing = facts_missing(templates.key_facts(tool, result), text)
+        if missing:
+            metrics.guardrail_triggers.labels(kind="facts").inc()
+            log.info("answer leaves out key facts %s; showing the template", missing)
+        return bool(missing)
+
+    def _schedule_headline(
+        self,
+        state: RunState,
+        events: EventCounter,
+        queue: "asyncio.Queue[RunEvent | None]",
+        tool: str,
+        result: ResultEnvelope,
+    ) -> None:
+        """Sends the headline of the latest result at the deadline, unless the answer is written
+        first. A later result before the deadline replaces the pending one; once sent, a headline
+        is never replaced by another headline (no flicker)."""
+        if state.answered or state.headline is not None:
+            return
+        if state.headline_task is not None and not state.headline_task.done():
+            state.headline_task.cancel()
+        delay = max(0.0, state.started + self.config.headline_after_s - clock.monotonic())
+
+        async def send() -> None:
+            await asyncio.sleep(delay)
+            if state.answered or state.headline is not None:
+                return
+            state.headline = normalize_dashes(templates.template_answer(tool, result))
+            await queue.put(events.make("pw.headline", text=state.headline))
+
+        state.headline_task = asyncio.create_task(send())
 
     @staticmethod
     async def _status(
@@ -740,6 +799,9 @@ class CopilotRuntime:
         *,
         source: Literal["model", "template", "message"] = "message",
     ) -> None:
+        state.answered = True
+        if state.headline_task is not None and not state.headline_task.done():
+            state.headline_task.cancel()
         text = normalize_dashes(text)
         state.answer_text, state.outcome, state.text_source = text, outcome, source
         message_id = "answer"  # one answer message per run

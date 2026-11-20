@@ -92,19 +92,22 @@ def _zone_summary(result: ResultEnvelope) -> str:
     )
 
 
+def _capacity_zone(r: dict[str, Any]) -> str:
+    zone, over = f"Zone {r['zone_code']} ({r['zone_name']})", r["over_capacity_bins"]
+    if over:
+        return (
+            f"{zone} has {over} {_plural(over, 'location', 'locations')} over capacity, while the zone "
+            f"as a whole is at {r['utilization_pct']} percent"
+        )
+    return f"{zone} is at {r['utilization_pct']} percent of its capacity"
+
+
 def _capacity(result: ResultEnvelope) -> str:
     """Says why each zone is flagged: a zone with locations over capacity is not "close to
     capacity" as a whole (the browser review found "close to capacity at 6.2 percent")."""
-    r, n = _first(result), result.row_count
-    over = r["over_capacity_bins"]
-    zone = f"Zone {r['zone_code']} ({r['zone_name']})"
-    detail = (
-        f"{zone} has {over} {_plural(over, 'location', 'locations')} over capacity, while the zone as a "
-        f"whole is at {r['utilization_pct']} percent"
-        if over
-        else f"{zone} is at {r['utilization_pct']} percent of its capacity"
-    )
-    return f"{_how_many(result)} {_plural(n, 'zone needs', 'zones need')} attention for capacity. {detail}."
+    n = result.row_count
+    details = ". ".join(_capacity_zone(r) for r in result.rows[:MAX_LISTED])
+    return f"{_how_many(result)} {_plural(n, 'zone needs', 'zones need')} attention for capacity. {details}."
 
 
 def _delayed(result: ResultEnvelope) -> str:
@@ -141,8 +144,29 @@ def _stockout(result: ResultEnvelope) -> str:
     )
 
 
+QUERY_NOUNS = {
+    "product": ("product", "products"),
+    "category": ("category", "categories"),
+    "brand": ("brand", "brands"),
+    "zone": ("zone", "zones"),
+    "rack": ("rack", "racks"),
+    "bin": ("location", "locations"),
+    "customer": ("outlet", "outlets"),
+}
+
+
 def _query(result: ResultEnvelope) -> str:
-    return f"The query returned {_how_many(result)} {_plural(result.row_count, 'row', 'rows')}."
+    """The count and the leading rows by name with their first measure, so a query answer says
+    what it found (the baseline's "The query returned 8 rows." answered nothing)."""
+    first, n = result.columns[0], result.row_count
+    measure = next((c for c in result.columns[1:] if c.type in ("integer", "number")), None)
+    one, many = QUERY_NOUNS.get(first.key, ("row", "rows"))
+    if measure is None:
+        listed = ", ".join(str(r[first.key]) for r in result.rows[:MAX_LISTED])
+    else:
+        label = measure.label.lower()
+        listed = ", ".join(f"{r[first.key]} ({label} {r[measure.key]})" for r in result.rows[:MAX_LISTED])
+    return f"{_how_many(result)} {_plural(n, one, many)} found, led by {listed}."
 
 
 TEMPLATES: dict[str, Callable[[ResultEnvelope], str]] = {
@@ -158,6 +182,51 @@ TEMPLATES: dict[str, Callable[[ResultEnvelope], str]] = {
     "get_order_stockout_risks": _stockout,
     "query_inventory": _query,
 }
+
+
+# ---------------------------------------------------------------- key facts (ADR 0001 section 4, 6)
+#
+# The facts an answer must state for its result: the ones its template states. Model wording that
+# drops one is not shown; the template, which states them all, is shown instead.
+
+
+def _first_value(result: ResultEnvelope, key: str) -> list[str]:
+    return [str(result.rows[0][key])] if result.rows and result.rows[0].get(key) is not None else []
+
+
+def key_facts(tool: str, result: ResultEnvelope) -> tuple[str, ...]:
+    if result.status is not ResultStatus.OK or not result.rows:
+        return ()
+    r = result.rows[0]
+    facts: list[str]
+    match tool:
+        case "find_product_locations":
+            facts = [str(result.normalized_request.get("sku") or r.get("sku") or "")]
+        case "get_bin_contents":
+            facts = [str(result.normalized_request.get("bin_code"))]
+        case "get_low_stock":
+            facts = [_how_many(result), str(r["sku"])]
+        case "get_top_movers":
+            facts = [str(r["sku"]), str(r["demand_units"])]
+        case "get_dead_stock":
+            facts = [str(r["sku"])]
+        case "get_slow_in_prime":
+            facts = [str(r["sku"]), str(r["bin_code"])]
+        case "get_zone_summary":
+            facts = [str(r["zone_name"]), str(r["on_hand"])]
+        case "get_capacity_hotspots":
+            facts = [str(z["zone_name"]) for z in result.rows[:MAX_LISTED]]
+            if any(z["over_capacity_bins"] for z in result.rows[:MAX_LISTED]):
+                facts.append("over capacity")
+        case "get_delayed_orders":
+            facts = [str(r["order_no"])]
+        case "get_order_stockout_risks":
+            facts = _first_value(result, "order_no") or _first_value(result, "sku")
+        case "query_inventory":
+            facts = [_how_many(result), str(r[result.columns[0].key])] if result.columns else []
+        case _:
+            facts = []
+    return tuple(f for f in facts if f and f != "None")
 
 
 def template_answer(tool: str, result: ResultEnvelope) -> str:

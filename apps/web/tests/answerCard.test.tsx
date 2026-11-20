@@ -15,6 +15,7 @@ function answer(overrides: Partial<Answer> = {}): Answer {
     outcome: "ANSWER",
     text: "SKU-102 is stored in 2 locations.",
     progress: null,
+    headline: null,
     results: [envelope([BIN_A, BIN_B], 12)],
     suggestions: [],
     error: null,
@@ -144,6 +145,32 @@ describe("answer card (UX spec 7)", () => {
       />,
     );
     expect(screen.queryByText("Writing the answer")).toBeNull();
+    expect(screen.getByText("SKU-102 is stored in 2 locations.")).toBeTruthy();
+  });
+
+  it("shows the template headline while the answer is late, then the answer", () => {
+    const headline = "37 products are at or below the minimum in their pick location.";
+    const { rerender } = render(
+      <AnswerCard
+        answer={answer({ status: "streaming", text: "", headline, progress: "Writing the answer" })}
+        siteId="s"
+        active={false}
+        onShowOnMap={() => undefined}
+        onSuggestion={() => undefined}
+      />,
+    );
+    expect(screen.getByText(headline)).toBeTruthy();
+    expect(screen.queryByText("Writing the answer")).toBeNull();
+    rerender(
+      <AnswerCard
+        answer={answer({ status: "done", headline })}
+        siteId="s"
+        active={false}
+        onShowOnMap={() => undefined}
+        onSuggestion={() => undefined}
+      />,
+    );
+    expect(screen.queryByText(headline)).toBeNull();
     expect(screen.getByText("SKU-102 is stored in 2 locations.")).toBeTruthy();
   });
 });

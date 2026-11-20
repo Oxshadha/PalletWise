@@ -9,6 +9,9 @@ from palletwise.agent.runtime import RuntimeConfig
 
 CONFIGS: dict[str, RuntimeConfig] = {
     "baseline": RuntimeConfig(name="baseline"),
+    # ADR 0001 change 2: the template headline at 3 s when the answer is late, and model wording
+    # shown only with every key fact of its result.
+    "headline-first": RuntimeConfig(name="headline-first", headline_first=True),
 }
 
 

@@ -237,3 +237,16 @@ def test_a_streamed_decimal_is_still_a_number_for_grounding() -> None:
     assert grounding_problems(text, [result], "") == []
     streamed = result.model_dump(mode="json")
     assert grounding_problems(text, [typed_result(streamed)], "") == []
+
+
+def test_the_headline_milestone_is_the_template_headline_when_it_comes_first() -> None:
+    run = events(
+        ("RUN_STARTED", 0.1, {}),
+        ("pw.status", 0.1, {}),
+        ("pw.result", 2.5, {"result": {"highlights": [{"target_id": "b"}]}}),
+        ("pw.headline", 3.0, {"text": "SKU-102 is stored in 2 locations."}),
+        ("TEXT_MESSAGE_CONTENT", 5.2, {"delta": "text"}),
+        ("RUN_FINISHED", 5.3, {}),
+    )
+    m = milestones(run, total_s=5.4)
+    assert m["first_progress_s"] == 0.1 and m["first_headline_s"] == 3.0 and m["complete_s"] == 5.3

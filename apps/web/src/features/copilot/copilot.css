@@ -377,3 +377,14 @@
     transform: scale(0.8);
   }
 }
+
+/* The headline giving way to the answer: one short fade, nothing moves (none with reduced motion). */
+@keyframes pw-swap {
+  from {
+    opacity: 0.35;
+  }
+}
+
+.pw-swap {
+  animation: pw-swap var(--pw-motion-enter) var(--pw-ease-enter) both;
+}

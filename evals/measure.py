@@ -5,35 +5,15 @@ without a model or a database.
 """
 
 import math
-import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-# ---------------------------------------------------------------- facts (ADR 0001 section 4)
+# Facts (ADR 0001 section 4): one definition for the runtime, which shows only wording that keeps
+# the key facts, and the evaluation, which gates on each case's required facts.
+from palletwise.agent.guardrails import facts_missing, normalize_fact_text
 
-_GROUPED = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?")
-_DECIMAL = re.compile(r"\d+\.\d+")
-
-
-def _number(match: re.Match[str]) -> str:
-    value = match.group(0).replace(",", "")
-    if "." in value:
-        value = value.rstrip("0").rstrip(".")
-    return value
-
-
-def normalize_fact_text(text: str) -> str:
-    """Case, spacing and number formatting normalized: "1,419,241.20", "1419241.2" and
-    "1419241.20" read the same. Identifiers such as SKU-102 and units are left as written."""
-    lowered = " ".join(str(text).lower().split())
-    return _DECIMAL.sub(_number, _GROUPED.sub(_number, lowered))
-
-
-def facts_missing(facts: Iterable[str], text: str) -> list[str]:
-    body = normalize_fact_text(text)
-    return [f for f in facts if normalize_fact_text(f) not in body]
-
+__all__ = ["facts_missing", "normalize_fact_text"]
 
 # ---------------------------------------------------------------- milestones and stages
 
@@ -55,7 +35,10 @@ def milestones(events: Sequence[dict[str, Any]], total_s: float) -> dict[str, An
         "first_progress_s": _first(events, lambda e: e.get("type") == "pw.status"),
         "first_highlight_s": _first(events, _has_highlights),
         "has_highlights": any(_has_highlights(e) for e in events),
-        "first_headline_s": _first(events, lambda e: e.get("type") == "TEXT_MESSAGE_CONTENT"),
+        # The template headline (pw.headline) or the answer text, whichever reaches the user first.
+        "first_headline_s": _first(
+            events, lambda e: e.get("type") in ("pw.headline", "TEXT_MESSAGE_CONTENT")
+        ),
         "complete_s": round(complete if complete is not None else total_s, 4),
     }
 

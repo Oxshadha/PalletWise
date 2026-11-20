@@ -23,6 +23,8 @@ export interface Answer {
   text: string;
   /** Plain-language progress while the answer is being prepared (agent spec 9.1, pw.status). */
   progress: string | null;
+  /** The exact template headline, shown when the answer is late (ADR 0001, pw.headline). */
+  headline: string | null;
   results: ResultEnvelope[];
   suggestions: Suggestion[];
   error: { code: string; message: string; traceId: string | null } | null;
@@ -91,6 +93,8 @@ function applyEvent(answer: Answer, event: RunEvent): Answer {
       return { ...next, path: event.path };
     case "pw.status":
       return { ...next, progress: event.label };
+    case "pw.headline":
+      return { ...next, headline: event.text };
     case "pw.result":
       return { ...next, results: [...next.results, event.result] };
     case "TEXT_MESSAGE_CONTENT":
@@ -127,6 +131,7 @@ function fromRecord(run: RunRecord): Answer {
     outcome: run.outcome ?? null,
     text: run.answer_text ?? "",
     progress: null,
+    headline: null,
     results: run.results as ResultEnvelope[],
     suggestions: run.suggestions as Suggestion[],
     error:
@@ -155,6 +160,7 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
             outcome: null,
             text: "",
             progress: null,
+            headline: null,
             results: [],
             suggestions: [],
             error: null,

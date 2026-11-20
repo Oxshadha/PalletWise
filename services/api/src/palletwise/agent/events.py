@@ -13,6 +13,7 @@ EventType = Literal[
     "TOOL_CALL_START",
     "TOOL_CALL_END",
     "pw.result",
+    "pw.headline",
     "TEXT_MESSAGE_START",
     "TEXT_MESSAGE_CONTENT",
     "TEXT_MESSAGE_END",

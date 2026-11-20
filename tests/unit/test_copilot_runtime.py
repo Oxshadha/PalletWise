@@ -169,9 +169,10 @@ def run(
     meter: FakeMeter | None = None,
     suggestion: Suggestion | None = None,
     fallback: str | None = None,
+    config: RuntimeConfig | None = None,
 ) -> tuple[list[RunEvent], RunState, FakeGateway, FakeMeter]:
     gateway, meter, state = gateway or FakeGateway(), meter or FakeMeter(), RunState()
-    runtime = CopilotRuntime(v1_tools(), gateway, provider, run_timeout=10)
+    runtime = CopilotRuntime(v1_tools(), gateway, provider, run_timeout=10, config=config)
 
     async def collect() -> list[RunEvent]:
         return [e async for e in runtime.run(request(question, suggestion, fallback), meter, state)]
@@ -635,7 +636,6 @@ def test_a_rejected_request_records_no_tokens() -> None:
         {"wording_model": "gemini-flash-lite"},
         {"hedge_after_s": 4.0},
         {"parallel_tools": True},
-        {"headline_first": True},
     ],
 )
 def test_a_runtime_choice_that_is_not_built_is_refused(choice: dict[str, Any]) -> None:
@@ -689,3 +689,73 @@ def test_progress_labels_never_name_a_tool_or_carry_model_text() -> None:
         FakeProvider(gemini_flash=tool_then_say("SKU-102 is in A8-01-02 with 7 units.")),
     )
     assert {label for _, label in statuses(events)} <= labels
+
+
+# ---------------------------------------------------------------- ADR 0001 change 2: headline first
+
+HEADLINE = RuntimeConfig(name="headline-first", headline_first=True, headline_after_s=0.05)
+TEMPLATE = "SKU-102 is stored in 2 locations: A8-01-02 (7 on hand), B1-02-02 (1 on hand)."
+
+
+def slow_tool_then_say(text: str, seconds: float) -> FunctionModel:
+    async def fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if not any(isinstance(p, ToolReturnPart) for m in messages for p in getattr(m, "parts", [])):
+            return ModelResponse(parts=[ToolCallPart("find_product_locations", {"sku": "SKU-102"})])
+        await asyncio.sleep(seconds)
+        return ModelResponse(parts=[TextPart(text)])
+
+    return FunctionModel(fn)
+
+
+def test_a_late_answer_shows_the_template_headline_first_then_the_wording() -> None:
+    model = slow_tool_then_say("SKU-102 is in A8-01-02 with 7 units and in B1-02-02 with 1 unit.", 0.3)
+    events, state, _, _ = run(
+        "Which bins hold the wireless mouse?", FakeProvider(gemini_flash=model), config=HEADLINE
+    )
+    kinds = types(events)
+    assert kinds.index("pw.result") < kinds.index("pw.headline") < kinds.index("TEXT_MESSAGE_CONTENT")
+    headline = next(e for e in events if e.type == "pw.headline")
+    assert headline.data["text"] == TEMPLATE and state.headline == TEMPLATE
+    assert text_of(events).startswith("SKU-102 is in A8-01-02") and state.text_source == "model"
+
+
+def test_an_answer_ready_before_the_deadline_has_no_headline() -> None:
+    config = RuntimeConfig(name="headline-first", headline_first=True, headline_after_s=5.0)
+    model = tool_then_say("SKU-102 is in A8-01-02 with 7 units.")
+    events, _, _, _ = run(
+        "Which bins hold the wireless mouse?", FakeProvider(gemini_flash=model), config=config
+    )
+    assert "pw.headline" not in types(events)
+
+
+def test_wording_that_drops_a_key_fact_is_replaced_by_the_template() -> None:
+    """The baseline's commonest miss: the product named but not its SKU."""
+    model = tool_then_say("The wireless mouse is in A8-01-02 with 7 units.")
+    events, state, _, _ = run(
+        "Which bins hold the wireless mouse?", FakeProvider(gemini_flash=model), config=HEADLINE
+    )
+    assert text_of(events) == TEMPLATE and state.text_source == "template"
+
+
+def test_path_a_wording_that_drops_a_key_fact_is_replaced_by_the_template() -> None:
+    events, state, _, _ = run(
+        "Where is SKU-102 stored?", FakeProvider(gemini_flash_lite=say("It is in A8-01-02.")), config=HEADLINE
+    )
+    assert text_of(events) == TEMPLATE and state.path == "B" and state.text_source == "template"
+
+
+def test_the_baseline_keeps_its_behaviour() -> None:
+    model = tool_then_say("The wireless mouse is in A8-01-02 with 7 units.")
+    events, state, _, _ = run("Which bins hold the wireless mouse?", FakeProvider(gemini_flash=model))
+    assert "pw.headline" not in types(events) and state.text_source == "model"
+    assert text_of(events) == "The wireless mouse is in A8-01-02 with 7 units."
+
+
+def test_no_headline_is_sent_after_the_answer() -> None:
+    model = tool_then_say("SKU-102 is in A8-01-02 with 7 units.")
+    config = RuntimeConfig(name="headline-first", headline_first=True, headline_after_s=0.2)
+    events, state, _, _ = run(
+        "Which bins hold the wireless mouse?", FakeProvider(gemini_flash=model), config=config
+    )
+    assert "pw.headline" not in types(events) and state.headline is None
+    assert state.headline_task is not None and state.headline_task.done()

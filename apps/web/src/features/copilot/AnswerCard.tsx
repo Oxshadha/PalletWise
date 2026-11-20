@@ -178,6 +178,7 @@ export function AnswerCard({
   const howComputed = [...new Set(answer.results.flatMap((r) => r.evidence.how_computed))];
   const asOf = first ? (first.evidence.data_as_of ?? first.evidence.as_of) : null;
   const streaming = answer.status === "streaming";
+  const shown = answer.text || answer.headline || "";
 
   return (
     <article className={answer.historical ? "pw-turn" : "pw-turn pw-enter"} aria-busy={streaming}>
@@ -192,13 +193,18 @@ export function AnswerCard({
           <p className="pw-outcome">{OUTCOME_LABEL[answer.outcome]}</p>
         )}
         <div className="pw-answer-text" aria-live="polite">
-          {answer.text ||
-            (streaming ? (
-              <span className="pw-progress">
-                <span className="pw-progress-dot" aria-hidden="true" />
-                {answer.progress ?? "Answering..."}
-              </span>
-            ) : null)}
+          {shown ? (
+            // Keyed by its words: the headline gives way to the answer once, with one short fade,
+            // and an answer equal to the headline does not re-render at all (ADR 0001 section 6).
+            <span key={shown} className={answer.headline ? "pw-swap" : undefined}>
+              {shown}
+            </span>
+          ) : streaming ? (
+            <span className="pw-progress">
+              <span className="pw-progress-dot" aria-hidden="true" />
+              {answer.progress ?? "Answering..."}
+            </span>
+          ) : null}
         </div>
         {answer.status === "cancelled" && <p className="pw-muted">Stopped.</p>}
         {answer.error && (

@@ -100,7 +100,7 @@ def test_the_comparison_measures_quality_latency_and_cost_on_the_same_cases(tmp_
     assert all(c["cost"] > 0 and not c["usage_estimated"] for c in path_c["calls"])
     assert path_c["cost_usd"] == pytest.approx(sum(c["cost"] for c in path_c["calls"]), abs=1e-6)
     assert 0 < path_c["first_highlight_s"] <= path_c["first_headline_s"] <= path_c["complete_s"]
-    assert path_c["first_progress_s"] is None  # the baseline sends no progress event
+    assert 0 < path_c["first_progress_s"] < path_c["first_highlight_s"]  # progress comes first
     assert path_c["stages"]["tools_s"] is not None and path_c["facts_missing"] == []
 
     path_a = runs["LOC-001"][0]
@@ -109,6 +109,6 @@ def test_the_comparison_measures_quality_latency_and_cost_on_the_same_cases(tmp_
     assert decline["outcome"] == "DECLINE" and decline["grounding_violations"] == []
 
     gates = {g["metric"]: g["verdict"] for g in configs[0]["gates"]}
-    assert gates["latency.model.first_progress_p95"] == "fail"  # never sent: infinitely late
+    assert gates["latency.model.first_progress_p95"] == "pass"
     assert gates["cost.per_answer_p95_usd"] == "pass"
-    assert configs[0]["status"].startswith("fail")  # progress is gated; the baseline lacks it
+    assert configs[0]["status"].startswith("pass")  # a scripted model is fast and exact
