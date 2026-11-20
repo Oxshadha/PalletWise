@@ -18,3 +18,35 @@ rules:
     identifier: bin
     argument: bin_code
     words: [what, contents, content, inside, holds, hold, contain, contains, stored, in]
+
+# The personas questions that need no identifier (Slice 2). Matched exactly after normalizing
+# case, spacing, apostrophes and end punctuation; any rewording or extra condition ("in zone B")
+# goes to the model, so a qualified question is never answered as the plain one.
+questions:
+  - text: which items are running low on stock
+    tool: get_low_stock
+    arguments: {}
+  - text: which items need replenishment before today's first dispatch window
+    tool: get_order_stockout_risks
+    arguments: {view: replenish_before_first_dispatch}
+  - text: which of today's orders are at risk
+    tool: get_order_stockout_risks
+    arguments: {view: orders}
+  - text: which outlet orders are delayed
+    tool: get_delayed_orders
+    arguments: {}
+  - text: show me the top 5 fastest-moving items
+    tool: get_top_movers
+    arguments: {limit: 5}
+  - text: show me the top 5 movers
+    tool: get_top_movers
+    arguments: {limit: 5}
+  - text: which zones have the highest stock levels
+    tool: get_zone_summary
+    arguments: {}
+  - text: where are we close to capacity
+    tool: get_capacity_hotspots
+    arguments: {}
+  - text: are slow movers sitting in the fast-pick zone
+    tool: get_slow_in_prime
+    arguments: {}

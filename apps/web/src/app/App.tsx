@@ -196,7 +196,7 @@ export function App() {
                 choosePanel("copilot");
               }}
             >
-              <Icon name="sparkle" size={16} /> Copilot
+              <Icon name="chat" size={16} /> Copilot
             </button>
           </nav>
         )}

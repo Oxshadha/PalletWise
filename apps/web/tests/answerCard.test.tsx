@@ -14,6 +14,8 @@ function answer(overrides: Partial<Answer> = {}): Answer {
     path: "B",
     outcome: "ANSWER",
     text: "SKU-102 is stored in 2 locations.",
+    progress: null,
+    headline: null,
     results: [envelope([BIN_A, BIN_B], 12)],
     suggestions: [],
     error: null,
@@ -90,5 +92,85 @@ describe("answer card (UX spec 7)", () => {
       />,
     );
     expect(screen.getByRole("alert").textContent).toContain("Reference: abc123");
+  });
+
+  it("formats numbers with their units and names the settings version", () => {
+    const result = envelope([BIN_A], 1);
+    const priced = {
+      ...result,
+      columns: [
+        ...result.columns,
+        { key: "stock_value", label: "Stock value", type: "number" as const, unit: "LKR" },
+      ],
+      rows: [{ ...result.rows[0], stock_value: "12500.00" }],
+      evidence: { ...result.evidence, settings_version_no: 2 },
+    };
+    const { container } = render(
+      <AnswerCard
+        answer={answer({ results: [priced] })}
+        siteId="s"
+        active={false}
+        onShowOnMap={noop}
+        onSuggestion={noop}
+      />,
+    );
+    expect(screen.getByText("Stock value (LKR)")).toBeTruthy();
+    expect(screen.getByText("12,500")).toBeTruthy();
+    expect(container.textContent).toContain("Settings version 2.");
+  });
+
+  it("shows live progress while the answer is prepared, and the answer once it arrives", () => {
+    const { rerender } = render(
+      <AnswerCard
+        answer={answer({
+          status: "streaming",
+          text: "",
+          results: [],
+          progress: "Checking pick locations against their minimums",
+        })}
+        siteId="s"
+        active={false}
+        onShowOnMap={() => undefined}
+        onSuggestion={() => undefined}
+      />,
+    );
+    expect(screen.getByText("Checking pick locations against their minimums")).toBeTruthy();
+    rerender(
+      <AnswerCard
+        answer={answer({ status: "streaming", progress: "Writing the answer" })}
+        siteId="s"
+        active={false}
+        onShowOnMap={() => undefined}
+        onSuggestion={() => undefined}
+      />,
+    );
+    expect(screen.queryByText("Writing the answer")).toBeNull();
+    expect(screen.getByText("SKU-102 is stored in 2 locations.")).toBeTruthy();
+  });
+
+  it("shows the template headline while the answer is late, then the answer", () => {
+    const headline = "37 products are at or below the minimum in their pick location.";
+    const { rerender } = render(
+      <AnswerCard
+        answer={answer({ status: "streaming", text: "", headline, progress: "Writing the answer" })}
+        siteId="s"
+        active={false}
+        onShowOnMap={() => undefined}
+        onSuggestion={() => undefined}
+      />,
+    );
+    expect(screen.getByText(headline)).toBeTruthy();
+    expect(screen.queryByText("Writing the answer")).toBeNull();
+    rerender(
+      <AnswerCard
+        answer={answer({ status: "done", headline })}
+        siteId="s"
+        active={false}
+        onShowOnMap={() => undefined}
+        onSuggestion={() => undefined}
+      />,
+    );
+    expect(screen.queryByText(headline)).toBeNull();
+    expect(screen.getByText("SKU-102 is stored in 2 locations.")).toBeTruthy();
   });
 });

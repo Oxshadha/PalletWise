@@ -22,11 +22,16 @@ x-python: &python
     LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
     LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
 
+# Each check starts a Python process (about 0.4 s of CPU). Checks run every 3 s while a service
+# starts, so `make up --wait` stays quick, then every 30 s: seven services checking every 5 s kept
+# about half a CPU core busy on the developer machine.
 x-health-python: &health-python
   test: ["CMD", "palletwise-healthcheck"]
-  interval: 5s
-  timeout: 3s
-  retries: 30
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 180s
+  start_interval: 3s
 
 services:
   postgres:
@@ -42,9 +47,11 @@ services:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${PW_BOOTSTRAP_USER} -d palletwise"]
-      interval: 3s
+      interval: 30s
       timeout: 3s
-      retries: 30
+      retries: 3
+      start_period: 60s
+      start_interval: 3s
 
   migrate:
     <<: *python
@@ -70,6 +77,7 @@ services:
       PW_SIM_ADMIN_PASSWORD: ${PW_SIM_ADMIN_PASSWORD}
       PW_AGENT_READ_PASSWORD: ${PW_AGENT_READ_PASSWORD}
       PW_MEMORY_PASSWORD: ${PW_MEMORY_PASSWORD}
+      PW_CACHE_PASSWORD: ${PW_CACHE_PASSWORD}
       SIM_OWNER_PASSWORD: ${SIM_OWNER_PASSWORD}
       SIM_OUTBOX_READER_PASSWORD: ${SIM_OUTBOX_READER_PASSWORD}
     depends_on:
@@ -118,7 +126,7 @@ services:
       <<: *health-python
       # Healthy only once the initial load has finished and the site is READY.
       retries: 120
-      start_period: 60s
+      start_period: 600s  # the full 180-day load takes about 4 minutes
     depends_on:
       migrate: { condition: service_completed_successfully }
       simulator: { condition: service_healthy }
@@ -172,6 +180,8 @@ services:
       PW_AGENT_READ_PASSWORD: ${PW_AGENT_READ_PASSWORD}
       PW_MEMORY_USER: pw_memory
       PW_MEMORY_PASSWORD: ${PW_MEMORY_PASSWORD}
+      PW_CACHE_USER: pw_cache
+      PW_CACHE_PASSWORD: ${PW_CACHE_PASSWORD}
       # Gemini on Vertex AI (optional). Without a project and key file the copilot uses path B.
       PW_LLM_PROJECT: ${GCP_PROJECT_ID:-}
       PW_LLM_LOCATION: ${PW_LLM_LOCATION:-global}
@@ -207,10 +217,11 @@ services:
       - ./keycloak/palletwise-realm.json:/opt/keycloak/data/import/palletwise-realm.json:ro
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q 'UP' <&3"]
-      interval: 5s
+      interval: 30s
       timeout: 5s
-      retries: 60
-      start_period: 30s
+      retries: 3
+      start_period: 120s  # Keycloak imports the realm on first start
+      start_interval: 3s
 
   opa:
     image: ${OPA_IMAGE}
@@ -220,9 +231,11 @@ services:
       - ../policy:/policy:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8181/health"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 30
+      retries: 3
+      start_period: 60s
+      start_interval: 3s
 
   web:
     image: palletwise/web:dev
@@ -235,9 +248,11 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 30
+      retries: 3
+      start_period: 60s
+      start_interval: 3s
     depends_on:
       api: { condition: service_healthy }
 
@@ -255,9 +270,11 @@ services:
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping", "--ping.entrypoint=web", "--entrypoints.web.address=:8080"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 30
+      retries: 3
+      start_period: 60s
+      start_interval: 3s
     depends_on:
       api: { condition: service_healthy }
       web: { condition: service_healthy }

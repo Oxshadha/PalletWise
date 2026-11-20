@@ -4,14 +4,27 @@ Templates only restate values that are in the result; they never compute new num
 """
 
 from collections.abc import Callable
+from typing import Any
 
-from palletwise.contracts.results import ResultEnvelope, ResultStatus
+from palletwise.agent.guardrails import instruction_echo
+from palletwise.contracts.results import Column, ResultEnvelope, ResultStatus
 
 MAX_LISTED = 3
+# In the wording cache key: bump when a template or a key fact changes meaning.
+TEMPLATES_VERSION = "templates.v6"
 
 
 def _plural(count: int, one: str, many: str) -> str:
     return one if count == 1 else many
+
+
+def _product(row: dict[str, Any]) -> str:
+    """A product by SKU and name; by SKU alone when the name carries instruction text, so even a
+    template never repeats an injection found in data (FR-COP-12; the table still shows the name)."""
+    name = str(row.get("name") or "")
+    if not name or instruction_echo(name, ""):
+        return str(row["sku"])
+    return f"{row['sku']} ({name})"
 
 
 def _how_many(result: ResultEnvelope) -> str:
@@ -34,18 +47,226 @@ def _bin_contents(result: ResultEnvelope) -> str:
     count = result.row_count
     return (
         f"{code} holds {_how_many(result)} {_plural(count, 'product', 'products')}. "
-        f"The most units are {top['sku']} ({top['name']}) with {top['on_hand']} on hand."
+        f"The most units are {_product(top)} with {top['on_hand']} on hand."
     )
+
+
+def _first(result: ResultEnvelope) -> dict[str, Any]:
+    return result.rows[0]
+
+
+def _low_stock(result: ResultEnvelope) -> str:
+    r, n = _first(result), result.row_count
+    return (
+        f"{_how_many(result)} {_plural(n, 'product is', 'products are')} at or below the minimum in "
+        f"{_plural(n, 'its', 'their')} pick location. {r['sku']} has {r['available']} available in "
+        f"{r['bin_code']} against a minimum of {r['min_qty']}."
+    )
+
+
+def _top_movers(result: ResultEnvelope) -> str:
+    r = _first(result)
+    days = result.normalized_request.get("days")
+    return (
+        f"The fastest mover over the last {days} days is {_product(r)}, with "
+        f"{r['demand_units']} units picked. The table lists {_how_many(result)} products."
+    )
+
+
+def _dead_stock(result: ResultEnvelope) -> str:
+    r, n = _first(result), result.row_count
+    picked = (
+        "never picked"
+        if r["days_since_last_pick"] is None
+        else f"last picked {r['days_since_last_pick']} days ago"
+    )
+    return (
+        f"{_how_many(result)} {_plural(n, 'product has', 'products have')} gone longer than the dead "
+        f"stock period without a pick. The most value is in {r['sku']}: {r['storable_on_hand']} units, "
+        f"{picked}."
+    )
+
+
+def _slow_in_prime(result: ResultEnvelope) -> str:
+    r, n = _first(result), result.row_count
+    picked = "has never been picked" if r["days_since_last_pick"] is None else (
+        f"was last picked {r['days_since_last_pick']} days ago")  # fmt: skip
+    return (
+        f"Yes: {_how_many(result)} fast-pick {_plural(n, 'location holds', 'locations hold')} slow "
+        f"stock. {r['sku']} in {r['bin_code']} {picked}."
+    )
+
+
+def _zone_summary(result: ResultEnvelope) -> str:
+    r = _first(result)
+    return (
+        f"Zone {r['zone_code']} ({r['zone_name']}) holds the most stock, with {r['on_hand']} units on hand."
+    )
+
+
+def _capacity_zone(r: dict[str, Any]) -> str:
+    zone, over = f"Zone {r['zone_code']} ({r['zone_name']})", r["over_capacity_bins"]
+    if over:
+        return (
+            f"{zone} has {over} {_plural(over, 'location', 'locations')} over capacity, while the zone "
+            f"as a whole is at {r['utilization_pct']} percent"
+        )
+    return f"{zone} is at {r['utilization_pct']} percent of its capacity"
+
+
+def _capacity(result: ResultEnvelope) -> str:
+    """Says why each zone is flagged: a zone with locations over capacity is not "close to
+    capacity" as a whole (the browser review found "close to capacity at 6.2 percent")."""
+    n = result.row_count
+    details = ". ".join(_capacity_zone(r) for r in result.rows[:MAX_LISTED])
+    return f"{_how_many(result)} {_plural(n, 'zone needs', 'zones need')} attention for capacity. {details}."
+
+
+def _delayed(result: ResultEnvelope) -> str:
+    r, n = _first(result), result.row_count
+    state = "still open" if r["status"] != "SHIPPED" else "shipped late"
+    return (
+        f"{_how_many(result)} {_plural(n, 'order is', 'orders are')} delayed. {r['order_no']} for "
+        f"{r['customer_code']} is {r['hours_late']} hours late and {state}."
+    )
+
+
+def _stockout(result: ResultEnvelope) -> str:
+    r, n = _first(result), result.row_count
+    view = result.normalized_request.get("view", "products")
+    if view == "orders":
+        return (
+            f"{_how_many(result)} open {_plural(n, 'order is', 'orders are')} at risk of a stockout. "
+            f"{r['order_no']} for {r['customer_code']} is due first."
+        )
+    if view == "replenish_before_first_dispatch":
+        return (
+            f"{_how_many(result)} {_plural(n, 'product needs', 'products need')} replenishing before "
+            f"the next dispatch. {r['sku']} is short {r['shortfall']} units, with {r['reserve_available']} "
+            "in reserve."
+        )
+    fix = (
+        "a replenishment from reserve covers it"
+        if r["fixable"]
+        else f"{r['true_shortage']} units are truly short"
+    )
+    return (
+        f"{_how_many(result)} {_plural(n, 'product is', 'products are')} short for orders due soon. "
+        f"{r['sku']} is short {r['shortfall']} units; {fix}."
+    )
+
+
+QUERY_NOUNS = {
+    "product": ("product", "products"),
+    "category": ("category", "categories"),
+    "brand": ("brand", "brands"),
+    "zone": ("zone", "zones"),
+    "rack": ("rack", "racks"),
+    "bin": ("location", "locations"),
+    "customer": ("outlet", "outlets"),
+}
+
+
+def _measure(result: ResultEnvelope) -> Column | None:
+    """The first measure after a breakdown's name column: the value a query answer states."""
+    return next((c for c in result.columns[1:] if c.numeric), None)
+
+
+def _query(result: ResultEnvelope) -> str:
+    """The count and the leading rows by name with their first measure, so a query answer says
+    what it found (the baseline's "The query returned 8 rows." answered nothing)."""
+    first, n = result.columns[0], result.row_count
+    if first.numeric:
+        # No breakdown: the result is totals, one value per measure (the baseline said
+        # "1 row found, led by 5728960.27").
+        r = result.rows[0]
+        values = "; ".join(f"{c.label.lower()} {r[c.key]}" for c in result.columns if c.numeric)
+        return f"In total: {values}."
+    measure = _measure(result)
+    if n == 1 and measure is not None and not result.truncated:
+        r = result.rows[0]  # one row reads as a statement: "Beverages: days of cover 12.2."
+        return f"{r[first.key]}: {measure.label.lower()} {r[measure.key]}."
+    one, many = QUERY_NOUNS.get(first.key, ("row", "rows"))
+    if measure is None:
+        listed = ", ".join(str(r[first.key]) for r in result.rows[:MAX_LISTED])
+    else:
+        label = measure.label.lower()
+        listed = ", ".join(f"{r[first.key]} ({label} {r[measure.key]})" for r in result.rows[:MAX_LISTED])
+    return f"{_how_many(result)} {_plural(n, one, many)} found, led by {listed}."
 
 
 TEMPLATES: dict[str, Callable[[ResultEnvelope], str]] = {
     "find_product_locations": _product_locations,
     "get_bin_contents": _bin_contents,
+    "get_low_stock": _low_stock,
+    "get_top_movers": _top_movers,
+    "get_dead_stock": _dead_stock,
+    "get_slow_in_prime": _slow_in_prime,
+    "get_zone_summary": _zone_summary,
+    "get_capacity_hotspots": _capacity,
+    "get_delayed_orders": _delayed,
+    "get_order_stockout_risks": _stockout,
+    "query_inventory": _query,
 }
+
+
+# ---------------------------------------------------------------- key facts (ADR 0001 section 4, 6)
+#
+# The facts an answer must state for its result: the ones its template states. Model wording that
+# drops one is not shown; the template, which states them all, is shown instead.
+
+
+def _first_value(result: ResultEnvelope, key: str) -> list[str]:
+    return [str(result.rows[0][key])] if result.rows and result.rows[0].get(key) is not None else []
+
+
+def key_facts(tool: str, result: ResultEnvelope) -> tuple[str, ...]:
+    if result.status is not ResultStatus.OK or not result.rows:
+        return ()
+    r = result.rows[0]
+    facts: list[str]
+    match tool:
+        case "find_product_locations":
+            facts = [str(result.normalized_request.get("sku") or r.get("sku") or "")]
+        case "get_bin_contents":
+            facts = [str(result.normalized_request.get("bin_code"))]
+        case "get_low_stock":
+            facts = [_how_many(result), str(r["sku"])]
+        case "get_top_movers":
+            facts = [str(r["sku"]), str(r["demand_units"])]
+        case "get_dead_stock":
+            facts = [str(r["sku"])]
+        case "get_slow_in_prime":
+            facts = [str(r["sku"]), str(r["bin_code"])]
+        case "get_zone_summary":
+            facts = [str(r["zone_name"]), str(r["on_hand"])]
+        case "get_capacity_hotspots":
+            facts = [str(z["zone_name"]) for z in result.rows[:MAX_LISTED]]
+            if any(z["over_capacity_bins"] for z in result.rows[:MAX_LISTED]):
+                facts.append("over capacity")
+        case "get_delayed_orders":
+            facts = [str(r["order_no"])]
+        case "get_order_stockout_risks":
+            facts = _first_value(result, "order_no") or _first_value(result, "sku")
+        case "query_inventory":
+            if not result.columns:
+                facts = []
+            elif result.columns[0].numeric:
+                facts = [str(r[result.columns[0].key])]  # totals: the first measure's value
+            elif result.row_count == 1 and not result.truncated:
+                # One row: its name and the value asked for; no count to state.
+                measure = _measure(result)
+                facts = [str(r[result.columns[0].key])] + ([str(r[measure.key])] if measure else [])
+            else:
+                facts = [_how_many(result), str(r[result.columns[0].key])]
+        case _:
+            facts = []
+    return tuple(f for f in facts if f and f != "None")
 
 
 def template_answer(tool: str, result: ResultEnvelope) -> str:
     """The answer for a result: its message for every non-OK status, else the tool template."""
     if result.status is not ResultStatus.OK or tool not in TEMPLATES:
         return result.message or "Here is the result."
-    return TEMPLATES[tool](result)
+    text = TEMPLATES[tool](result)
+    return text[:1].upper() + text[1:]  # "More than 20 products found", never a lowercase start

@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 
 from evals.fake_idp import CLIENT_ID, CLIENT_SECRET, ISSUER, ORIGIN, SIGNING_KEY, FakeIdp
 from evals.reference import create_eval_role
-from palletwise.agent.runtime import CopilotRuntime
+from palletwise.agent.runtime import CopilotRuntime, RuntimeConfig
 from palletwise.api import copilot, sites
 from palletwise.api.app import create_app
 from palletwise.auth.crypto import KeyRing
@@ -56,11 +56,14 @@ class EvalEnv:
     reader: psycopg.Connection  # pw_eval_reader, for reference queries
     opa_url: str
     dataset_version: str = DATASET_VERSION
+    # Highlight target ids to stable codes: bins by code, zones as "zone:<code>" (evals/reference.py).
     bin_codes: dict[str, str] = field(default_factory=lambda: {})
 
     def __post_init__(self) -> None:
         rows = self.superuser.execute(
-            "SELECT id, code FROM pw.bin WHERE site_id = %s", (self.site,)
+            "SELECT id, code FROM pw.bin WHERE site_id = %s"
+            " UNION ALL SELECT id, 'zone:' || code FROM pw.zone WHERE site_id = %s",
+            (self.site, self.site),
         ).fetchall()
         self.bin_codes = {str(i): c for i, c in rows}
 
@@ -76,7 +79,9 @@ class EvalEnv:
         )
 
     @contextmanager
-    def api(self, provider: LLMProvider, run_timeout: float = 45.0) -> Generator["ApiClient"]:
+    def api(
+        self, provider: LLMProvider, run_timeout: float = 45.0, config: RuntimeConfig | None = None
+    ) -> Generator["ApiClient"]:
         idp = FakeIdp()
         oidc = OidcClient(
             OidcSettings(
@@ -94,7 +99,7 @@ class EvalEnv:
         auth = AuthService(oidc, KeyRing(sessions.keys), sessions, SessionStore(app_pool), AuditLog(app_pool))
         executor = self.executor()
         services = copilot.CopilotServices(
-            runtime=CopilotRuntime(v1_tools(), executor, provider, run_timeout=run_timeout),
+            runtime=CopilotRuntime(v1_tools(), executor, provider, run_timeout=run_timeout, config=config),
             agents=AgentRegistry(app_pool),
             conversations=ConversationStore(role_pool("PW_MEMORY")),
             ledger=UsageLedger(app_pool),
@@ -211,8 +216,9 @@ class ApiClient:
                 if not line.startswith("data:"):
                     continue
                 event = json.loads(line[5:])
-                events.append(event)
                 now = time.perf_counter() - started
+                event["_t"] = round(now, 4)  # arrival time from the question being sent (ADR 0001)
+                events.append(event)
                 if event["type"] == "pw.result" and first_result is None:
                     first_result = now
                 if event["type"] == "TEXT_MESSAGE_CONTENT" and first_text is None:
@@ -251,9 +257,11 @@ def standalone() -> Generator[EvalEnv]:
         if "=" in line and not line.startswith("#")
     )
     passwords = {role: f"eval-{role}" for role in LOGIN_ROLES}
+    # Data in memory (tmpfs): the image declares a data volume, and an anonymous volume would be
+    # left behind on the host after every run.
     with PostgresContainer(
         "postgres:17-alpine", username="postgres", password="postgres", dbname="palletwise"
-    ) as pg:
+    ).with_tmpfs_mount("/var/lib/postgresql/data") as pg:
         os.environ.update(
             {
                 "PW_DB_HOST": pg.get_container_host_ip(),

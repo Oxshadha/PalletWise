@@ -47,6 +47,11 @@ DEFAULT_SEVERITY: dict[HighlightReason, Severity] = {
 }
 
 
+class RequestRejected(ValueError):
+    """A tool request refused for a reason the agent can act on (semantic spec 7.4): reported as a
+    validation failure with this message, and counted toward the step limit (NFR-REL-03)."""
+
+
 class Frozen(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -64,6 +69,10 @@ class Column(Frozen):
     type: Literal["text", "integer", "number", "boolean", "datetime"]
     unit: str | None = None
 
+    @property
+    def numeric(self) -> bool:
+        return self.type in ("integer", "number")
+
 
 class StreamFreshness(Frozen):
     stream: Literal["MASTER", "MOVEMENTS", "ORDERS", "ALLOCATIONS"]
@@ -73,8 +82,9 @@ class StreamFreshness(Frozen):
 class Evidence(Frozen):
     as_of: datetime
     time_zone: str
-    # None while no definition used depends on a setting (settings arrive in Slice 2).
+    # The settings version in effect for the whole answer (semantic spec 2, Slice 2 acceptance).
     settings_version_id: UUID | None
+    settings_version_no: int | None = None  # the same version as people read it ("settings v2")
     data_as_of: datetime | None  # the oldest data_as_of among the streams used
     freshness: tuple[StreamFreshness, ...]
     how_computed: tuple[str, ...]
@@ -109,3 +119,25 @@ class ResultEnvelope(Frozen):
     @property
     def row_count(self) -> int:
         return len(self.rows)
+
+
+class WorkingSet(Frozen):
+    """The previous answer's identifiers for follow-up questions (semantic spec 7.5, Slice 2 D5).
+
+    Only typed identifiers, never values: a follow-up re-reads current data for them. Scoped to
+    one conversation, owner, site and tenant by the conversation store; at most MAX_ENTITIES.
+    """
+
+    run_id: UUID  # provenance: the run that produced the result
+    tool: str | None  # provenance: the tool that produced it
+    created_at: datetime
+    products: tuple[UUID, ...] = ()
+    bins: tuple[UUID, ...] = ()
+    zones: tuple[UUID, ...] = ()
+
+    def ids(self, kind: str) -> tuple[UUID, ...]:
+        return {"product": self.products, "bin": self.bins, "zone": self.zones}.get(kind, ())
+
+    @property
+    def size(self) -> int:
+        return len(self.products) + len(self.bins) + len(self.zones)

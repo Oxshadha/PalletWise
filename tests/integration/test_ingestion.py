@@ -30,9 +30,15 @@ def test_load_completes_and_site_becomes_ready(connect_as: Connect, loaded: tupl
     assert state and state.history_loaded and state.status == "BUILDING"
     digest, counts = dataset_hash.compute(admin, tenant, site)
     assert counts["bin"] == 676 and counts["product"] == 300 and counts["movement"] > 0
+    before = admin.execute("SELECT clock_timestamp()").fetchone()
     site_repo.complete_load(admin, tenant, site, run, digest)
     status = status_repo.site_status(admin, tenant, site)
     assert status is not None and status.data_status == "READY" and status.data_status_detail is None
+    # Statistics are current when the site becomes READY: without them the first questions after a
+    # load ran into the statement timeout (top movers 3.7 s instead of 0.01 s, migration 0016).
+    for table in ("pw.movement", "pw.inventory_balance", "pw.order_line"):
+        analyzed = admin.execute("SELECT pg_stat_get_last_analyze_time(%s::regclass)", (table,)).fetchone()
+        assert before and analyzed and analyzed[0] is not None and analyzed[0] >= before[0], table
 
 
 def test_clock_equals_last_tick_and_never_leads(connect_as: Connect, loaded: tuple[UUID, ...]) -> None:

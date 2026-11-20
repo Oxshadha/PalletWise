@@ -52,7 +52,7 @@ test-unit:
 	uv run pytest tests/unit -q
 
 test-integration:
-	uv run pytest tests/integration -q
+	uv run pytest tests/integration -q --durations=15
 
 # Deterministic eval gate (evals spec 5): no model, no credentials; blocks every merge.
 evals:
@@ -60,10 +60,14 @@ evals:
 
 # Model eval gate: three runs per case on the real model. Reads GCP_SA_FILE and GCP_PROJECT_ID
 # from .env; without them it writes a pending report and exits 3 (never a silent pass).
+# CONFIG=name runs one runtime configuration; COMPARE=a,b compares several on the same cases
+# (ADR 0001), for example COMPARE=baseline,baseline for an A/A noise run.
+CONFIG ?= production
 evals-model:
 	@sa=$$(grep -E '^GCP_SA_FILE=' .env 2>/dev/null | cut -d= -f2-); \
 	project=$$(grep -E '^GCP_PROJECT_ID=' .env 2>/dev/null | cut -d= -f2-); \
-	PW_LLM_CREDENTIALS_FILE="$$sa" PW_LLM_PROJECT="$$project" uv run python -m evals --level model
+	PW_LLM_CREDENTIALS_FILE="$$sa" PW_LLM_PROJECT="$$project" uv run python -m evals --level model \
+	  --config "$(CONFIG)" $(if $(COMPARE),--compare "$(COMPARE)")
 
 # OPA policy tests with the pinned OPA image (CI uses the setup-opa action).
 test-policy:

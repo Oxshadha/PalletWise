@@ -14,10 +14,18 @@ import {
   Environment,
   Html,
   Lightformer,
+  Line,
 } from "@react-three/drei";
 import { Canvas, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Color, type InstancedMesh, Object3D, type PerspectiveCamera } from "three";
+import {
+  CanvasTexture,
+  Color,
+  type InstancedMesh,
+  Object3D,
+  type PerspectiveCamera,
+  RepeatWrapping,
+} from "three";
 
 import type { Highlight, Layout, LayoutBin } from "../../shared/api/client";
 import { type BinState, type Bounds, prefersReducedMotion, siteBounds } from "./geometry";
@@ -46,6 +54,7 @@ interface Props {
   states: Map<string, BinState>;
   onHand: Map<string, number>;
   highlights: Highlight[];
+  zoneHighlights: Highlight[];
   bins: Map<string, LayoutBin>;
   selectedBinId: string | null;
   focus: Bounds | null;
@@ -85,9 +94,16 @@ export function Scene3D(props: Props) {
           scale={[40, 10, 1]}
         />
       </Environment>
-      <Floor layout={props.layout} colors={props.colors} site={site} />
+      <Floor
+        layout={props.layout}
+        colors={props.colors}
+        site={site}
+        marked={new Set(props.zoneHighlights.map((h) => h.target_id))}
+      />
       <Racking layout={props.layout} colors={props.colors} />
+      <StatePlates {...props} />
       <Stock {...props} />
+      <ZoneOutlines {...props} />
       <HitTargets {...props} />
       <Pins {...props} />
       <ContactShadows
@@ -116,7 +132,26 @@ function strip(from: [number, number], to: [number, number], width: number) {
   };
 }
 
-function Floor({ layout, colors, site }: { layout: Layout; colors: SceneColors; site: Bounds }) {
+/** The centre of a zone's outline, where its name sits (corners crowd where zones meet). */
+function zoneCentre(outline: readonly (readonly number[])[]): [number, number] {
+  const n = outline.length || 1;
+  return [
+    outline.reduce((sum, p) => sum + (p[0] ?? 0), 0) / n,
+    outline.reduce((sum, p) => sum + (p[1] ?? 0), 0) / n,
+  ];
+}
+
+function Floor({
+  layout,
+  colors,
+  site,
+  marked,
+}: {
+  layout: Layout;
+  colors: SceneColors;
+  site: Bounds;
+  marked: Set<string>;
+}) {
   const cx = site.maxX / 2;
   const cz = site.maxY / 2;
   const walls: [number, number, number, number][] = [
@@ -164,12 +199,17 @@ function Floor({ layout, colors, site }: { layout: Layout; colors: SceneColors; 
                 </mesh>
               );
             })}
+            {/* Always mounted (mounting drei Html while the scene updates races React's DOM
+                removal); hidden when the zone's highlight tag (ZoneOutlines) names it instead. */}
             <Html
-              position={[first[0] + 0.6, 0.05, first[1] + 0.6]}
+              position={[zoneCentre(corners)[0], 0.05, zoneCentre(corners)[1]]}
+              center
               zIndexRange={[10, 0]}
               pointerEvents="none"
             >
-              <span className="pw-zone-tag">{zone.name}</span>
+              <span className="pw-zone-tag" hidden={marked.has(zone.id)}>
+                {zone.name}
+              </span>
             </Html>
           </group>
         );
@@ -378,10 +418,11 @@ function slotBase(bin: LayoutBin): number {
  * Empty locations show nothing on the shelf: the racking stays visible. While an answer is
  * shown, highlighted stock takes its severity color and the rest fades towards the floor.
  */
-function Stock({ layout, states, highlights, colors }: Props) {
+function Stock({ layout, onHand, highlights, colors }: Props) {
+  // Drawn from what the location holds: a low stock pick location can be empty.
   const stocked = useMemo(
-    () => layout.bins.filter((b) => states.get(b.id) !== "EMPTY"),
-    [layout, states],
+    () => layout.bins.filter((b) => (onHand.get(b.id) ?? 0) > 0),
+    [layout, onHand],
   );
   const highlighted = useMemo(
     () => new Map(highlights.map((h) => [h.target_id, h.severity])),
@@ -450,6 +491,144 @@ function Stock({ layout, states, highlights, colors }: Props) {
   );
 }
 
+/** The base state as people read it, with the units held (UX spec 5). */
+function stateText(state: BinState | undefined, onHand: number): string {
+  const held = `${String(onHand)} on hand`;
+  if (state === "OVER_CAPACITY") return `Over capacity, ${held}`;
+  if (state === "LOW_STOCK") return onHand > 0 ? `Low stock, ${held}` : "Low stock, empty";
+  return state === "EMPTY" ? "Empty" : held;
+}
+
+/** A repeating hatch in one status color: diagonal for low stock, crossed for over capacity. */
+function hatchTexture(color: string, crossed: boolean): CanvasTexture {
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 7;
+    const stripe = (from: [number, number], to: [number, number]) => {
+      ctx.beginPath();
+      ctx.moveTo(...from);
+      ctx.lineTo(...to);
+      ctx.stroke();
+    };
+    for (const offset of [-size, 0, size]) {
+      stripe([offset, size], [offset + size, 0]);
+      if (crossed) stripe([offset, 0], [offset + size, size]);
+    }
+  }
+  const texture = new CanvasTexture(canvas);
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = RepeatWrapping;
+  texture.repeat.set(2, 2);
+  return texture;
+}
+
+/**
+ * The base state layer (UX spec 5): low stock and over capacity locations get a hatched plate on
+ * top of their stock (on the shelf when empty), readable in the isometric view and under any
+ * answer highlight. Color is never the only signal: the hatch differs.
+ */
+function StatePlates({ layout, states, onHand, colors }: Props) {
+  const kinds = [
+    { state: "LOW_STOCK", token: "--pw-color-status-warning", crossed: false },
+    { state: "OVER_CAPACITY", token: "--pw-color-status-critical", crossed: true },
+  ] as const;
+  return (
+    <>
+      {kinds.map((kind) => (
+        <StatePlate
+          key={kind.state}
+          bins={layout.bins.filter((b) => states.get(b.id) === kind.state)}
+          onHand={onHand}
+          color={colors[kind.token]}
+          crossed={kind.crossed}
+        />
+      ))}
+    </>
+  );
+}
+
+function StatePlate({
+  bins,
+  onHand,
+  color,
+  crossed,
+}: {
+  bins: LayoutBin[];
+  onHand: Map<string, number>;
+  color: string;
+  crossed: boolean;
+}) {
+  const texture = useMemo(() => hatchTexture(color, crossed), [color, crossed]);
+  useEffect(
+    () => () => {
+      texture.dispose();
+    },
+    [texture],
+  );
+  const mesh = useInstances(
+    bins.length,
+    (dummy, i) => {
+      const bin = bins[i];
+      if (!bin) return;
+      // On top of the stock (the cartons' height in Stock), else on the empty shelf.
+      const stocked = (onHand.get(bin.id) ?? 0) > 0;
+      const top = stocked ? 0.14 + Math.min(bin.height_m * 0.62, 1.4) + 0.012 : 0.012;
+      dummy.position.set(bin.x, slotBase(bin) + top, bin.y);
+      dummy.rotation.set(-Math.PI / 2, 0, 0);
+      dummy.scale.set(bin.width_m * 0.98, bin.depth_m * 0.98, 1);
+    },
+    [bins, onHand],
+  );
+  if (bins.length === 0) return null;
+  return (
+    <instancedMesh ref={mesh} args={[undefined, undefined, bins.length]} raycast={() => null}>
+      <planeGeometry args={[1, 1]} />
+      <meshBasicMaterial map={texture} transparent depthWrite={false} />
+    </instancedMesh>
+  );
+}
+
+/** Zone highlights (semantic spec 7.6): an outline painted round the zone, with its code. */
+function ZoneOutlines({ layout, zoneHighlights, colors }: Props) {
+  const zones = new Map(layout.zones.map((z) => [z.id, z]));
+  return (
+    <>
+      {zoneHighlights.map((highlight) => {
+        const zone = zones.get(highlight.target_id);
+        const first = zone?.outline[0];
+        if (!zone || !first || zone.outline.length < 3) return null;
+        const points = [...zone.outline, first].map(
+          ([x, y]) => [x, 0.06, y] as [number, number, number],
+        );
+        const [cx, cy] = zoneCentre(zone.outline);
+        return (
+          <group key={highlight.target_id}>
+            <Line
+              points={points}
+              color={colors[SEVERITY_TOKEN[highlight.severity]]}
+              lineWidth={highlight.severity === "critical" ? 6 : 4}
+            />
+            <Html position={[cx, 0.4, cy]} center zIndexRange={[20, 10]} pointerEvents="none">
+              <span className={`pw-pin-tag is-${highlight.severity}`}>
+                Zone {zone.code} · {zone.name}
+              </span>
+            </Html>
+          </group>
+        );
+      })}
+    </>
+  );
+}
+
 /** Invisible boxes, one per location, for hover and click, empty locations included. */
 function HitTargets({ layout, onHand, states, onSelect }: Props) {
   const bins = layout.bins;
@@ -499,9 +678,7 @@ function HitTargets({ layout, onHand, states, onSelect }: Props) {
         >
           <span className="pw-tooltip">
             <strong>{bin.code}</strong>
-            {states.get(bin.id) === "EMPTY"
-              ? "Empty"
-              : `${String(onHand.get(bin.id) ?? 0)} on hand`}
+            {stateText(states.get(bin.id), onHand.get(bin.id) ?? 0)}
           </span>
         </Html>
       )}
@@ -509,34 +686,63 @@ function HitTargets({ layout, onHand, states, onSelect }: Props) {
   );
 }
 
-/** A pin with the location code above each highlighted location, visible from any angle. */
+const MAX_LABELS = 12;
+const RANK = { info: 1, warning: 2, critical: 3 } as const;
+
+/**
+ * A pin above each highlighted location, visible from any angle. Labels stay readable: bins
+ * stacked on one rack face share one label ("B1-01-02 +1"), and with many highlights only the
+ * most severe faces are labelled; the locations list names every one (UX spec 3).
+ */
 function Pins({ highlights, bins, selectedBinId, colors }: Props) {
   const selected = selectedBinId ? bins.get(selectedBinId) : undefined;
+  const faces = useMemo(() => {
+    const byFace = new Map<
+      string,
+      { top: LayoutBin; codes: string[]; severity: Highlight["severity"] }
+    >();
+    for (const h of highlights) {
+      const bin = h.target_type === "bin" ? bins.get(h.target_id) : undefined;
+      if (!bin) continue;
+      const key = `${String(bin.x)}:${String(bin.y)}`;
+      const face = byFace.get(key);
+      if (!face) byFace.set(key, { top: bin, codes: [bin.code], severity: h.severity });
+      else {
+        face.codes.push(bin.code);
+        if (bin.z > face.top.z) face.top = bin;
+        if (RANK[h.severity] > RANK[face.severity]) face.severity = h.severity;
+      }
+    }
+    const all = [...byFace.values()].sort((a, b) => RANK[b.severity] - RANK[a.severity]);
+    return all.map((face, i) => ({ ...face, labelled: i < MAX_LABELS }));
+  }, [highlights, bins]);
   return (
     <>
-      {highlights.map((highlight) => {
-        const bin = highlight.target_type === "bin" ? bins.get(highlight.target_id) : undefined;
-        if (!bin) return null;
-        const top = bin.z + bin.height_m / 2;
-        const color = colors[SEVERITY_TOKEN[highlight.severity]];
+      {faces.map(({ top: bin, codes, severity, labelled }) => {
+        const height = bin.z + bin.height_m / 2;
+        const color = colors[SEVERITY_TOKEN[severity]];
+        const label =
+          codes.length > 1 ? `${codes.sort()[0] ?? ""} +${String(codes.length - 1)}` : bin.code;
         return (
-          <group key={highlight.target_id}>
-            <mesh position={[bin.x, top + PIN_HEIGHT / 2, bin.y]} raycast={() => null}>
+          <group key={bin.id}>
+            <mesh position={[bin.x, height + PIN_HEIGHT / 2, bin.y]} raycast={() => null}>
               <cylinderGeometry args={[0.045, 0.045, PIN_HEIGHT, 8]} />
               <meshBasicMaterial color={color} />
             </mesh>
-            <mesh position={[bin.x, top + PIN_HEIGHT, bin.y]} raycast={() => null}>
-              <sphereGeometry args={[highlight.severity === "critical" ? 0.42 : 0.32, 24, 24]} />
+            <mesh position={[bin.x, height + PIN_HEIGHT, bin.y]} raycast={() => null}>
+              <sphereGeometry args={[severity === "critical" ? 0.42 : 0.32, 24, 24]} />
               <meshBasicMaterial color={color} />
             </mesh>
-            <Html
-              position={[bin.x, top + PIN_HEIGHT + 0.8, bin.y]}
-              center
-              zIndexRange={[20, 10]}
-              pointerEvents="none"
-            >
-              <span className={`pw-pin-tag is-${highlight.severity}`}>{bin.code}</span>
-            </Html>
+            {labelled && (
+              <Html
+                position={[bin.x, height + PIN_HEIGHT + 0.8, bin.y]}
+                center
+                zIndexRange={[20, 10]}
+                pointerEvents="none"
+              >
+                <span className={`pw-pin-tag is-${severity}`}>{label}</span>
+              </Html>
+            )}
           </group>
         );
       })}

@@ -95,6 +95,7 @@
   --pw-radius-lg: 1.5rem;
   --pw-radius-pill: 999px;
   --pw-shadow-card: 0 1px 1px rgb(9 42 102 / 0.03), 0 12px 40px rgb(9 42 102 / 0.07);
+  --pw-color-scroll-shade: rgb(9 42 102 / 0.14); /* edge of a table that scrolls further */
   --pw-shadow-popover: 0 16px 48px rgb(9 42 102 / 0.16);
   --pw-blur-glass: 18px;
 
@@ -154,6 +155,7 @@
   --pw-color-status-success: #4ade80;
 
   --pw-shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
+  --pw-color-scroll-shade: rgb(0 0 0 / 0.55);
   --pw-shadow-popover: 0 12px 32px rgb(0 0 0 / 0.45);
   --pw-logo: url("/brand/logo-dark.png");
 

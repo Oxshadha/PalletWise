@@ -139,7 +139,8 @@ def test_every_new_tenant_gets_an_active_copilot(gov: Gov) -> None:
     assert agent is not None and agent.active
     assert agent.allowed_scopes == ("inventory.read", "orders.read", "proposal.create")
     # Flash-Lite words path A answers; the tool-using fallback is the full Flash model.
-    assert (agent.primary_model, agent.fallback_model) == ("gemini-flash", "gemini-flash-fallback")
+    assert (agent.primary_model, agent.fallback_model) == ("gemini-flash-lite", "gemini-flash-fallback")
+    assert agent.prompt_version == "system.v3"  # question shape and conditions (ADR 0001)
 
 
 def test_registry_rows_are_tenant_isolated(gov: Gov, connect_as: Connect) -> None:
@@ -164,7 +165,7 @@ def test_allowed_call_runs_as_the_read_role_and_is_fully_audited(gov: Gov) -> No
         "row_count", "trace_id", "site_id")} == {
         "actor_type": "AGENT", "action": "tool.call", "outcome": "OK", "user_subject": "user-1",
         "user_role": "warehouse_manager", "agent_id": "copilot", "agent_version": "1",
-        "model": "gemini-flash", "prompt_version": "system.v1", "run_id": run.run_id,
+        "model": "gemini-flash", "prompt_version": "system.v3", "run_id": run.run_id,
         "scope": "inventory.read", "tool": "echo", "parameters": {"sku": "SKU-102", "limit": 5},
         "decision": "ALLOW", "deny_reasons": None, "row_count": 3, "trace_id": TRACE, "site_id": gov.site,
     }  # fmt: skip

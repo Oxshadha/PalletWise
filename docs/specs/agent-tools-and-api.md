@@ -106,7 +106,7 @@ Every tool is declared once:
 ## 5. Agent runtime
 
 - **Framework**: Pydantic AI behind an `AgentRuntime` interface; models behind an `LLMProvider` interface. Neither leaks into tools or the semantic layer.
-- **Models**: primary Gemini Flash (3.8 Flash candidate, confirmed by NFR-QLT-03); Flash-Lite for path A wording and the input classifier; fallback model from the agent registry.
+- **Models**: primary Flash-Lite (`gemini-flash-lite`, chosen by the ADR 0001 final comparison), which also words path A; fallback from the agent registry (`gemini-flash-fallback`). The input classifier is deterministic and uses no model.
 - **Prompt**: `copilot/prompts/system.v{n}.md`, versioned; the version is recorded on every run; changes pass the evaluation gate.
 - **Limits per run**: at most 5 tool calls, a token cap, low temperature, a per-call timeout and a total run timeout.
 - **Context given to the model** (context only, never used for authorization, which always uses the verified server-side identity of section 7):
@@ -124,7 +124,7 @@ Security is enforced by deterministic boundaries. The classifier helps decide wh
 | Stage | Check | On failure |
 |---|---|---|
 | Input | length at most 1,000 characters; Unicode normalized; rate limit | rejected with a message |
-| Input | Flash-Lite classifier: out of scope or injection attempt (**advisory**) | polite decline; logged |
+| Input | Deterministic classifier (`agent/input_classifier.py`), only for messages no route recognised: injection markers, change requests, restricted information, clearly off-topic requests (**advisory**; abstains when unsure) | polite fixed decline without a model call; logged and counted |
 | Every tool call | agent status active (kill switch rechecked per call, so a suspension stops a run within one step) | run stopped with the suspension message |
 | Every tool call | arguments validated against `input_model` | error returned to the model, counts as a step |
 | Every tool call | policy decision (section 7) | denied, audited, the model is told it is not permitted |
@@ -190,11 +190,13 @@ The run response is an event stream using AG-UI event types plus PalletWise even
 | Event | Content |
 |---|---|
 | `RUN_STARTED` | run id, path (A, B or C) |
+| `pw.status` | live progress (ADR 0001): `stage` (`reading`, `checking`, `reviewing`, `writing`) and a plain-language `label` from a fixed list per stage and per tool, sent first and before each step. Never model reasoning, prompts, tool names, arguments or identifiers. |
 | `TOOL_CALL_START`, `TOOL_CALL_END` | tool name and normalized, already-authorized arguments, for traces and the Admin audit view; the Manager sees the plain-language "how computed" explanation instead (UX spec 7) |
 | `pw.result` | the result envelope (semantic spec 7.5), including highlights |
+| `pw.headline` | headline first (ADR 0001 section 6, when enabled): the exact template headline of the latest result, sent once when the answer is not written by the headline deadline (3 s after the run starts). The answer text that follows replaces it; model wording is shown only when it keeps every key fact of its result, otherwise the answer text is the template. |
 | `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END` | answer text |
 | `pw.suggestions` | suggestions (section 11) |
-| `RUN_FINISHED` | run id, trace id |
+| `RUN_FINISHED` | run id, trace id, final path, card outcome, and `text_source`: `model`, `template` or `message` (who wrote the answer text, for traces and the evaluation; ADR 0001) |
 | `RUN_ERROR` | user-safe message, error code, trace id |
 
 **Reliability rules**
@@ -355,6 +357,18 @@ CWM 11.3 names a `pw_memory` role for "conversation tables (other spec)", but no
 - No authorization fingerprint in the key: a lookup happens only after this user's authorized tool call produced this exact result, so reused wording restates only data the user already received. Adding scopes would split the cache without adding protection.
 - Only wording that passed the grounding check is stored.
 
+**Built in Slice 2 step 7c.** Path A wording only (one question, one result), behind
+`RuntimeConfig.wording_cache` (on in `PRODUCTION_RUNTIME`). The runtime builds the key material after
+the authorized tool call (tenant, site, tool, normalized arguments, the SHA-256 of exactly what the
+model saw of the result, the normalized question, wording prompt, model, template, settings and cache
+versions, locale and units); the API adapter adds the semantic model version and hashes it; the store
+(`db/cache_repo.py`, role `pw_cache`, table `pw.wording_cache` with forced row-level security) keeps
+only the hash, with a 24 hour TTL, at most 5,000 entries per tenant (least recently used first) and
+expired rows removed on write. Only wording that passed grounding, the key-fact rule and the
+instruction-echo guard is stored, and a hit is checked again against the current result before it is
+shown (`text_source = "cache"`). A cache failure is a miss, never an error. The evaluation measures
+uncached answers: its runtime has no cache store.
+
 **Learned routes (Slice 3 or later).** Never learned automatically from how often something is asked, and never promoted by a user message. A candidate route is promoted only after it passes a fixed evaluation set, under explicit promotion rules, versioned with rollback, isolated per tenant. A learned route only chooses the tool; the call still runs through `tools.executor`.
 
 **Storage.** PostgreSQL first, behind a cache interface so Redis can replace it without touching the copilot: forced RLS per tenant, keys as above, a TTL with cleanup, a size bound per tenant, a cache version that invalidates every entry, and no credentials, tokens or personal data beyond what the key requires.
@@ -384,3 +398,15 @@ CWM 11.3 names a `pw_memory` role for "conversation tables (other spec)", but no
 | 2026-11-19 | Slice 1 step 5 findings: (1) Models verified on the project: `gemini-3.8-flash` (primary) is served only from the Vertex `global` location; there is no 3.8 Flash-Lite, so path A and the classifier use `gemini-3.5-flash-lite`, and the fallback is `gemini-3.5-flash`. The registry keeps logical names; the provider maps them. (2) `RUN_FINISHED` carries the final path and card outcome, because a run that starts on path A falls back to B when wording fails grounding or the budget is used up. (3) Run and tool rate limits are per user per minute in PostgreSQL (20 runs, 30 calls per tool), so they hold across API instances. (4) A cancel request sets a flag that the instance running the answer checks every second, so cancel works across instances; a client disconnect cancels after 10 seconds. (5) Estimated cost uses `llm/model_prices.yaml` until versioned settings exist. (6) The advisory input classifier is not built yet; it arrives with the injection evaluation cases in Slice 2, and deterministic boundaries already cover every permission. (7) Conversation store defined in section 14a. |
 | 2026-11-19 | Review of step 5: composite ownership keys for runs and feedback, interrupted runs closed, Admin has no conversation access (14a). Measured on `gemini-3.8-flash`: `max_tokens` caps thinking and answer together, and default thinking used about 30 times the answer's tokens, so model calls use low thinking, a 1,024 token cap (400 for wording), budget reservations of input estimate plus the full cap, and a cut-off answer falls back to the template. Prices verified against Google's standard global pricing with effective dates (`llm/model_prices.yaml`). |
 | 2026-11-19 | Slice 1 step 7a findings: (1) Path C now uses the registry fallback model: provider errors and transport errors (timeouts, lost connections) on the primary move the request to the fallback; a spent budget, the step limit or any other error does not. Each model call is metered under the model that made it. (2) The seeded fallback is `gemini-flash-fallback` (`gemini-3.5-flash`), not Flash-Lite, as decided in step 5; migration `0007_agent_fallback` fixes the seed and system-seeded rows only. |
+| 2026-11-19 | ADR 0001 measurement: `RUN_FINISHED` carries `text_source`; every model call is recorded with its stage (`TOOL_CHOICE`, `ANSWER_TEXT`, `WORDING`, `CLASSIFIER`) and outcome (`OK`, `ERROR`, `CANCELLED`); a call cancelled or timed out after it was sent is charged the upper bound (input estimate plus output cap) and marked `usage_estimated`; a rejected request records no tokens. The runtime takes a `RuntimeConfig` (defaults are the baseline) that accepts only built choices. |
+| 2026-11-20 | ADR 0001 change 1: `pw.status` progress events, sent before any model call or tool, before each tool, after each result and before path A wording; labels come from `agent/progress.py` only. |
+| 2026-11-20 | ADR 0001 change 2 (headline first, behind `RuntimeConfig.headline_first`): `pw.headline` event; key facts per tool (`templates.key_facts`), shared fact matching (`guardrails.facts_missing`); model wording that leaves out a key fact is replaced by the template without a retry. Query answers name their leading rows; capacity answers name every flagged zone and the reason. |
+| 2026-11-20 | ADR 0001 change 5 (behind `RuntimeConfig.hedge_after_s`): `HedgedModel` starts the registry fallback alongside a primary that has not answered within the deadline, or at once when the primary fails with a provider or transport error; the first successful response wins and the other call is cancelled and charged. Any other error is raised. Only model responses race; the chosen tool runs once through the executor. |
+| 2026-11-20 | Evaluation findings (headline-first versus hedged): (1) grounding treated a number inside a result's text value (a product name such as "Soda Water 1.5L Value Pack") as an unsupported quantity, so quoting the name failed; such numbers now count as grounded. (2) A run whose result was in but whose wording was late ended with a timeout error; it now answers with the result's template. (3) The answer deadline of ADR 0001 section 6 is built (`RuntimeConfig.answer_deadline_s`): with a result in and the deadline passed, the run answers with the template and cancels the late wording, which is still charged. |
+| 2026-11-20 | Output guard (FR-COP-12), always on: model prose that contains an instruction marker from a fixed list ("ignore previous", "approve all", "system prompt", "DATA START" and similar) that the user's question did not contain is not shown; the template or a fixed message is shown instead. Found by eval case IND-002: the model listed a poisoned product name verbatim when asking which product was meant. It did not act on it; the guard keeps the prose from repeating it. The table still shows names as plain data. |
+| 2026-11-20 | ADR 0001 amendment 2 built: tier 2, the semantic router (`agent/semantic_router.py`, `agent/semantic_routes.yaml`), behind `RuntimeConfig.semantic_router`. Routes carry fixed arguments only; a question routes only when every content word is in the route's vocabulary and the calibrated threshold and margin are met; page context leaves the question to the model. `RUN_STARTED` and `RUN_FINISHED` carry `tier` (1 exact route or suggestion, 2 semantic router, 3 model). The hedged model has a per-process circuit breaker (failures of the primary at 50 percent over the last 20 calls pause speculative calls for 60 s; the normal fallback still runs). `RuntimeConfig.agent_model` names tier 3's agent model for the Flash-Lite experiment. |
+| 2026-11-20 | Three-tier comparison findings: (1) templates name a product by SKU alone when its name carries instruction text (eval IND-003: the bin-contents template quoted the poisoned name after the model's prose was refused); (2) a query result without a breakdown answers with its totals ("In total: stock value ...") instead of "1 row found, led by ..."; (3) `RuntimeConfig.routed_answer_deadline_s` gives questions routed without the model (tiers 1 and 2) their own answer deadline against the fast path target. |
+| 2026-11-20 | ADR 0001 amendment 3: prompt `system.v3` (migration `0017_prompt_v3`, system-seeded rows only); safeguard A (`guardrails.shape_problem`: a working-set query without a breakdown is not run unless the question asks for a total) and safeguard B (`guardrails.count_problems`: a stated count must be a count in the data), both deterministic. |
+| 2026-11-20 | Final comparison decided (ADR 0001): the copilot's primary model is Flash-Lite (`gemini-flash-lite`, migration `0018_agent_flash_lite`, system-seeded agents only), fallback `gemini-flash-fallback`; the app runs `PRODUCTION_RUNTIME` (headline first, 2.5 s hedge with the circuit breaker, answer deadlines 7 s and 2.5 s, semantic router). |
+| 2026-11-20 | Slice 2 step 7b, product owner direction: the input classifier is deterministic, not a Flash-Lite call (no added latency, the same verdict every time). It runs only on messages no route recognised, so a real question carrying an injection is still answered under the deterministic boundaries (eval INJ-003); it declines only clear injection, change, restricted and off-topic messages with a fixed message and never grants anything (Slice 2 D6). Behind `RuntimeConfig.input_classifier`, on in `PRODUCTION_RUNTIME`. |
+| 2026-11-20 | Slice 2 step 7c: the answer-wording cache built as section 14b and D4 describe; new database role `pw_cache` (AGENTS.md rule 7), migration `0019_wording_cache`; `RUN_FINISHED.text_source` may be `cache`. |

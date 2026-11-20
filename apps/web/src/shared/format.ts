@@ -10,3 +10,11 @@ export function formatSiteTime(iso: string, timeZone: string): string {
   const monthYear = part({ month: "short", year: "numeric" });
   return `${time}, ${day} ${monthYear} (${timeZone})`;
 }
+
+const NUMBER = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 });
+
+/** A number from the API (decimals arrive as text, for example "10000.00") with separators. */
+export function formatNumber(value: unknown): string {
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(n) ? NUMBER.format(n) : String(value);
+}

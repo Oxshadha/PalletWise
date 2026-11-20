@@ -6,7 +6,14 @@ import type { LayoutBin } from "../../shared/api/client";
 import { Icon } from "../../shared/ui/Icon";
 import { useWorkspace } from "../../shared/workspace/WorkspaceContext";
 import { activeHighlights } from "../../shared/workspace/workspace";
-import { binsById, highlightBounds, onHandById, statesById, webglAvailable } from "./geometry";
+import {
+  binsById,
+  highlightBounds,
+  onHandById,
+  splitHighlights,
+  statesById,
+  webglAvailable,
+} from "./geometry";
 import { Legend } from "./Legend";
 import { LocationPopover } from "./LocationPopover";
 import { LocationsList } from "./LocationsList";
@@ -62,8 +69,19 @@ export function MapPanel() {
   const bins = useMemo(() => (ready ? binsById(ready) : new Map<string, LayoutBin>()), [ready]);
   const states = useMemo(() => statesById(mapState), [mapState]);
   const onHand = useMemo(() => onHandById(mapState), [mapState]);
-  const highlights = activeHighlights(state);
-  const focus = useMemo(() => highlightBounds(highlights, bins), [highlights, bins]);
+  const answer = activeHighlights(state);
+  // Racks become their bins; zones stay zones and are drawn as floor outlines (semantic spec 7.6).
+  const marks = useMemo(
+    () => (ready ? splitHighlights(answer, ready) : { bins: answer, zones: [] }),
+    [answer, ready],
+  );
+  const highlights = marks.bins;
+  const zoneHighlights = marks.zones;
+  const zoneById = useMemo(() => new Map((ready?.zones ?? []).map((z) => [z.id, z])), [ready]);
+  const focus = useMemo(
+    () => highlightBounds(highlights, bins, zoneHighlights, zoneById),
+    [highlights, bins, zoneHighlights, zoneById],
+  );
   const selected = state.selectedBinId ? bins.get(state.selectedBinId) : undefined;
   // With WebGL, 2D is the same scene seen from above; the SVG plan is the fallback without it.
   const view = webgl ? state.view : "2d";
@@ -117,7 +135,7 @@ export function MapPanel() {
       <header className="pw-panel-header">
         <div>
           <h2 id="pw-warehouse-title" tabIndex={-1}>
-            Warehouse map
+            Warehouse
           </h2>
           <p className="pw-muted">
             {site ? `${site.name} (${site.code})` : ""}
@@ -152,7 +170,7 @@ export function MapPanel() {
       <div className="pw-map-body">
         <aside className="pw-map-side">
           {ready && (
-            <div className="pw-card-soft">
+            <div className="pw-side-section">
               <p className="pw-eyebrow">Zones</p>
               <ul className="pw-zone-list">
                 {ready.zones.map((zone) => {
@@ -172,14 +190,16 @@ export function MapPanel() {
               </ul>
             </div>
           )}
-          <div className="pw-card-soft">
+          <div className="pw-side-section">
             <LocationsList
               highlights={highlights}
+              zoneHighlights={zoneHighlights}
+              zones={zoneById}
               bins={bins}
               selectedBinId={state.selectedBinId}
               onSelect={select}
             />
-            {highlights.length > 0 && (
+            {answer.length > 0 && (
               <button
                 type="button"
                 className="pw-link-button pw-clear"
@@ -191,7 +211,7 @@ export function MapPanel() {
               </button>
             )}
           </div>
-          <div className="pw-card-soft">
+          <div className="pw-side-section">
             <Legend />
           </div>
         </aside>
@@ -231,6 +251,7 @@ export function MapPanel() {
                   states={states}
                   onHand={onHand}
                   highlights={highlights}
+                  zoneHighlights={zoneHighlights}
                   bins={bins}
                   selectedBinId={state.selectedBinId}
                   focus={focus}
@@ -247,6 +268,7 @@ export function MapPanel() {
               layout={ready}
               states={states}
               highlights={highlights}
+              zoneHighlights={zoneHighlights}
               selectedBinId={state.selectedBinId}
               focus={focus}
               onSelect={select}
@@ -334,6 +356,12 @@ export function MapPanel() {
             </li>
             <li>
               <span className="pw-dot is-empty" /> Empty
+            </li>
+            <li>
+              <span className="pw-dot is-low-stock" /> Low stock
+            </li>
+            <li>
+              <span className="pw-dot is-over-capacity" /> Over capacity
             </li>
             <li>
               <span className="pw-dot is-info" /> Highlighted

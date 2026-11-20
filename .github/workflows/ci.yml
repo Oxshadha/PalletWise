@@ -46,7 +46,7 @@ jobs:
       - run: uv run lint-imports
       - run: uv run pytest tests/unit -q
       - name: Integration tests (real PostgreSQL 17, roles and RLS)
-        run: uv run pytest tests/integration -q
+        run: uv run pytest tests/integration -q --durations=15
       - name: Dependency audit (third-party packages; workspace packages are not on PyPI)
         run: |
           uv export --frozen --all-packages --no-emit-workspace --format requirements-txt -o "$RUNNER_TEMP/requirements.txt"

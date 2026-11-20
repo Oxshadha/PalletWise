@@ -11,6 +11,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Answers scrolled past fade under the header instead of being cut by it. */
+  mask-image: linear-gradient(to bottom, transparent, black var(--pw-space-4));
 }
 
 .pw-copilot-title {
@@ -19,14 +21,17 @@
   gap: var(--pw-space-2);
 }
 
-.pw-sparkle {
+/* The panel's mark: the product's own chat glyph on a quiet tint, never a sparkle (no stock AI
+   decoration; the copilot shows what it does instead). */
+.pw-copilot-mark {
   display: inline-grid;
   place-items: center;
+  flex: none;
   width: 2rem;
   height: 2rem;
   border-radius: var(--pw-radius-pill);
-  background: var(--pw-color-accent-strong);
-  color: var(--pw-color-text-on-accent);
+  background: var(--pw-color-accent-soft);
+  color: var(--pw-color-accent-text);
 }
 
 .pw-empty-state {
@@ -66,18 +71,72 @@
 .pw-answer {
   display: flex;
   flex-direction: column;
-  gap: var(--pw-space-3);
+  gap: var(--pw-space-4);
   padding: var(--pw-space-5);
   border: 1px solid var(--pw-color-glass-border);
   border-radius: var(--pw-radius-md);
   background: var(--pw-color-surface);
-  box-shadow: 0 1px 2px var(--pw-color-glass-border);
+  transition: box-shadow var(--pw-motion-panel) var(--pw-ease);
 }
 
+/* The answer whose locations are on the map is lifted by its own surface and shadow, not ringed:
+   a ring reads as keyboard focus nobody gave it. */
 .pw-answer.is-active {
-  box-shadow:
-    0 0 0 2px var(--pw-color-accent-soft),
-    var(--pw-shadow-card);
+  box-shadow: var(--pw-shadow-card);
+}
+
+/* "Show on map": a compact control that hugs its label, the map's own glyph beside it. */
+.pw-map-link {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--pw-space-2);
+  padding: var(--pw-space-1) var(--pw-space-3) var(--pw-space-1) var(--pw-space-2);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-surface);
+  color: var(--pw-color-accent-text);
+  font: inherit;
+  font-size: var(--pw-font-size-sm);
+  font-weight: var(--pw-font-weight-navigation);
+  line-height: 1.75rem;
+  cursor: pointer;
+}
+
+.pw-map-link svg {
+  flex: none;
+}
+
+.pw-map-link[aria-pressed="true"] {
+  border-color: var(--pw-color-accent);
+  background: var(--pw-color-accent-soft);
+}
+
+.pw-map-link-count {
+  color: var(--pw-color-text-muted);
+  font-weight: var(--pw-font-weight-body);
+}
+
+.pw-answer-result {
+  display: grid;
+  gap: var(--pw-space-2);
+  min-width: 0;
+}
+
+.pw-table-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--pw-space-3);
+  font-size: var(--pw-font-size-sm);
+}
+
+/* Evidence sits below a hairline, one step quieter than the answer it supports. */
+.pw-answer-meta {
+  display: grid;
+  gap: var(--pw-space-1);
+  padding-top: var(--pw-space-3);
+  border-top: 1px solid var(--pw-color-border);
 }
 
 /* The headline leads (NFR-UX-03): larger and lighter than the evidence below it. */
@@ -112,8 +171,19 @@
   border-radius: var(--pw-radius-sm);
 }
 
+/* Wide tables scroll sideways; a soft edge shows there is more, only while there is more
+   (background-attachment local covers it once the end is reached). */
 .pw-answer-table {
   overflow-x: auto;
+  background:
+    linear-gradient(to right, var(--pw-color-surface), var(--pw-color-surface)) left / 24px 100%
+      no-repeat local,
+    linear-gradient(to left, var(--pw-color-surface), var(--pw-color-surface)) right / 24px 100%
+      no-repeat local,
+    radial-gradient(farthest-side at 0 50%, var(--pw-color-scroll-shade), transparent) left / 12px
+      100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, var(--pw-color-scroll-shade), transparent) right /
+      12px 100% no-repeat scroll;
 }
 
 /* Codes, quantities and times never break across lines; the table scrolls instead. */
@@ -123,8 +193,10 @@
 }
 
 .pw-how summary {
+  width: fit-content;
   cursor: pointer;
   color: var(--pw-color-accent-text);
+  font-size: var(--pw-font-size-sm);
 }
 
 .pw-how ul {
@@ -142,7 +214,37 @@
 .pw-feedback {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--pw-space-2);
+  align-items: center;
+  gap: var(--pw-space-1);
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-feedback > .pw-muted {
+  margin-right: var(--pw-space-1);
+}
+
+.pw-feedback-done {
+  margin: 0;
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-feedback-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--pw-radius-pill);
+  background: transparent;
+  color: var(--pw-color-text-muted);
+  cursor: pointer;
+}
+
+.pw-feedback-button[aria-expanded="true"] {
+  background: var(--pw-color-accent-soft);
+  color: var(--pw-color-accent-text);
 }
 
 .pw-feedback-form {
@@ -189,7 +291,10 @@
 }
 
 .pw-composer:focus-within {
-  box-shadow: 0 0 0 3px var(--pw-color-focus-ring);
+  border-color: var(--pw-color-focus-ring);
+  box-shadow:
+    0 0 0 1px var(--pw-color-focus-ring),
+    var(--pw-shadow-card);
 }
 
 .pw-send {
@@ -204,8 +309,10 @@
   cursor: pointer;
 }
 
+/* Nothing to send yet: a neutral disc, not a washed-out accent. */
 .pw-send:disabled {
-  opacity: 0.45;
+  background: var(--pw-color-border);
+  color: var(--pw-color-text-muted);
   cursor: not-allowed;
 }
 
@@ -239,4 +346,45 @@
   padding: 0;
   display: grid;
   gap: var(--pw-space-2);
+}
+
+/* Live progress while an answer is prepared (pw.status): plain words, one quiet pulsing dot. */
+.pw-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pw-space-2);
+  color: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-md);
+}
+
+.pw-progress-dot {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pw-progress-dot {
+    animation: pw-progress-pulse 1.2s var(--pw-ease) infinite;
+  }
+}
+
+@keyframes pw-progress-pulse {
+  50% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+}
+
+/* The headline giving way to the answer: one short fade, nothing moves (none with reduced motion). */
+@keyframes pw-swap {
+  from {
+    opacity: 0.35;
+  }
+}
+
+.pw-swap {
+  animation: pw-swap var(--pw-motion-enter) var(--pw-ease-enter) both;
 }

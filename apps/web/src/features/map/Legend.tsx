@@ -8,11 +8,20 @@ export function Legend() {
           <span className="pw-swatch is-normal" aria-hidden="true" /> Location with stock
         </li>
         <li>
-          <span className="pw-swatch is-empty" aria-hidden="true" /> Empty location (hatched)
+          <span className="pw-swatch is-empty" aria-hidden="true" /> Empty location (thin hatch,
+          dashed edge)
+        </li>
+        <li>
+          <span className="pw-swatch is-low-stock" aria-hidden="true" /> Low stock (bold hatch,
+          solid edge)
+        </li>
+        <li>
+          <span className="pw-swatch is-over-capacity" aria-hidden="true" /> Over capacity (cross
+          hatch)
         </li>
         <li>
           <span className="pw-swatch is-info" aria-hidden="true" /> Highlighted: information
-          (outline)
+          (outline; zones outlined on the floor)
         </li>
         <li>
           <span className="pw-swatch is-warning" aria-hidden="true" /> Highlighted: warning

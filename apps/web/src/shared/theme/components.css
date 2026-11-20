@@ -125,17 +125,24 @@ a {
   opacity: 0.6;
 }
 
+/* Suggestions and starters: neutral at rest so the answer stays the heaviest thing on screen. */
 .pw-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--pw-space-2);
   padding: var(--pw-space-2) var(--pw-space-3);
-  border: 1px solid var(--pw-color-glass-border);
+  border: 1px solid var(--pw-color-border);
   border-radius: var(--pw-radius-pill);
-  background: var(--pw-color-accent-soft);
-  color: var(--pw-color-accent-text);
+  background: var(--pw-color-surface);
+  color: var(--pw-color-text-primary);
   font-size: var(--pw-font-size-sm);
-  font-weight: var(--pw-font-weight-navigation);
+  font-weight: var(--pw-font-weight-body);
+  text-align: left;
+}
+
+.pw-chip svg {
+  flex: none;
+  color: var(--pw-color-accent-text);
 }
 
 .pw-chips {
@@ -256,6 +263,8 @@ a {
 .pw-chip,
 .pw-icon-button,
 .pw-send,
+.pw-map-link,
+.pw-feedback-button,
 .pw-nav button,
 .pw-segmented button,
 .pw-location,
@@ -274,7 +283,7 @@ a {
   .pw-chip:not(:disabled):hover,
   .pw-icon-button:hover,
   .pw-send:not(:disabled):hover,
-  .pw-location:hover,
+  .pw-map-link:hover,
   .pw-avatar:hover {
     transform: translateY(-1px);
     transition-duration: var(--pw-motion-in);
@@ -286,14 +295,23 @@ a {
   }
 
   .pw-button-quiet:not(:disabled):hover,
-  .pw-icon-button:hover,
-  .pw-location:hover {
+  .pw-icon-button:hover {
     border-color: var(--pw-color-accent);
   }
 
-  .pw-chip:not(:disabled):hover {
+  .pw-location:hover {
+    background: var(--pw-color-accent-soft);
+  }
+
+  .pw-chip:not(:disabled):hover,
+  .pw-map-link:hover {
     border-color: var(--pw-color-accent);
-    background: var(--pw-color-surface);
+    color: var(--pw-color-accent-text);
+  }
+
+  .pw-feedback-button:hover {
+    background: var(--pw-color-accent-soft);
+    color: var(--pw-color-accent-text);
   }
 
   .pw-nav button:not([aria-pressed="true"]):hover,
@@ -307,6 +325,8 @@ a {
 .pw-chip:not(:disabled):active,
 .pw-icon-button:active,
 .pw-send:not(:disabled):active,
+.pw-map-link:active,
+.pw-feedback-button:active,
 .pw-location:active,
 .pw-avatar:active {
   transform: translateY(1px) scale(0.985);

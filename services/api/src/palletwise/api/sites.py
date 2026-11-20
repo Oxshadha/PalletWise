@@ -114,7 +114,7 @@ class LayoutOut(BaseModel):
 
 class BinStateOut(BaseModel):
     bin_id: UUID
-    state: Literal["NORMAL", "EMPTY"]
+    state: Literal["NORMAL", "EMPTY", "LOW_STOCK", "OVER_CAPACITY"]
     on_hand: int
 
 

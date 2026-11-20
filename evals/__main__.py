@@ -1,4 +1,7 @@
-"""CLI: python -m evals --set core --set adversarial --level deterministic|model [--write-golden]."""
+"""CLI: python -m evals --set core --set adversarial --level deterministic|model [--write-golden].
+
+Model level: --config NAME runs one configuration; --compare A,B runs several on the same cases,
+interleaved (ADR 0001). --compare baseline,baseline is an A/A run that measures run-to-run noise."""
 
 import argparse
 import logging
@@ -6,8 +9,21 @@ import sys
 from pathlib import Path
 
 from evals.cases import load_set
+from evals.configs import named
 from evals.environment import standalone
-from evals.runner import GATES, REPORTS_DIR, deterministic, model, score, write_golden, write_report
+from evals.runner import (
+    REPORTS_DIR,
+    TOOL_NAMES,
+    ConfigRun,
+    compare,
+    config_names,
+    deterministic,
+    git_sha,
+    write_golden,
+    write_model_report,
+    write_report,
+)
+from palletwise.agent.runtime import choose_route
 from palletwise.llm import DisabledProvider, build_provider
 from palletwise.settings import LlmSettings
 
@@ -19,10 +35,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--write-golden", action="store_true")
     parser.add_argument("--report-dir", type=Path, default=REPORTS_DIR)
+    parser.add_argument("--config", default="production", help="one named runtime configuration")
+    parser.add_argument("--compare", default=None, help="model level: named configurations, comma separated")
+    parser.add_argument(
+        "--tier3-only",
+        action="store_true",
+        help="model level: only the cases the three-tier runtime leaves to the model (tier 3)",
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
 
-    names = args.sets or ["core", "adversarial"]
+    sha = git_sha()  # at the start: a commit made during a long run must not relabel it
+    names = args.sets or ["core", "adversarial", "operations", "routing"]
     cases, hashes = [], {}
     for name in names:
         found, digest = load_set(name)
@@ -38,16 +62,25 @@ def main(argv: list[str] | None = None) -> int:
         print(f"model gate: PENDING (provider unavailable). Report: {paths[1]}")
         return 3
 
+    every_case = list(cases)
+    if args.tier3_only:
+        cases = [
+            c
+            for c in cases
+            if choose_route(c.question, None, c.page_context, TOOL_NAMES, semantic=True)[0] is None
+        ]
+        hashes["selection"] = "tier3-only"
+
     with standalone() as env:
         if args.write_golden:
             for path in write_golden(env, cases):
                 print(f"golden: {path}")
         if args.level == "deterministic":
-            results = deterministic(env, cases)
+            results = deterministic(env, cases, named([args.config])[0])
             failed = [r for r in results if not r.passed]
             status = "pass" if not failed else "fail"
             paths = write_report(
-                "deterministic", hashes, env, results, status=status, directory=args.report_dir
+                "deterministic", hashes, env, results, status=status, directory=args.report_dir, sha=sha
             )
             print(
                 f"deterministic gate: {status.upper()}, {len(results) - len(failed)} of {len(results)}"
@@ -55,23 +88,27 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0 if not failed else 1
         llm = LlmSettings()
-        results = model(env, cases, provider, runs=args.runs)
-        metrics = score(results)
-        gated = {k: v for k, v in metrics.items() if k in GATES}
-        failing = [k for k, v in gated.items() if v is not None and v < GATES[k]]
-        status = "pass" if not failing else f"fail: {', '.join(failing)}"
-        paths = write_report(
-            "model",
+        configs = named(args.compare.split(",") if args.compare else [args.config])
+        # A provider per configuration: each API runs on its own event loop (runner.compare).
+        compared = compare(
+            env, cases, lambda: build_provider(LlmSettings()), configs, runs=args.runs, lookup=every_case
+        )
+        entries = [
+            ConfigRun(name, config.as_json(), results)
+            for (name, results), config in zip(compared, configs, strict=True)
+        ]
+        paths = write_model_report(
             hashes,
             env,
-            results,
-            status=status,
-            metrics=metrics,
+            entries,
             model_info={"models": llm.models, "location": llm.location, "runs": args.runs},
             directory=args.report_dir,
+            sha=sha,
         )
-        print(f"model gate: {status.upper()}. Report: {paths[1]}")
-        return 0 if not failing else 1
+        for name, entry in zip(config_names(configs), entries, strict=True):
+            print(f"model gate [{name}]: {entry.status.upper()}")
+        print(f"Report: {paths[1]}")
+        return 0 if all(e.status.startswith("pass") for e in entries) else 1
 
 
 if __name__ == "__main__":

@@ -21,12 +21,21 @@ export type RunEvent = Base &
     | { type: "RUN_STARTED"; run_id: string; path: "A" | "B" | "C" }
     | { type: "TOOL_CALL_START"; tool_call_id: string; tool: string }
     | { type: "TOOL_CALL_END"; tool_call_id: string; tool: string; outcome: string }
+    | { type: "pw.status"; stage: string; label: string }
+    | { type: "pw.headline"; text: string }
     | { type: "pw.result"; tool_call_id: string; result: ResultEnvelope }
     | { type: "TEXT_MESSAGE_START"; message_id: string }
     | { type: "TEXT_MESSAGE_CONTENT"; message_id: string; delta: string }
     | { type: "TEXT_MESSAGE_END"; message_id: string }
     | { type: "pw.suggestions"; suggestions: Suggestion[] }
-    | { type: "RUN_FINISHED"; run_id: string; trace_id: string; path: string; outcome: string }
+    | {
+        type: "RUN_FINISHED";
+        run_id: string;
+        trace_id: string;
+        path: string;
+        outcome: string;
+        text_source?: "model" | "template" | "message" | "cache" | null;
+      }
     | { type: "RUN_ERROR"; code: string; message: string; trace_id: string }
   );
 

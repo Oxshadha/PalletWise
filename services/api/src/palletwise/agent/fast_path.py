@@ -21,11 +21,19 @@ class _Rule(BaseModel):
     words: tuple[str, ...]
 
 
+class _Question(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    text: str
+    tool: str
+    arguments: dict[str, Any]
+
+
 class _Rules(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     version: int
     identifiers: dict[str, str]
     rules: tuple[_Rule, ...]
+    questions: tuple[_Question, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,8 +52,18 @@ def _rules() -> _Rules:
     return rules
 
 
+def normalize(question: str) -> str:
+    """Lower case, one space, straight apostrophes, no end punctuation."""
+    text = question.replace("\u2019", "'").replace("\u2018", "'").lower()
+    return " ".join(text.split()).rstrip(" ?.!")
+
+
 def route(question: str) -> Route | None:
     rules = _rules()
+    exact = normalize(question)
+    for known in rules.questions:
+        if exact == known.text:
+            return Route(f"question:{known.tool}", known.tool, dict(known.arguments))
     words = set(re.findall(r"[a-z]+", question.lower()))
     found: dict[str, set[str]] = {
         name: {m.upper() for m in re.findall(pattern, question, flags=re.IGNORECASE)}

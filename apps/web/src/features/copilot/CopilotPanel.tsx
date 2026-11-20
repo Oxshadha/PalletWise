@@ -40,14 +40,19 @@ export function CopilotPanel({ notReadyText }: { notReadyText: string | null }) 
     });
   }, [state.pending, notReadyText, dispatch, ask]);
 
-  // Auto-scroll unless the user has scrolled up to read earlier answers (UX spec 6).
+  // A new question always comes into view; while an answer streams, the view follows it unless
+  // the user has scrolled up to read earlier answers (UX spec 6).
   const lastText = state.answers.at(-1)?.text;
+  const count = state.answers.length;
+  const seen = useRef(count);
   useEffect(() => {
     const box = list.current;
     if (!box) return;
+    const asked = count > seen.current;
+    seen.current = count;
     const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
-    if (nearBottom) end.current?.scrollIntoView({ block: "end" });
-  }, [state.answers.length, lastText]);
+    if (asked || nearBottom) end.current?.scrollIntoView({ block: "end" });
+  }, [count, lastText]);
 
   const choose = (suggestion: Suggestion) => {
     void ask(suggestion.label, { suggestion });
@@ -58,8 +63,8 @@ export function CopilotPanel({ notReadyText }: { notReadyText: string | null }) 
       <header className="pw-panel-header">
         <div>
           <h2 id="pw-copilot-title" tabIndex={-1} className="pw-copilot-title">
-            <span className="pw-sparkle">
-              <Icon name="sparkle" size={16} />
+            <span className="pw-copilot-mark" aria-hidden="true">
+              <Icon name="chat" size={16} />
             </span>
             PalletWise Copilot
           </h2>
@@ -70,6 +75,7 @@ export function CopilotPanel({ notReadyText }: { notReadyText: string | null }) 
           <button
             type="button"
             className="pw-button-quiet"
+            aria-label="New conversation"
             onClick={() => {
               void stop();
               dispatch({ type: "new-conversation" });

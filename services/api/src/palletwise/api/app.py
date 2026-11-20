@@ -9,7 +9,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Response, status
 from pydantic import BaseModel
 
-from palletwise.agent.runtime import CopilotRuntime
+from palletwise.agent import semantic_router
+from palletwise.agent.runtime import PRODUCTION_RUNTIME, CopilotRuntime
 from palletwise.api import auth_routes, copilot, sites
 from palletwise.api.observability import request_span
 from palletwise.api.security import CurrentPrincipal, csrf_middleware, require_session, site_in_scope
@@ -19,6 +20,7 @@ from palletwise.auth.service import AuthService
 from palletwise.db import status_repo
 from palletwise.db.agent_repo import AgentRegistry
 from palletwise.db.audit_repo import AuditLog
+from palletwise.db.cache_repo import WordingCacheStore
 from palletwise.db.connection import close_pools, role_pool
 from palletwise.db.copilot_repo import ConversationStore, RateLimiter, UsageLedger
 from palletwise.db.session_repo import SessionStore
@@ -69,8 +71,16 @@ def build_copilot() -> copilot.CopilotServices:
     tools = v1_tools()
     executor = ToolExecutor(tools, agents, PolicyClient(PolicySettings()), audit, read_pool, limiter)
     llm = LlmSettings()
+    semantic_router.router()  # parsed at startup: a broken routes file fails here, not on a question
     return copilot.CopilotServices(
-        runtime=CopilotRuntime(tools, executor, build_provider(llm), llm.run_timeout_seconds),
+        runtime=CopilotRuntime(
+            tools,
+            executor,
+            build_provider(llm),
+            llm.run_timeout_seconds,
+            config=PRODUCTION_RUNTIME,
+            cache=copilot.WordingCacheAdapter(WordingCacheStore(role_pool("PW_CACHE"))),
+        ),
         agents=agents,
         conversations=ConversationStore(role_pool("PW_MEMORY")),
         ledger=UsageLedger(app_pool),

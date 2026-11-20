@@ -112,7 +112,9 @@
           "state": {
             "enum": [
               "NORMAL",
-              "EMPTY"
+              "EMPTY",
+              "LOW_STOCK",
+              "OVER_CAPACITY"
             ],
             "title": "State",
             "type": "string"
@@ -314,6 +316,17 @@
               }
             ],
             "title": "Settings Version Id"
+          },
+          "settings_version_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings Version No"
           },
           "time_zone": {
             "title": "Time Zone",

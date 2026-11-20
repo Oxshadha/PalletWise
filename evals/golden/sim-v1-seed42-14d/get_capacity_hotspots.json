@@ -1,0 +1,11 @@
+{
+ "ref": "get_capacity_hotspots",
+ "dataset_version": "sim-v1-seed42-14d",
+ "locations": [
+  "B1-01-02",
+  "B1-04-04",
+  "D1-01-02",
+  "zone:B",
+  "zone:D"
+ ]
+}

@@ -35,6 +35,9 @@ run_duration = Histogram(
     buckets=LATENCY_BUCKETS,
     registry=REGISTRY,
 )
+wording_cache = Counter(
+    "pw_wording_cache", "Answer-wording cache lookups and stores", ["outcome"], registry=REGISTRY
+)
 llm_tokens = Counter("pw_llm_tokens", "Model tokens", ["model", "direction"], registry=REGISTRY)
 llm_cost = Counter("pw_llm_cost_estimated", "Estimated model cost in USD", ["model"], registry=REGISTRY)
 tool_calls = Counter(

@@ -47,14 +47,38 @@
   text-align: center;
 }
 
+/* Camera controls: one glass rail at the bottom right, not a column of separate discs. */
 .pw-map-controls {
   position: absolute;
   right: var(--pw-space-4);
-  top: 50%;
-  translate: 0 -50%;
+  bottom: var(--pw-space-4);
   display: flex;
   flex-direction: column;
-  gap: var(--pw-space-2);
+  gap: 2px;
+  padding: var(--pw-space-1);
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-glass);
+  backdrop-filter: blur(var(--pw-blur-glass));
+  box-shadow: var(--pw-shadow-card);
+}
+
+.pw-map-controls .pw-icon-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  color: var(--pw-color-text-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pw-map-controls .pw-icon-button:hover {
+    transform: none;
+    background: var(--pw-color-surface);
+    color: var(--pw-color-text-primary);
+  }
 }
 
 /* Floating key, bottom left of the map. */
@@ -96,6 +120,34 @@
   background: var(--pw-color-status-info);
 }
 
+/* The two hatched base states as small squares, matching the scene's plates (UX spec 5). */
+.pw-dot.is-low-stock,
+.pw-dot.is-over-capacity {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 0;
+}
+
+.pw-dot.is-low-stock {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--pw-color-surface) 0 2px,
+    var(--pw-color-status-warning) 2px 4px
+  );
+  box-shadow: inset 0 0 0 1px var(--pw-color-status-warning);
+}
+
+.pw-dot.is-over-capacity {
+  background:
+    repeating-linear-gradient(45deg, transparent 0 2px, var(--pw-color-status-critical) 2px 3px),
+    repeating-linear-gradient(
+      -45deg,
+      var(--pw-color-surface) 0 2px,
+      var(--pw-color-status-critical) 2px 3px
+    );
+  box-shadow: inset 0 0 0 1px var(--pw-color-status-critical);
+}
+
 /* Labels drawn in the 3D scene (real text, so it is Inter at any zoom). */
 .pw-zone-tag,
 .pw-pin-tag {
@@ -109,10 +161,12 @@
   user-select: none;
 }
 
+/* Zone names are wayfinding, not findings: quiet glass, so highlights carry the heaviest marks. */
 .pw-zone-tag {
-  background: var(--pw-color-accent-strong);
-  color: var(--pw-color-text-on-accent);
-  opacity: 0.92;
+  border: 1px solid var(--pw-color-glass-border);
+  background: var(--pw-color-glass);
+  color: var(--pw-color-text-muted);
+  backdrop-filter: blur(var(--pw-blur-glass));
 }
 
 .pw-pin-tag {
@@ -181,13 +235,20 @@
 .pw-map-side {
   display: flex;
   flex-direction: column;
-  gap: var(--pw-space-3);
+  gap: var(--pw-space-4);
   min-width: 0;
   overflow: auto;
 }
 
-.pw-map-side .pw-card-soft {
-  padding: var(--pw-space-3);
+/* Side column: sections divided by a hairline and space, never cards inside the panel card. */
+.pw-side-section {
+  padding-bottom: var(--pw-space-4);
+  border-bottom: 1px solid var(--pw-color-border);
+}
+
+.pw-side-section:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
 /* ---------------------------------------------------------------- 2D plan */
@@ -283,6 +344,54 @@
   stroke-width: 0.55;
 }
 
+/* Base states (UX spec 5): fill and pattern, under any highlight outline. */
+.pw-plan-hatch-low {
+  stroke: var(--pw-color-status-warning);
+  stroke-width: 0.12;
+}
+
+.pw-plan-hatch-over {
+  stroke: var(--pw-color-status-critical);
+  stroke-width: 0.1;
+}
+
+.pw-plan-bin.is-low-stock {
+  fill: url(#pw-low-pattern);
+  stroke: var(--pw-color-status-warning);
+}
+
+.pw-plan-bin.is-over-capacity {
+  fill: url(#pw-over-pattern);
+  stroke: var(--pw-color-status-critical);
+}
+
+/* Zone highlights: the zone's outline in the highlight's severity. */
+.pw-plan-zone-mark polygon {
+  fill: none;
+  stroke-width: 0.45;
+}
+
+.pw-plan-zone-mark text {
+  font-weight: var(--pw-font-weight-heading);
+  fill: var(--pw-color-text-primary);
+  paint-order: stroke;
+  stroke: var(--pw-color-surface);
+  stroke-width: 0.3;
+}
+
+.pw-plan-zone-mark.is-info polygon {
+  stroke: var(--pw-color-status-info);
+}
+
+.pw-plan-zone-mark.is-warning polygon {
+  stroke: var(--pw-color-status-warning);
+}
+
+.pw-plan-zone-mark.is-critical polygon {
+  stroke: var(--pw-color-status-critical);
+  stroke-width: 0.7;
+}
+
 .pw-plan-bin.is-selected {
   stroke: var(--pw-color-focus-ring);
   stroke-width: 0.25;
@@ -328,41 +437,66 @@
   color: var(--pw-color-text-muted);
 }
 
+/* A highlighted location: a plain row with its severity as a bar on the left (wider for
+   critical, so it is not color alone), an inset fill on hover. */
 .pw-location {
+  position: relative;
   display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   width: 100%;
-  justify-content: space-between;
-  gap: var(--pw-space-2);
-  padding: var(--pw-space-2) var(--pw-space-3);
-  border: 1px solid var(--pw-color-glass-border);
-  border-left-width: 3px;
+  column-gap: var(--pw-space-2);
+  padding: var(--pw-space-1) var(--pw-space-2) var(--pw-space-1) var(--pw-space-4);
+  border: 0;
   border-radius: var(--pw-radius-sm);
-  background: var(--pw-color-surface);
-  font-size: var(--pw-font-size-sm);
+  background: transparent;
   color: var(--pw-color-text-primary);
   font: inherit;
+  font-size: var(--pw-font-size-sm);
+  line-height: 1.75rem;
   text-align: left;
   cursor: pointer;
 }
 
-.pw-location.is-info {
-  border-left-color: var(--pw-color-status-info);
+.pw-location::before {
+  content: "";
+  position: absolute;
+  left: var(--pw-space-1);
+  top: var(--pw-space-2);
+  bottom: var(--pw-space-2);
+  width: 3px;
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-status-info);
 }
 
-.pw-location.is-warning {
-  border-left-color: var(--pw-color-status-warning);
+.pw-location.is-warning::before {
+  background: var(--pw-color-status-warning);
 }
 
-.pw-location.is-critical {
-  border-left-color: var(--pw-color-status-critical);
+.pw-location.is-critical::before {
+  width: 5px;
+  background: var(--pw-color-status-critical);
 }
 
 .pw-location[aria-pressed="true"] {
+  background: var(--pw-color-accent-soft);
   outline: 2px dashed var(--pw-color-focus-ring);
+  outline-offset: -2px;
+}
+
+.pw-locations-reason {
+  margin: var(--pw-space-1) 0 0;
+  color: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-sm);
 }
 
 .pw-location-code {
   font-weight: var(--pw-font-weight-navigation);
+  white-space: nowrap; /* "Zone A" and bin codes never break */
+}
+
+.pw-location > .pw-muted {
+  font-size: var(--pw-font-size-xs);
 }
 
 .pw-swatch {
@@ -383,6 +517,26 @@
     var(--pw-color-text-muted) 3px 4px
   );
   border-style: dashed;
+}
+
+.pw-swatch.is-low-stock {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--pw-color-surface) 0 3px,
+    var(--pw-color-status-warning) 3px 5px
+  );
+  border-color: var(--pw-color-status-warning);
+}
+
+.pw-swatch.is-over-capacity {
+  background:
+    repeating-linear-gradient(45deg, transparent 0 3px, var(--pw-color-status-critical) 3px 4px),
+    repeating-linear-gradient(
+      -45deg,
+      var(--pw-color-surface) 0 3px,
+      var(--pw-color-status-critical) 3px 4px
+    );
+  border-color: var(--pw-color-status-critical);
 }
 
 .pw-swatch.is-info {
@@ -431,11 +585,6 @@
   .pw-map-body {
     grid-template-columns: 12.5rem minmax(0, 1fr);
   }
-
-  .pw-location {
-    flex-direction: column;
-    gap: 0;
-  }
 }
 
 @media (max-height: 820px) {
@@ -462,4 +611,9 @@
 .pw-tooltip strong {
   color: var(--pw-color-text-primary);
   font-weight: var(--pw-font-weight-heading-strong);
+}
+
+/* A zone tag stays mounted; a highlighted zone's own tag replaces it. */
+.pw-zone-tag[hidden] {
+  display: none;
 }

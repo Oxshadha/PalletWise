@@ -14,6 +14,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
+from palletwise.contracts.results import MAX_ENTITIES, WorkingSet
 from palletwise.db.connection import tenant_session
 from palletwise.db.ids import uuid7
 
@@ -177,18 +178,29 @@ class ConversationStore:
             ).fetchall()
         return [Turn(q, a) for q, a in rows]
 
-    def working_set(self, owner: Owner, conversation_id: UUID) -> list[Any]:
-        """Identifiers from the last successful result (semantic spec 7.5)."""
+    def working_set(self, owner: Owner, conversation_id: UUID, since: datetime | None) -> WorkingSet | None:
+        """Identifiers of the last successful result in this conversation (semantic spec 7.5), with
+        their provenance. Results from before `since` (a simulation reset) do not count."""
         with self._session(owner) as conn:
             row = conn.execute(
                 """
-                SELECT entities FROM pw.copilot_run
+                SELECT id, created_at, entities, results -> -1 -> 'normalized_request' ->> 'tool'
+                  FROM pw.copilot_run
                  WHERE conversation_id = %s AND status = 'COMPLETED' AND jsonb_array_length(entities) > 0
                  ORDER BY seq DESC LIMIT 1
                 """,
                 (conversation_id,),
             ).fetchone()
-        return list(row[0]) if row else []
+        if row is None or (since is not None and row[1] < since):
+            return None
+        ids: dict[str, list[UUID]] = {"product": [], "bin": [], "zone": []}
+        for entity in row[2][:MAX_ENTITIES]:
+            if entity.get("type") in ids:
+                ids[entity["type"]].append(UUID(str(entity["id"])))
+        return WorkingSet(
+            run_id=row[0], tool=row[3], created_at=row[1],
+            products=tuple(ids["product"]), bins=tuple(ids["bin"]), zones=tuple(ids["zone"]),
+        )  # fmt: skip
 
     def request_cancel(self, owner: Owner, run_id: UUID) -> bool:
         with self._session(owner) as conn:
@@ -275,7 +287,9 @@ class UsageRecord:
     cached_tokens: int
     cost_estimated: Decimal
     latency_ms: int
-    outcome: str
+    outcome: str  # OK, ERROR, CANCELLED
+    stage: str  # TOOL_CHOICE, ANSWER_TEXT, WORDING, CLASSIFIER, UNKNOWN (ADR 0001)
+    usage_estimated: bool
 
     def as_json(self) -> dict[str, Any]:
         return {

@@ -26,7 +26,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from support import load_site, provision_site
 
 from evals.fake_idp import CLIENT_ID, CLIENT_SECRET, ISSUER, SIGNING_KEY, FakeIdp
-from palletwise.agent.runtime import BUDGET_TEXT, CopilotRuntime
+from palletwise.agent.runtime import BUDGET_TEXT, CopilotRuntime, RuntimeConfig
 from palletwise.api import copilot, sites
 from palletwise.api.app import create_app
 from palletwise.auth.crypto import KeyRing
@@ -160,7 +160,11 @@ def env(ready_site: Site, connect_session: Connect, opa_url: str) -> Generator[E
         limiter,
     )
     services = copilot.CopilotServices(
-        runtime=CopilotRuntime(v1_tools(), executor, models, run_timeout=30),
+        # The scripted agent model is registered as gemini-flash: name it, since the registry's
+        # primary is Flash-Lite (ADR 0001), which these tests script as the path A wording model.
+        runtime=CopilotRuntime(
+            v1_tools(), executor, models, run_timeout=30, config=RuntimeConfig(agent_model="gemini-flash")
+        ),
         agents=agents,
         conversations=ConversationStore(role_pool("PW_MEMORY")),
         ledger=UsageLedger(app_pool),
@@ -517,7 +521,9 @@ def test_map_state_comes_from_the_semantic_layer(env: Env) -> None:
              SELECT 1 FROM pw.inventory_balance ib WHERE ib.bin_id = b.id AND ib.on_hand > 0)""",
         (env.site.site,),
     ).fetchall()
-    assert {b["bin_id"] for b in state["bins"] if b["state"] == "EMPTY"} == {str(r[0]) for r in empty}
+    # An empty pick bin below its policy minimum shows as low stock, which takes precedence (ux-screens 5).
+    low = {b["bin_id"] for b in state["bins"] if b["state"] == "LOW_STOCK"}
+    assert {b["bin_id"] for b in state["bins"] if b["state"] == "EMPTY"} == {str(r[0]) for r in empty} - low
     clock = env.db.execute(
         "SELECT sim_time FROM pw.site_clock WHERE site_id = %s", (env.site.site,)
     ).fetchone()
@@ -559,13 +565,13 @@ def test_map_endpoints_are_site_scoped_and_fail_closed(env: Env) -> None:
 def test_starters_come_from_the_server_and_only_name_built_tools(env: Env) -> None:
     env.sign_in()
     starters = env.client.get("/api/copilot/starters").json()
-    assert starters == [
-        {
-            "label": "Where is SKU-102 stored?",
-            "tool": "find_product_locations",
-            "arguments": {"sku": "SKU-102"},
-        }
-    ]
+    assert starters[0] == {
+        "label": "Where is SKU-102 stored?",
+        "tool": "find_product_locations",
+        "arguments": {"sku": "SKU-102"},
+    }
+    built = {t.name for t in v1_tools()}
+    assert len(starters) == 4 and all(s["tool"] in built for s in starters)
     status = env.client.get(f"/api/sites/{env.site.site}/status").json()
     assert status["time_zone"] == "Asia/Colombo"
 
@@ -643,3 +649,105 @@ def test_an_error_response_carries_the_trace_id_of_its_request(env: Env, exporte
     assert status == 503
     servers = [s for s in exported_spans.get_finished_spans() if s.name == "http.server"]
     assert body["trace_id"] in {format(s.context.trace_id, "032x") for s in servers}
+
+
+# ---------------------------------------------------------------- working sets (semantic spec 7.5)
+
+
+def narrow_previous(seen: list[str]) -> FunctionModel:
+    """A model that narrows the previous answer by location, recording what it was told."""
+
+    def fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        seen.extend(str(m) for m in messages)
+        if not any(isinstance(p, ToolReturnPart) for m in messages for p in getattr(m, "parts", [])):
+            arguments = {"measures": ["on_hand"], "dimensions": ["bin"], "scope": {"working_set": True}}
+            return ModelResponse(parts=[ToolCallPart("query_inventory", arguments)])
+        return ModelResponse(parts=[TextPart("Those are the locations holding it.")])
+
+    return FunctionModel(fn)
+
+
+def query_audit(env: Env, run_id: str) -> tuple[Any, ...]:
+    row = env.db.execute(
+        "SELECT outcome, parameters FROM pw.audit_event WHERE run_id = %s AND tool = 'query_inventory'",
+        (UUID(run_id),),
+    ).fetchone()
+    assert row is not None
+    return tuple(row)
+
+
+def test_of_those_narrows_the_previous_answer_with_fresh_data(env: Env) -> None:
+    env.sign_in(subject="ws-narrow")  # its own run budget (20 runs per user per minute)
+    _, first, _ = env.ask("Where is SKU-102 stored?")  # fast path: product and its bins
+    conversation = first["x-conversation-id"]
+    seen: list[str] = []
+    env.models.models["gemini_flash"] = narrow_previous(seen)
+    _, follow, events = env.ask("Of those, which are in zone B?", conversation_id=conversation)
+
+    assert any("The previous answer listed 1 product" in m for m in seen)
+    assert not any(str(env.site.site) in m for m in seen if "previous answer" in m)  # counts, not ids
+    [result] = of_type(events, "pw.result")
+    expected = {
+        r[0]
+        for r in env.db.execute(
+            "SELECT b.code FROM pw.inventory_balance ib JOIN pw.bin b ON b.id = ib.bin_id"
+            " JOIN pw.product p ON p.id = ib.product_id WHERE ib.tenant_id = %s AND p.sku = 'SKU-102'"
+            " AND ib.on_hand > 0",
+            (env.site.tenant,),
+        ).fetchall()
+    }
+    assert {r["bin"] for r in result["result"]["rows"]} == expected  # only SKU-102, re-read now
+    assert "Narrowed to the 1 product of the previous answer." in " ".join(
+        result["result"]["evidence"]["how_computed"]
+    )
+    outcome, parameters = query_audit(env, follow["x-run-id"])
+    assert outcome == "OK" and parameters["working_set_from"]["run_id"] == first["x-run-id"]
+
+
+def test_without_a_previous_result_there_is_nothing_to_narrow(env: Env) -> None:
+    env.sign_in(subject="ws-empty")  # its own run budget (20 runs per user per minute)
+    env.models.models["gemini_flash"] = narrow_previous([])
+    _, headers, _ = env.ask("Of those, which are in zone B?")  # a new conversation
+    outcome, _ = query_audit(env, headers["x-run-id"])
+    assert outcome == "VALIDATION_FAILED"
+
+
+def test_a_simulation_reset_invalidates_earlier_working_sets(env: Env) -> None:
+    env.sign_in(subject="ws-reset")  # its own run budget (20 runs per user per minute)
+    _, first, _ = env.ask("Where is SKU-102 stored?")
+    reset = uuid4()
+    current = env.db.execute(
+        "SELECT id FROM pw.simulation_run WHERE site_id = %s AND status = 'ACTIVE'", (env.site.site,)
+    ).fetchone()
+    assert current is not None
+    # A reset ends the current run and starts a new one (one active run per site).
+    env.db.execute("UPDATE pw.simulation_run SET status = 'ENDED' WHERE id = %s", (current[0],))
+    env.db.execute(
+        "INSERT INTO pw.simulation_run (id, tenant_id, site_id, seed, dataset_version, history_start,"
+        " clock_start, status, started_at, started_by)"
+        " SELECT %s, tenant_id, site_id, seed, dataset_version, history_start, clock_start, 'ACTIVE',"
+        " now(), 'test-reset' FROM pw.simulation_run WHERE id = %s",
+        (reset, current[0]),
+    )
+    try:
+        env.models.models["gemini_flash"] = narrow_previous([])
+        _, follow, _ = env.ask("Of those, which are in zone B?", conversation_id=first["x-conversation-id"])
+        outcome, _ = query_audit(env, follow["x-run-id"])
+        assert outcome == "VALIDATION_FAILED"  # the earlier result describes replaced data
+    finally:
+        env.db.execute("UPDATE pw.simulation_run SET status = 'ENDED' WHERE id = %s", (reset,))
+        env.db.execute("UPDATE pw.simulation_run SET status = 'ACTIVE' WHERE id = %s", (current[0],))
+
+
+def test_a_persona_question_is_answered_on_the_fast_path_without_a_model(env: Env) -> None:
+    env.sign_in(subject="fast-path")
+    status, _, events = env.ask("Which items are running low on stock?")
+    assert status == 200 and events[0]["path"] == "B"
+    [result] = of_type(events, "pw.result")
+    assert result["result"]["normalized_request"]["tool"] == "get_low_stock"
+    finished = of_type(events, "RUN_FINISHED")[0]
+    text = answer(events)
+    if result["result"]["status"] == "OK":
+        assert finished["outcome"] == "ANSWER" and "at or below the minimum" in text
+        assert {h["reason"] for h in result["result"]["highlights"]} == {"low_stock"}
+    assert not any(d in text for d in ("\u2013", "\u2014"))
