@@ -136,6 +136,9 @@ class RuntimeConfig:
     # run started, the run finishes with the result's template answer instead of waiting for the
     # model's wording. None: wait for the model (the baseline).
     answer_deadline_s: float | None = None
+    # The same for questions routed without the model (tiers 1 and 2), against the fast path
+    # target of 3 s: past it, the template answer is final instead of the small model's wording.
+    routed_answer_deadline_s: float | None = None
     # Tier 2 (ADR 0001 amendment 2): confidently recognised questions route without a model call.
     semantic_router: bool = False
     # Tier 3's agent model (tool choice and answer text), by logical name; None: the agent
@@ -155,8 +158,12 @@ class RuntimeConfig:
             raise ValueError("headline_after_s must be more than 0")
         if self.hedge_after_s is not None and self.hedge_after_s <= 0:
             raise ValueError("hedge_after_s must be more than 0")
-        if self.answer_deadline_s is not None and self.answer_deadline_s <= 0:
-            raise ValueError("answer_deadline_s must be more than 0")
+        for name, value in (
+            ("answer_deadline_s", self.answer_deadline_s),
+            ("routed_answer_deadline_s", self.routed_answer_deadline_s),
+        ):
+            if value is not None and value <= 0:
+                raise ValueError(f"{name} must be more than 0")
         if unbuilt:
             raise ValueError(f"runtime choices not built yet: {', '.join(unbuilt)}")
 
@@ -170,6 +177,7 @@ class RuntimeConfig:
             "headline_first": self.headline_first,
             "headline_after_s": self.headline_after_s if self.headline_first else None,
             "answer_deadline_s": self.answer_deadline_s,
+            "routed_answer_deadline_s": self.routed_answer_deadline_s,
             "semantic_router": self.semantic_router,
             "agent_model": self.agent_model,
         }
@@ -668,7 +676,7 @@ class CopilotRuntime:
             await self._status(events, queue, "writing")
             try:
                 text = await self._until_deadline(
-                    state, self._word(request, route.tool, result, lite, meter, state)
+                    state, self._word(request, route.tool, result, lite, meter, state), routed=True
                 )
             except _PastDeadline:
                 text = None
@@ -902,12 +910,12 @@ class CopilotRuntime:
 
     # ------------------------------------------------------------ headline first (ADR 0001 section 6)
 
-    async def _until_deadline[T](self, state: RunState, work: Awaitable[T]) -> T:
+    async def _until_deadline[T](self, state: RunState, work: Awaitable[T], *, routed: bool = False) -> T:
         """Awaits model work, unless the answer deadline passes while a result is in: then the work
         is cancelled (its model calls are still charged) and _PastDeadline is raised, so the run
         finishes with the result's template answer."""
         task = asyncio.ensure_future(work)
-        limit = self.config.answer_deadline_s
+        limit = self.config.routed_answer_deadline_s if routed else self.config.answer_deadline_s
         try:
             while limit is not None and not task.done():
                 remaining = state.started + limit - clock.monotonic()

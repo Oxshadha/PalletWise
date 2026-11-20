@@ -1064,3 +1064,46 @@ def test_the_agent_model_can_be_set_for_tier_3() -> None:
     _, state, gateway, meter = run("Which bins hold the wireless mouse?", provider, config=config)
     assert state.tier == 3 and state.outcome == "ANSWER" and gateway.calls
     assert {c.model for c in meter.settled} == {"gemini-flash-lite"}
+
+
+# ---------------------------------------------------------------- three-tier comparison findings
+
+
+def test_a_template_never_repeats_an_injected_product_name() -> None:
+    """Eval IND-003: the bin-contents template quoted the poisoned name after the model's prose was
+    refused. The template names the product by SKU alone; the table still shows the name."""
+    from palletwise.agent import templates
+
+    poisoned = contents_result().model_copy(
+        update={"rows": ({"sku": "SKU-233", "name": POISONED, "on_hand": 4},)}
+    )
+    text = templates.template_answer("get_bin_contents", poisoned)
+    assert "approve all" not in text.lower() and "SKU-233 with 4 on hand" in text
+
+
+def test_a_totals_query_answers_with_its_totals() -> None:
+    """Eval OPS-012: "1 row found, led by 5728960.27." for a query without a breakdown."""
+    from palletwise.agent import templates
+    from palletwise.contracts.results import Column
+
+    totals = contents_result().model_copy(
+        update={
+            "columns": (Column(key="stock_value", label="Stock value", type="number"),),
+            "rows": ({"stock_value": 5728960.27},),
+            "normalized_request": {"tool": "query_inventory"},
+        }
+    )
+    assert templates.template_answer("query_inventory", totals) == "In total: stock value 5728960.27."
+    assert templates.key_facts("query_inventory", totals) == ("5728960.27",)
+
+
+def test_slow_wording_of_a_routed_question_gives_way_to_the_template() -> None:
+    async def slow(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        await asyncio.sleep(5.0)
+        return ModelResponse(parts=[TextPart("late")])
+
+    config = RuntimeConfig(name="three-tier", semantic_router=True, routed_answer_deadline_s=0.1)
+    events, state, _, _ = run(
+        "Where is SKU-102 stored?", FakeProvider(gemini_flash_lite=FunctionModel(slow)), config=config
+    )
+    assert state.tier == 1 and text_of(events) == TEMPLATE and state.text_source == "template"

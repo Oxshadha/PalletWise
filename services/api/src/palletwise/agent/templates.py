@@ -6,6 +6,7 @@ Templates only restate values that are in the result; they never compute new num
 from collections.abc import Callable
 from typing import Any
 
+from palletwise.agent.guardrails import instruction_echo
 from palletwise.contracts.results import ResultEnvelope, ResultStatus
 
 MAX_LISTED = 3
@@ -13,6 +14,15 @@ MAX_LISTED = 3
 
 def _plural(count: int, one: str, many: str) -> str:
     return one if count == 1 else many
+
+
+def _product(row: dict[str, Any]) -> str:
+    """A product by SKU and name; by SKU alone when the name carries instruction text, so even a
+    template never repeats an injection found in data (FR-COP-12; the table still shows the name)."""
+    name = str(row.get("name") or "")
+    if not name or instruction_echo(name, ""):
+        return str(row["sku"])
+    return f"{row['sku']} ({name})"
 
 
 def _how_many(result: ResultEnvelope) -> str:
@@ -35,7 +45,7 @@ def _bin_contents(result: ResultEnvelope) -> str:
     count = result.row_count
     return (
         f"{code} holds {_how_many(result)} {_plural(count, 'product', 'products')}. "
-        f"The most units are {top['sku']} ({top['name']}) with {top['on_hand']} on hand."
+        f"The most units are {_product(top)} with {top['on_hand']} on hand."
     )
 
 
@@ -56,7 +66,7 @@ def _top_movers(result: ResultEnvelope) -> str:
     r = _first(result)
     days = result.normalized_request.get("days")
     return (
-        f"The fastest mover over the last {days} days is {r['sku']} ({r['name']}), with "
+        f"The fastest mover over the last {days} days is {_product(r)}, with "
         f"{r['demand_units']} units picked. The table lists {_how_many(result)} products."
     )
 
@@ -159,6 +169,14 @@ def _query(result: ResultEnvelope) -> str:
     """The count and the leading rows by name with their first measure, so a query answer says
     what it found (the baseline's "The query returned 8 rows." answered nothing)."""
     first, n = result.columns[0], result.row_count
+    if first.type in ("integer", "number"):
+        # No breakdown: the result is totals, one value per measure (the baseline said
+        # "1 row found, led by 5728960.27").
+        r = result.rows[0]
+        values = "; ".join(
+            f"{c.label.lower()} {r[c.key]}" for c in result.columns if c.type in ("integer", "number")
+        )
+        return f"In total: {values}."
     measure = next((c for c in result.columns[1:] if c.type in ("integer", "number")), None)
     one, many = QUERY_NOUNS.get(first.key, ("row", "rows"))
     if measure is None:
@@ -223,7 +241,12 @@ def key_facts(tool: str, result: ResultEnvelope) -> tuple[str, ...]:
         case "get_order_stockout_risks":
             facts = _first_value(result, "order_no") or _first_value(result, "sku")
         case "query_inventory":
-            facts = [_how_many(result), str(r[result.columns[0].key])] if result.columns else []
+            if not result.columns:
+                facts = []
+            elif result.columns[0].type in ("integer", "number"):
+                facts = [str(r[result.columns[0].key])]  # totals: the first measure's value
+            else:
+                facts = [_how_many(result), str(r[result.columns[0].key])]
         case _:
             facts = []
     return tuple(f for f in facts if f and f != "None")

@@ -24,6 +24,17 @@ CONFIGS: dict[str, RuntimeConfig] = {
     "three-tier": RuntimeConfig(
         name="three-tier", headline_first=True, hedge_after_s=4.0, answer_deadline_s=7.0, semantic_router=True
     ),
+    # Three-tier with a routed answer deadline: questions routed without the model (tiers 1 and 2)
+    # answer with the template when the small model's wording is not ready 2.5 s after the question
+    # (the three-tier run measured tier 2 complete p95 at 3.7 s against the 3 s fast path target).
+    "three-tier-v2": RuntimeConfig(
+        name="three-tier-v2",
+        headline_first=True,
+        hedge_after_s=4.0,
+        answer_deadline_s=7.0,
+        routed_answer_deadline_s=2.5,
+        semantic_router=True,
+    ),
     # Amendment 2 tuning: the hedge trigger near the p90 of healthy tool choice (5.4 s) instead of 4 s.
     "three-tier-p90": RuntimeConfig(
         name="three-tier-p90",
@@ -38,6 +49,7 @@ CONFIGS: dict[str, RuntimeConfig] = {
         headline_first=True,
         hedge_after_s=4.0,
         answer_deadline_s=7.0,
+        routed_answer_deadline_s=2.5,
         semantic_router=True,
         agent_model="gemini-flash-lite",
     ),
