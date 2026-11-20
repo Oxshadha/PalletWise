@@ -9,9 +9,7 @@ import {
   signIn,
   SignedOut,
 } from "../../shared/api/client";
-
-/** Map state is re-read on this interval until the live site stream arrives (agent spec 9.2). */
-export const MAP_STATE_REFRESH_MS = 10_000;
+import { useSiteChanges } from "../../shared/api/siteEvents";
 
 export type LayoutStatus =
   | { kind: "loading" }
@@ -58,22 +56,20 @@ export function useSiteMap(siteId: string) {
     };
   }, [siteId, key]);
 
+  // Re-read when the site stream says stock or the data status changed (agent spec 9.2); the
+  // stream refetches on connect and reconnect, so nothing is missed between hints.
+  const changed = useSiteChanges(siteId, ["inventory", "data_status"]);
   useEffect(() => {
     const controller = new AbortController();
-    const load = () => {
-      fetchMapState(siteId, controller.signal)
-        .then(setState)
-        .catch(() => {
-          /* keep the last known state; the next refresh retries */
-        });
-    };
-    load();
-    const timer = window.setInterval(load, MAP_STATE_REFRESH_MS);
+    fetchMapState(siteId, controller.signal)
+      .then(setState)
+      .catch(() => {
+        /* keep the last known state; the next hint retries */
+      });
     return () => {
       controller.abort();
-      window.clearInterval(timer);
     };
-  }, [siteId]);
+  }, [siteId, changed]);
 
   const retry = useCallback(() => {
     setAttempt((n) => n + 1);

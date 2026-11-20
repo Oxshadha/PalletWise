@@ -751,3 +751,61 @@ def test_a_persona_question_is_answered_on_the_fast_path_without_a_model(env: En
         assert finished["outcome"] == "ANSWER" and "at or below the minimum" in text
         assert {h["reason"] for h in result["result"]["highlights"]} == {"low_stock"}
     assert not any(d in text for d in ("\u2013", "\u2014"))
+
+
+# ---------------------------------------------------------------- site live stream (Slice 3 step 2)
+
+
+def read_events(lines: Any, count: int) -> list[tuple[str, int, dict[str, Any]]]:
+    """The next `count` SSE events as (event, id, data)."""
+    found: list[tuple[str, int, dict[str, Any]]] = []
+    event, ident = "", 0
+    for line in lines:
+        if line.startswith("event: "):
+            event = line[7:]
+        elif line.startswith("id: "):
+            ident = int(line[4:])
+        elif line.startswith("data: "):
+            found.append((event, ident, json.loads(line[6:])))
+            if len(found) == count:
+                return found
+    return found
+
+
+def tick(env: Env) -> None:
+    with env.db.transaction():
+        env.db.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
+        env.db.execute(
+            "UPDATE pw.site_clock SET sim_time = sim_time + interval '1 second' WHERE site_id = %s",
+            (env.site.site,),
+        )
+
+
+def test_the_site_stream_says_hello_then_what_changed(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    from palletwise.api import events
+
+    monkeypatch.setattr(events, "HEARTBEAT_SECONDS", 0.5)
+    env.sign_in()
+    url = f"/api/sites/{env.site.site}/events"
+    with env.client.stream("GET", url) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        lines = response.iter_lines()
+        ((kind, start, _),) = read_events(lines, 1)
+        assert kind == "hello"
+        tick(env)
+        ((kind, seq, data),) = read_events((x for x in lines if not x.startswith("event: heartbeat")), 1)
+        while kind == "heartbeat":
+            ((kind, seq, data),) = read_events(lines, 1)
+        assert kind == "change" and seq == start + 1 and data == {"kinds": ["clock"], "complete": True}
+    # A reconnecting client names the last event it applied and is told what it missed.
+    tick(env)
+    with env.client.stream("GET", url, headers={"Last-Event-ID": str(start)}) as response:
+        ((kind, seq, data),) = read_events(response.iter_lines(), 1)
+        assert kind == "change" and seq == start + 2 and data["kinds"] == ["clock"]
+
+
+def test_the_site_stream_is_site_scoped_and_needs_a_session(env: Env) -> None:
+    assert env.client.get(f"/api/sites/{env.site.site}/events").status_code == 401
+    env.sign_in()
+    assert env.client.get(f"/api/sites/{uuid4()}/events").status_code == 404

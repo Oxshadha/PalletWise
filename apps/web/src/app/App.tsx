@@ -19,6 +19,7 @@ import {
   storedThemeChoice,
   type ThemeChoice,
 } from "../shared/theme/theme";
+import { useSiteChanges } from "../shared/api/siteEvents";
 import { formatSiteTime } from "../shared/format";
 import { Icon } from "../shared/ui/Icon";
 import { WorkspaceProvider } from "../shared/workspace/WorkspaceContext";
@@ -151,6 +152,22 @@ export function App() {
       window.clearInterval(timer);
     };
   }, [authError]);
+
+  // The header's site time and data status follow the site stream (agent spec 9.2).
+  const siteId = me?.sites[0]?.id ?? null;
+  const statusChanged = useSiteChanges(siteId, ["clock", "data_status"]);
+  useEffect(() => {
+    if (!siteId || statusChanged === 0) return;
+    const controller = new AbortController();
+    fetchSiteStatus(siteId, controller.signal)
+      .then(setSite)
+      .catch(() => {
+        /* the 15-second reload above retries */
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [siteId, statusChanged]);
 
   const choosePanel = (next: Panel) => {
     setPanel(next);
