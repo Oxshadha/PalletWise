@@ -12,6 +12,9 @@ CONFIGS: dict[str, RuntimeConfig] = {
     # ADR 0001 change 2: the template headline at 3 s when the answer is late, and model wording
     # shown only with every key fact of its result.
     "headline-first": RuntimeConfig(name="headline-first", headline_first=True),
+    # ADR 0001 change 5 on top: the fallback model starts alongside a primary that has not answered
+    # in 4 s (about the healthy p95 of a model call), and the first good response wins.
+    "headline-hedged": RuntimeConfig(name="headline-hedged", headline_first=True, hedge_after_s=4.0),
 }
 
 

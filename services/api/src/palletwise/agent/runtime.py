@@ -135,7 +135,6 @@ class RuntimeConfig:
             name
             for name, value in (
                 ("wording_model", self.wording_model),
-                ("hedge_after_s", self.hedge_after_s),
                 ("parallel_tools", self.parallel_tools or None),
             )
             if value is not None
@@ -144,6 +143,8 @@ class RuntimeConfig:
             unbuilt.append("agent_thinking")
         if self.headline_after_s <= 0:
             raise ValueError("headline_after_s must be more than 0")
+        if self.hedge_after_s is not None and self.hedge_after_s <= 0:
+            raise ValueError("hedge_after_s must be more than 0")
         if unbuilt:
             raise ValueError(f"runtime choices not built yet: {', '.join(unbuilt)}")
 
@@ -206,6 +207,70 @@ class RunState:
             if result.status is ResultStatus.OK:
                 return [e.model_dump(mode="json") for e in result.entities]
         return []
+
+
+# ---------------------------------------------------------------- hedged model (ADR 0001 change 5)
+
+
+class HedgedModel(WrapperModel):
+    """The primary model, with the fallback started alongside it when the primary is slow.
+
+    The primary starts at once. If it has not answered within `hedge_after_s`, or fails with a
+    provider or transport error, the fallback starts too, and the first successful response wins;
+    the other call is cancelled (its cost is still recorded, as an upper bound when the provider
+    never reported usage). Only model responses race: the chosen tool runs once, after the winner
+    is known, through the executor like any other call. Any other error is a bug and is raised.
+    """
+
+    def __init__(
+        self,
+        primary: Model,
+        fallback: Model,
+        hedge_after_s: float,
+        fallback_on: tuple[type[BaseException], ...],
+    ) -> None:
+        super().__init__(primary)
+        self._fallback = fallback
+        self._after = hedge_after_s
+        self._fallback_on = fallback_on
+
+    async def request(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> ModelResponse:
+        def start(model: Model) -> "asyncio.Task[ModelResponse]":
+            return asyncio.create_task(model.request(messages, model_settings, model_request_parameters))
+
+        tasks = [start(self.wrapped)]
+        try:
+            done, _ = await asyncio.wait(tasks, timeout=self._after)
+            if done:
+                error = tasks[0].exception()
+                if error is None or not isinstance(error, self._fallback_on):
+                    return tasks[0].result()  # answered in time, or a bug that must not be hidden
+            metrics.guardrail_triggers.labels(kind="hedge").inc()
+            tasks.append(start(self._fallback))
+            remaining = {t for t in tasks if not t.done()}
+            failure: BaseException | None = tasks[0].exception() if tasks[0].done() else None
+            while remaining:
+                done, remaining = await asyncio.wait(remaining, return_when=asyncio.FIRST_COMPLETED)
+                for finished in done:
+                    error = finished.exception()
+                    if error is None:
+                        return finished.result()  # the first successful response, and only it
+                    if not isinstance(error, self._fallback_on):
+                        raise error
+                    failure = error
+            assert failure is not None
+            raise failure
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            # Let a cancelled call settle its usage record before the run moves on.
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 # ---------------------------------------------------------------- metered model
@@ -574,6 +639,13 @@ class CopilotRuntime:
         )
         if fallback is None:
             return model
+        if self.config.hedge_after_s is not None:
+            return HedgedModel(
+                model,
+                MeteredModel(fallback, meter, "AGENT", state),
+                self.config.hedge_after_s,
+                fallback_on=(ModelAPIError, httpx.TransportError),
+            )
         return FallbackModel(
             model,
             MeteredModel(fallback, meter, "AGENT", state),

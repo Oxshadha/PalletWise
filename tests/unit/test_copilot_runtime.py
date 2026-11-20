@@ -634,7 +634,6 @@ def test_a_rejected_request_records_no_tokens() -> None:
     "choice",
     [
         {"wording_model": "gemini-flash-lite"},
-        {"hedge_after_s": 4.0},
         {"parallel_tools": True},
     ],
 )
@@ -759,3 +758,70 @@ def test_no_headline_is_sent_after_the_answer() -> None:
     )
     assert "pw.headline" not in types(events) and state.headline is None
     assert state.headline_task is not None and state.headline_task.done()
+
+
+# ---------------------------------------------------------------- ADR 0001 change 5: hedged calls
+
+HEDGED = RuntimeConfig(name="hedged", hedge_after_s=0.05)
+
+
+def answering(text: str, seconds: float = 0.0, *, fail: BaseException | None = None) -> FunctionModel:
+    """Chooses the location tool, then answers; optionally slow or failing on every request."""
+
+    async def fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        await asyncio.sleep(seconds)
+        if fail is not None:
+            raise fail
+        if not any(isinstance(p, ToolReturnPart) for m in messages for p in getattr(m, "parts", [])):
+            return ModelResponse(parts=[ToolCallPart("find_product_locations", {"sku": "SKU-102"})])
+        return ModelResponse(parts=[TextPart(text)])
+
+    return FunctionModel(fn)
+
+
+def hedged_run(
+    primary: FunctionModel, fallback: FunctionModel
+) -> tuple[list[RunEvent], RunState, FakeGateway, FakeMeter]:
+    provider = FakeProvider(gemini_flash=primary, gemini_flash_fallback=fallback)
+    return run("Which bins hold the mouse?", provider, fallback="gemini-flash-fallback", config=HEDGED)
+
+
+def test_a_primary_that_answers_in_time_is_never_hedged() -> None:
+    _, state, gateway, meter = hedged_run(
+        answering("SKU-102 is in A8-01-02 with 7 units."), answering("never used")
+    )
+    assert {c.model for c in meter.settled} == {"gemini-flash"} and state.text_source == "model"
+    assert gateway.calls == [("find_product_locations", {"sku": "SKU-102"})]
+
+
+def test_a_slow_primary_loses_to_the_fallback_and_is_cancelled_and_charged() -> None:
+    events, state, gateway, meter = hedged_run(
+        answering("never shown", seconds=2.0), answering("SKU-102 is in A8-01-02 with 7 units.")
+    )
+    assert text_of(events) == "SKU-102 is in A8-01-02 with 7 units." and state.outcome == "ANSWER"
+    assert gateway.calls == [("find_product_locations", {"sku": "SKU-102"})]  # the tool ran once
+    primary = [c for c in meter.settled if c.model == "gemini-flash"]
+    assert primary and all(c.outcome == "CANCELLED" and c.usage_estimated for c in primary)
+    assert meter.reserved == 0
+
+
+def test_a_primary_that_fails_fast_moves_to_the_fallback_at_once() -> None:
+    _, state, _, meter = hedged_run(
+        answering("x", fail=httpx.ConnectError("refused")), answering("SKU-102 is in A8-01-02 with 7 units.")
+    )
+    assert state.outcome == "ANSWER"
+    assert [c.outcome for c in meter.settled if c.model == "gemini-flash"] == ["ERROR", "ERROR"]
+
+
+def test_a_bug_is_not_hidden_by_the_hedge() -> None:
+    _, state, _, meter = hedged_run(answering("x", fail=RuntimeError("bug")), answering("never used"))
+    assert state.error_code == "MODEL_UNAVAILABLE"
+    assert {c.model for c in meter.settled} == {"gemini-flash"}
+
+
+def test_when_both_fail_the_run_ends_as_without_a_model() -> None:
+    _, state, _, _ = hedged_run(
+        answering("x", seconds=0.1, fail=httpx.ReadTimeout("slow")),
+        answering("y", fail=httpx.ConnectError("down")),
+    )
+    assert state.error_code == "MODEL_UNAVAILABLE" and state.outcome == "DECLINE"

@@ -145,6 +145,10 @@ Required facts become a hard gate at 100 percent, replacing "reported" in evals 
   timeout before the fallback runs, so one slow provider costs its timeout twice per answer. The
   hedged calls of change 5 replace this wrapper on the tool-choice call; until then the measurement
   shows it as estimated, timed-out calls of the primary model.
+- **Hedging covers every request of the agent loop**, not only the tool choice: a request's role is
+  known only from its response, and the baseline's 15 s hangs hit answer-text requests as well. The
+  hedged model replaces the fallback wrapper when `hedge_after_s` is set, so a slow primary no longer
+  costs its timeout on each request of the answer.
 - **The baseline sends no progress event**, so the first-progress gate fails on it by definition,
   and a missing progress or headline counts as infinitely late in the p95.
 
