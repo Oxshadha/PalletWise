@@ -186,6 +186,72 @@ the work focuses on **quality and latency**. Cost is a business lever to reduce 
   kept if it improves latency without lowering quality, whatever its cost effect.
 - Hedging still counts the losing call's cost, so the report shows what latency costs.
 
+## Amendment 2, 2026-11-20 (product owner): three-tier routing
+
+**Finding.** A Flash model choosing a tool takes 2.6 s at p50 and 6.7 s at p95 (3.8 Flash, healthy
+calls, report `2026-11-20-e5d097f`), so no answer that waits for model tool selection can show
+highlights within 3 s at p95. Hedging and the answer deadline trim the tail; they cannot make the
+call itself fast. Current practice is to route before reasoning: decide confidently recognised
+intents without a model call and keep the model for the rest.
+
+**Decision.** Three tiers, each for a level of ambiguity:
+
+| Tier | Handles | Tool chosen by |
+|---|---|---|
+| 1. Exact routes (exists) | fixed phrasings, suggestion chips, SKU and bin patterns | `fast_path.yaml`, deterministic |
+| 2. Semantic router (new) | confidently recognised questions with no condition beyond the route's own | curated examples and local text similarity, no model call |
+| 3. Model path | combinations, follow-ups, conditions, genuine interpretation | the model, with headline first, hedging and the answer deadline |
+
+**Safeguards for tier 2**
+
+1. **Calibrated confidence.** The similarity threshold and the margin over the second-best route are
+   fitted on a calibration set of labelled paraphrases and near-misses that is separate from the
+   evaluation sets (fitting on the evaluation set would inflate the measured accuracy). The
+   threshold, the calibration set's hash and its precision are recorded with the routes.
+2. **Conditions detected independently of similarity, by unexplained words.** Tier 2 routes only
+   when every content word of the question belongs to the route's own vocabulary. Any other word
+   (a zone, SKU, bin, number, date, category, brand, outlet, "those") makes it abstain. This is
+   stricter than a list of condition types, which could never name every category or brand.
+3. **Safe abstention.** Uncertain, qualified or conflicting questions go to tier 3; tier 2 never
+   guesses.
+4. **Positive and negative evaluation cases for every route:** paraphrases, qualified variants,
+   ambiguous questions and adversarial phrasings, in a new `routing` set. The original sets and the
+   62-case baseline report are not changed.
+5. **No invented arguments.** In v1 a tier-2 route carries only its own fixed arguments; it
+   extracts nothing from the question. The call goes through `tools.executor` like any other.
+
+| Example | Route |
+|---|---|
+| Show low-stock products | tier 2 |
+| Which products have low stock? | tier 2 |
+| Show low-stock products in zone B | tier 3 |
+| Show the top 10 movers | tier 3 (tier 1 only if its exact route supports that limit) |
+| Which of those are in zone B? | tier 3 |
+
+**Targets unchanged.** NFR-PERF-02 stays the product-wide target (highlights 3 s, headline 4 s,
+complete 8 s, all p95). Reports give every milestone **per tier**; a slow tier 3 is never hidden by
+averaging it with tiers 1 and 2. If tier 3 cannot meet the targets after tier 2 is built, its
+measured workload is the basis for a proposal of tier-specific targets, decided by the product
+owner.
+
+**Hedging tuned.** The trigger moves toward the p90 of healthy primary-model latency (about 5.4 s for
+3.8 Flash tool choice; the 4 s trigger sat near p75 and fired on 30 to 50 percent of calls). The
+trigger is a setting, and both values are compared on the same cases, because a later trigger also
+lengthens the tier-3 tail. A circuit breaker tracks provider timeouts and failures, stops
+speculative calls while the provider is unhealthy, recovers after a cooldown, and never blocks the
+normal fallback when the primary actually fails. In v1 the breaker's state is per API process.
+Whichever response wins, its tool name and arguments pass validation and authorization in
+`tools.executor` before anything runs.
+
+**Flash-Lite for tier-3 tool selection: an experiment.** Kept only if it independently reaches tool
+and parameter accuracy of at least 95 percent, injection resistance of 100 percent, zero grounding
+violations and no regression in required facts.
+
+**Next comparison** (the existing runtime against the three-tier runtime, same cases): share of
+answers per tier; tier-2 accuracy and abstention rate; misrouted qualified questions (must be 0);
+highlight, headline and complete p95 per tier; overall quality and injection resistance; overall
+and tier-3 cost p95.
+
 ## Status
 
 Accepted, 2026-11-19, by the product owner, with the conditions above. Implementation is gated on the
