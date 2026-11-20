@@ -367,6 +367,7 @@ def compare(
     providers: Callable[[], LLMProvider],
     configs: Sequence[RuntimeConfig],
     runs: int = 3,
+    lookup: Sequence[Case] | None = None,
 ) -> list[tuple[str, list[CaseResult]]]:
     """Every configuration on the same cases in one session, interleaved case by case and run by run.
 
@@ -375,7 +376,8 @@ def compare(
     loop at once (found by the first baseline run, which was discarded).
     """
     names = config_names(configs)
-    by_id = {c.id: c for c in cases}
+    # A follow-up's first question may be outside a selection (--tier3-only): look it up in all cases.
+    by_id = {c.id: c for c in (lookup or cases)}
     cases = [c for c in cases if c.level != "deterministic"]  # routing checks only
     results: dict[str, list[CaseResult]] = {n: [] for n in names}
     with ExitStack() as stack:

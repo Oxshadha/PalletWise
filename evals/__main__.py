@@ -62,6 +62,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"model gate: PENDING (provider unavailable). Report: {paths[1]}")
         return 3
 
+    every_case = list(cases)
     if args.tier3_only:
         cases = [
             c
@@ -89,7 +90,9 @@ def main(argv: list[str] | None = None) -> int:
         llm = LlmSettings()
         configs = named(args.compare.split(",") if args.compare else [args.config])
         # A provider per configuration: each API runs on its own event loop (runner.compare).
-        compared = compare(env, cases, lambda: build_provider(LlmSettings()), configs, runs=args.runs)
+        compared = compare(
+            env, cases, lambda: build_provider(LlmSettings()), configs, runs=args.runs, lookup=every_case
+        )
         entries = [
             ConfigRun(name, config.as_json(), results)
             for (name, results), config in zip(compared, configs, strict=True)
