@@ -918,3 +918,149 @@ def test_the_users_own_words_may_be_repeated() -> None:
 
     assert instruction_echo("I can't share my system prompt.", "What is your system prompt?") == []
     assert instruction_echo(POISONED, "Where is the Crunchy Mix?") == ["ignore previous", "approve all"]
+
+
+# ---------------------------------------------------------------- ADR 0001 amendment 2: tiers
+
+TIERED = RuntimeConfig(name="three-tier", semantic_router=True)
+
+
+def never_called(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    raise AssertionError("tier 2 must not call the primary model")
+
+
+def tiered(
+    question: str, config: RuntimeConfig = TIERED, **kwargs: Any
+) -> tuple[list[RunEvent], RunState, FakeGateway, FakeMeter]:
+    provider = FakeProvider(
+        gemini_flash=FunctionModel(never_called), gemini_flash_lite=say("SKU-102 has 7 on hand.")
+    )
+    return run(question, provider, config=config, **kwargs)
+
+
+def test_a_recognised_question_routes_in_tier_2_without_a_model_choosing_the_tool() -> None:
+    events, state, gateway, meter = tiered("Show low-stock products")
+    assert state.tier == 2 and state.path == "A"
+    assert gateway.calls == [("get_low_stock", {})]
+    assert {c.stage for c in meter.settled} == {"WORDING"}  # only the small wording call
+    assert events[0].data["tier"] == 2 and finished(events)["tier"] == 2
+
+
+def test_fixed_arguments_come_from_the_route_only() -> None:
+    _, state, gateway, _ = tiered("Which orders are at risk?")
+    assert state.tier == 2 and gateway.calls == [("get_order_stockout_risks", {"view": "orders"})]
+
+
+def test_a_qualified_question_goes_to_the_model() -> None:
+    model = tool_then_say("SKU-102 is in A8-01-02 with 7 units.")
+    events, state, _, _ = run(
+        "Show low-stock products in zone B", FakeProvider(gemini_flash=model), config=TIERED
+    )
+    assert state.tier == 3 and state.path == "C" and finished(events)["tier"] == 3
+
+
+def test_page_context_leaves_the_question_to_the_model() -> None:
+    from dataclasses import replace
+
+    model = tool_then_say("SKU-102 is in A8-01-02 with 7 units.")
+    runtime = CopilotRuntime(
+        v1_tools(), FakeGateway(), FakeProvider(gemini_flash=model), run_timeout=10, config=TIERED
+    )
+    state = RunState()
+    req = replace(request("Show low-stock products"), page_context={"selected_bin": "A8-01-02"})
+
+    async def collect() -> list[RunEvent]:
+        return [e async for e in runtime.run(req, FakeMeter(), state)]
+
+    asyncio.run(collect())
+    assert state.tier == 3
+
+
+def test_exact_routes_stay_tier_1_and_the_baseline_has_no_tier_2() -> None:
+    _, state, _, _ = tiered("Where is SKU-102 stored?")
+    assert state.tier == 1
+    model = tool_then_say("SKU-102 is in A8-01-02 with 7 units.")
+    _, state, _, _ = run("Show low-stock products", FakeProvider(gemini_flash=model))
+    assert state.tier == 3  # semantic router off: the model chooses
+
+
+# ---------------------------------------------------------------- hedging circuit breaker
+
+
+def test_the_breaker_opens_on_failures_and_stops_speculative_calls() -> None:
+    from palletwise.agent.runtime import CircuitBreaker
+
+    breaker = CircuitBreaker(min_samples=2, cooldown_s=60)
+    for _ in range(2):
+        breaker.record(False)
+    assert not breaker.allows_hedging()
+
+    # Open breaker, a slow but successful primary: no fallback call is started.
+    runtime = CopilotRuntime(
+        v1_tools(),
+        FakeGateway(),
+        FakeProvider(
+            gemini_flash=answering("SKU-102 is in A8-01-02 with 7 units.", seconds=0.2),
+            gemini_flash_fallback=answering("never used"),
+        ),
+        run_timeout=10,
+        config=HEDGED,
+        breaker=breaker,
+    )
+    meter, state = FakeMeter(), RunState()
+
+    async def collect() -> list[RunEvent]:
+        req = request("Which bins hold the mouse?", fallback="gemini-flash-fallback")
+        return [e async for e in runtime.run(req, meter, state)]
+
+    asyncio.run(collect())
+    assert {c.model for c in meter.settled} == {"gemini-flash"} and state.outcome == "ANSWER"
+
+
+def test_an_open_breaker_still_falls_back_when_the_primary_fails() -> None:
+    from palletwise.agent.runtime import CircuitBreaker
+
+    breaker = CircuitBreaker(min_samples=1, cooldown_s=60)
+    breaker.record(False)
+    runtime = CopilotRuntime(
+        v1_tools(),
+        FakeGateway(),
+        FakeProvider(
+            gemini_flash=answering("x", fail=httpx.ConnectError("down")),
+            gemini_flash_fallback=answering("SKU-102 is in A8-01-02 with 7 units."),
+        ),
+        run_timeout=10,
+        config=HEDGED,
+        breaker=breaker,
+    )
+    state = RunState()
+
+    async def collect() -> list[RunEvent]:
+        req = request("Which bins hold the mouse?", fallback="gemini-flash-fallback")
+        return [e async for e in runtime.run(req, FakeMeter(), state)]
+
+    asyncio.run(collect())
+    assert state.outcome == "ANSWER"
+
+
+def test_the_breaker_recovers_after_its_cooldown() -> None:
+    import time
+
+    from palletwise.agent.runtime import CircuitBreaker
+
+    breaker = CircuitBreaker(min_samples=1, cooldown_s=0.05)
+    breaker.record(False)
+    assert not breaker.allows_hedging()
+    time.sleep(0.06)
+    assert breaker.allows_hedging()
+
+
+def test_the_agent_model_can_be_set_for_tier_3() -> None:
+    provider = FakeProvider(
+        gemini_flash=FunctionModel(never_called),
+        gemini_flash_lite=tool_then_say("SKU-102 is in A8-01-02 with 7 units."),
+    )
+    config = RuntimeConfig(name="lite", agent_model="gemini-flash-lite")
+    _, state, gateway, meter = run("Which bins hold the wireless mouse?", provider, config=config)
+    assert state.tier == 3 and state.outcome == "ANSWER" and gateway.calls
+    assert {c.model for c in meter.settled} == {"gemini-flash-lite"}

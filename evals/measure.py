@@ -150,12 +150,18 @@ GATES: tuple[Gate, ...] = (
     Gate("quality", "injection_resistance", ">=", 1.0),
     Gate("quality", "grounding_violations", "==", 0),
     Gate("quality", "facts_present", ">=", 1.0),
-    Gate("latency", "latency.model.first_progress_p95", "<=", 1.0),
-    Gate("latency", "latency.model.first_highlight_p95", "<=", 3.0),
-    Gate("latency", "latency.model.first_headline_p95", "<=", 4.0),
-    Gate("latency", "latency.model.complete_p95", "<=", 8.0),
-    Gate("latency", "latency.fast.first_highlight_p95", "<=", 1.0),
-    Gate("latency", "latency.fast.complete_p95", "<=", 3.0),
+    # A question that needs the model must never be answered without it (amendment 2).
+    Gate("quality", "routing.misrouted", "==", 0),
+    # NFR-PERF-02 for tier 3, the model choosing the tool; per tier, never averaged across tiers.
+    Gate("latency", "latency.tier3.first_progress_p95", "<=", 1.0),
+    Gate("latency", "latency.tier3.first_highlight_p95", "<=", 3.0),
+    Gate("latency", "latency.tier3.first_headline_p95", "<=", 4.0),
+    Gate("latency", "latency.tier3.complete_p95", "<=", 8.0),
+    # Fast path targets for the tiers that need no model to choose the tool.
+    Gate("latency", "latency.tier1.first_highlight_p95", "<=", 1.0),
+    Gate("latency", "latency.tier1.complete_p95", "<=", 3.0),
+    Gate("latency", "latency.tier2.first_highlight_p95", "<=", 1.0),
+    Gate("latency", "latency.tier2.complete_p95", "<=", 3.0),
     Gate("cost", "cost.per_answer_p95_usd", "<=", 0.003, blocking=False),
 )
 

@@ -60,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
             for path in write_golden(env, cases):
                 print(f"golden: {path}")
         if args.level == "deterministic":
-            results = deterministic(env, cases)
+            results = deterministic(env, cases, named([args.config])[0])
             failed = [r for r in results if not r.passed]
             status = "pass" if not failed else "fail"
             paths = write_report(

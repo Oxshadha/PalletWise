@@ -1,0 +1,167 @@
+# Tier 2 routes (ADR 0001 amendment 2): curated phrasings of questions whose meaning is fixed.
+#
+# A route's vocabulary is the content words of its examples plus its synonyms. A question routes only
+# when every one of its content words is in that vocabulary, the best route reaches `threshold`, and
+# it beats the second best by `margin`. Both are fitted by `python -m evals.calibrate_router` on the
+# calibration set (evals/calibration/semantic_routes.jsonl), which is separate from the evaluation
+# sets; do not edit them by hand.
+#
+# Routes carry only fixed arguments. Anything with a condition (zone, SKU, number, date, category,
+# "those") is left to the model.
+version: 1
+threshold: 0.26  # fitted by calibration
+margin: 0.04  # fitted by calibration
+calibration: {"set": "evals/calibration/semantic_routes.jsonl", "sha256": "5bb463530bc56a19e4636ae4395add67be6b9ca8c68d18ae6604540f64c4b658", "questions": 76, "positives": 46, "misroutes": 0, "coverage": 0.8913}
+
+# Function words that never carry a condition. Context words (this, that, these, those, them), negations
+# (not, no, without) and quantities are deliberately absent, so they always count as content.
+stopwords: [a, an, the, is, are, am, was, were, be, been, do, does, did, have, has, had, we, our, us,
+  i, me, my, you, your, please, show, list, give, tell, get, see, find, what, which, where, who, how,
+  any, anything, there, here, right, now, currently, current, moment, in, of, for, to, 'on', at, with,
+  and, or, can, could, would, will, should, it, its, let, know, about, kindly, quick, quickly, just,
+  some, whats, what's, they, by, from, up, out, all, every, our, warehouse, site]
+
+routes:
+  - name: low_stock
+    tool: get_low_stock
+    arguments: {}
+    synonyms: [low, stock, item, product, sku, running, run, below, minimum, minimums, pick, face,
+      faces, location, locations, low-stock, short, level, levels, need, needs, replenishing]
+    examples:
+      - Which items are running low on stock?
+      - Show low-stock products
+      - Which products have low stock?
+      - What is running low?
+      - What's running low in the pick faces?
+      - Which items are below their minimum?
+      - Which SKUs are at or below the minimum in their pick location?
+      - Low stock items
+      - Show me the low stock list
+      - Which pick locations are below minimum?
+      - What stock is running low?
+      - Which products are low in their pick faces?
+
+  - name: top_movers
+    tool: get_top_movers
+    arguments: {}
+    synonyms: [fastest, moving, mover, movers, fast-moving, top, best, selling, sellers, item, product,
+      sku, picked, most, popular, demand, highest]
+    examples:
+      - Show me the fastest-moving items
+      - Which products move fastest?
+      - What are our top movers?
+      - Show the top movers
+      - Which items are picked the most?
+      - What are the fastest movers?
+      - Which SKUs have the highest demand?
+      - Best selling products
+      - Most popular items
+      - Which products sell the most?
+
+  - name: dead_stock
+    tool: get_dead_stock
+    arguments: {}
+    synonyms: [dead, stock, item, product, sku, not, moved, moving, picked, idle, sitting, stale,
+      'no', recent, picks, pick, been, without, haven't, hasn't, gone]
+    examples:
+      - Do we have any dead stock?
+      - Which items have not moved?
+      - Show dead stock
+      - Which products have not been picked?
+      - What stock is sitting idle?
+      - Which items have no recent picks?
+      - Which products haven't moved?
+      - List dead stock items
+      - What stock has not been picked recently?
+      - Which SKUs are not moving?
+
+  - name: slow_in_prime
+    tool: get_slow_in_prime
+    arguments: {}
+    synonyms: [slow, mover, movers, moving, fast-pick, fast, pick, zone, prime, sitting, item,
+      product, stock, area, locations, location, slots, slot, occupying, taking, space]
+    examples:
+      - Are slow movers sitting in the fast-pick zone?
+      - Are slow movers in prime locations?
+      - Which slow movers are taking up fast-pick space?
+      - Show slow-moving stock in the fast pick area
+      - Is slow stock occupying prime slots?
+      - Slow movers in the fast-pick zone
+      - Which slow-moving items are in prime locations?
+      - Are there slow movers in the fast pick zone?
+
+  - name: zone_summary
+    tool: get_zone_summary
+    arguments: {}
+    synonyms: [zone, zones, highest, most, stock, level, levels, inventory, holding, hold, holds,
+      biggest, summary, units, much, area, areas]
+    examples:
+      - Which zones have the highest stock levels?
+      - Which zone holds the most stock?
+      - Which zone is holding the most inventory?
+      - Show stock by zone
+      - Zone summary
+      - Which zone has the most inventory?
+      - How much stock is in each zone?
+      - Which areas hold the most stock?
+      - Show me the zone stock levels
+
+  - name: capacity
+    tool: get_capacity_hotspots
+    arguments: {}
+    synonyms: [close, capacity, full, nearly, near, space, running, out, over, overfull, hotspot,
+      hotspots, room, utilization, utilisation, tight, short, zone, zones, location, locations, bin, bins]
+    examples:
+      - Where are we close to capacity?
+      - Where are we running out of space?
+      - Which zones are nearly full?
+      - Show capacity hotspots
+      - Which locations are over capacity?
+      - Are any bins over capacity?
+      - Where is space tight?
+      - Which zones are close to full?
+      - Capacity hotspots
+      - Where is utilization highest?
+
+  - name: delayed_orders
+    tool: get_delayed_orders
+    arguments: {}
+    synonyms: [outlet, outlets, order, orders, delayed, late, overdue, behind, shipped, missed,
+      deadline, deadlines, dispatch, past]
+    examples:
+      - Which outlet orders are delayed?
+      - Which orders are late?
+      - Show delayed orders
+      - Which orders are overdue?
+      - Which orders missed their dispatch deadline?
+      - Which outlet orders shipped late or are overdue?
+      - Late orders
+      - Which orders are behind schedule?
+      - Are any orders past their deadline?
+
+  - name: orders_at_risk
+    tool: get_order_stockout_risks
+    arguments: {view: orders}
+    synonyms: [today, today's, order, orders, risk, at-risk, stockout, stock-out, short, might,
+      may, could, fail, endangered, danger, open]
+    examples:
+      - Which of today's orders are at risk?
+      - Which orders are at risk?
+      - Which orders could run short?
+      - Show orders at risk of a stockout
+      - Which open orders are at risk?
+      - Which of today's orders might not be filled?
+      - Orders at risk today
+
+  - name: replenish_before_dispatch
+    tool: get_order_stockout_risks
+    arguments: {view: replenish_before_first_dispatch}
+    synonyms: [item, items, product, products, need, needs, replenishment, replenish, replenishing,
+      before, today's, today, first, dispatch, window, next, top, up, topped, refill]
+    examples:
+      - Which items need replenishment before today's first dispatch window?
+      - What needs replenishing before the first dispatch?
+      - Which products need replenishing before the next dispatch?
+      - What should be replenished before the first dispatch window?
+      - Replenishment needed before first dispatch
+      - Which items need topping up before the next dispatch?

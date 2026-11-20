@@ -143,7 +143,12 @@ def passing_metrics() -> dict:  # type: ignore[type-arg]
         "injection_resistance": 1.0,
         "grounding_violations": 0,
         "facts_present": 1.0,
-        "latency": {"model": lat, "fast": {"first_highlight_p95": 0.4, "complete_p95": 2.0}},
+        "routing": {"misrouted": 0},
+        "latency": {
+            "tier1": {"first_highlight_p95": 0.4, "complete_p95": 2.0},
+            "tier2": {"first_highlight_p95": 0.4, "complete_p95": 2.0},
+            "tier3": lat,
+        },
         "cost": {"per_answer_p95_usd": 0.002},
     }
 
@@ -151,8 +156,8 @@ def passing_metrics() -> dict:  # type: ignore[type-arg]
 def test_quality_and_latency_must_pass_together() -> None:
     metrics = passing_metrics()
     assert combined_status(check_gates(metrics)) == "pass"
-    metrics["latency"]["model"]["complete_p95"] = 8.1
-    assert combined_status(check_gates(metrics)) == "fail: latency.model.complete_p95"
+    metrics["latency"]["tier3"]["complete_p95"] = 8.1
+    assert combined_status(check_gates(metrics)) == "fail: latency.tier3.complete_p95"
 
 
 def test_cost_is_reported_against_its_limit_but_does_not_decide() -> None:
@@ -173,21 +178,29 @@ def test_facts_below_100_percent_fail_quality() -> None:
 
 def test_a_gate_without_runs_is_reported_never_passed_silently() -> None:
     metrics = passing_metrics()
-    metrics["latency"]["fast"] = None
+    metrics["latency"]["tier2"] = None
     gates = check_gates(metrics)
-    assert {g["verdict"] for g in gates if g["metric"].startswith("latency.fast")} == {"no data"}
-    assert combined_status(gates).startswith("pass (no data: latency.fast")
+    assert {g["verdict"] for g in gates if g["metric"].startswith("latency.tier2")} == {"no data"}
+    assert combined_status(gates).startswith("pass (no data: latency.tier2")
 
 
 def test_the_gates_are_the_approved_ones() -> None:
     by_metric = {g.metric: (g.op, g.threshold) for g in GATES}
-    assert by_metric["latency.model.first_progress_p95"] == ("<=", 1.0)
-    assert by_metric["latency.model.first_highlight_p95"] == ("<=", 3.0)
-    assert by_metric["latency.model.first_headline_p95"] == ("<=", 4.0)
-    assert by_metric["latency.model.complete_p95"] == ("<=", 8.0)
+    assert by_metric["latency.tier3.first_progress_p95"] == ("<=", 1.0)
+    assert by_metric["latency.tier3.first_highlight_p95"] == ("<=", 3.0)
+    assert by_metric["latency.tier3.first_headline_p95"] == ("<=", 4.0)
+    assert by_metric["latency.tier3.complete_p95"] == ("<=", 8.0)
     assert by_metric["cost.per_answer_p95_usd"] == ("<=", 0.003)  # reported, not blocking
     assert by_metric["facts_present"] == (">=", 1.0)
     assert by_metric["grounding_violations"] == ("==", 0)
+    assert by_metric["routing.misrouted"] == ("==", 0)  # amendment 2: qualified questions never routed
+    assert by_metric["latency.tier2.first_highlight_p95"] == ("<=", 1.0)
+
+
+def test_a_misrouted_qualified_question_fails_quality() -> None:
+    metrics = passing_metrics()
+    metrics["routing"]["misrouted"] = 1
+    assert combined_status(check_gates(metrics)) == "fail: routing.misrouted"
 
 
 # ---------------------------------------------------------------- comparison workload

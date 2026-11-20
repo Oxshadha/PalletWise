@@ -27,9 +27,8 @@ from evals.measure import (
 )
 from evals.reference import run_reference
 from palletwise import clock
-from palletwise.agent import fast_path
 from palletwise.agent.guardrails import grounding_problems
-from palletwise.agent.runtime import CARD_OUTCOMES, RuntimeConfig, data_block, model_view
+from palletwise.agent.runtime import CARD_OUTCOMES, RuntimeConfig, choose_route, data_block, model_view
 from palletwise.contracts.results import ResultEnvelope, WorkingSet
 from palletwise.llm import DisabledProvider, LLMProvider
 from palletwise.tools.catalog import v1_tools
@@ -214,17 +213,22 @@ def _working_set_of(tool: str, envelope: ResultEnvelope) -> WorkingSet:
 # ---------------------------------------------------------------- deterministic gate (no model)
 
 
-def deterministic(env: EvalEnv, cases: list[Case]) -> list[CaseResult]:
-    """Routing, the gold tool through the real executor, golden highlights, and model-free declines."""
+TOOL_NAMES = frozenset(t.name for t in v1_tools())
+
+
+def deterministic(env: EvalEnv, cases: list[Case], config: RuntimeConfig | None = None) -> list[CaseResult]:
+    """Routing, the gold tool through the real executor, golden highlights, and model-free declines,
+    for the runtime configuration under test (its routing tiers)."""
+    config = config or RuntimeConfig()
     executor = env.executor()
     by_id = {c.id: c for c in cases}
     results: list[CaseResult] = []
-    with env.api(DisabledProvider()) as api:
+    with env.api(DisabledProvider(), config=config) as api:
         for role in ("warehouse_manager", "admin"):
             if any(c.role == role for c in cases):
                 api.sign_in(role)
                 for case in (c for c in cases if c.role == role):
-                    results.append(_deterministic_case(env, executor, api, case, by_id))
+                    results.append(_deterministic_case(env, executor, api, case, by_id, config))
     order = {c.id: i for i, c in enumerate(cases)}
     return sorted(results, key=lambda r: order[r.case])
 
@@ -241,22 +245,30 @@ def _follow_up_working_set(
 
 
 def _deterministic_case(
-    env: EvalEnv, executor: Any, api: Any, case: Case, by_id: dict[str, Case]
+    env: EvalEnv, executor: Any, api: Any, case: Case, by_id: dict[str, Case], config: RuntimeConfig
 ) -> CaseResult:
     checks: list[Check] = []
     gold = case.gold
 
-    # 1. Fast-path routing (agent spec 3.2): pattern cases route to exactly the gold call.
-    route = fast_path.route(case.question)
-    if gold.path in ("A", "B"):
+    # 1. Routing (agent spec 3.2, ADR 0001 amendment 2), the runtime's own decision: a routed case
+    # routes to exactly the gold call; a tier-2 case may abstain (safe, counted in the model gate);
+    # a question that needs the model must never be routed.
+    route, tier = choose_route(
+        case.question, None, case.page_context, TOOL_NAMES, semantic=config.semantic_router
+    )
+    if gold.path in ("A", "B") and route is None and gold.tier == 2:
+        checks.append(Check("routing", True, "abstained: the model chooses (tier 3)"))
+    elif gold.path in ("A", "B"):
         ok = (
             route is not None
             and route.tool == gold.tool
             and params_match(gold.params, route.arguments, set(route.arguments))
         )
-        checks.append(Check("routing", ok, f"routed to {route}" if route else "no route"))
+        checks.append(Check("routing", ok, f"tier {tier}, routed to {route}" if route else "no route"))
     else:
-        checks.append(Check("routing", route is None, f"unexpected route {route}" if route else "model path"))
+        checks.append(
+            Check("routing", route is None, f"misrouted in tier {tier} to {route}" if route else "model path")
+        )
 
     # 2. The gold tool with the gold parameters through the real executor (policy, audit, tracing).
     if gold.tool:
@@ -291,7 +303,7 @@ def _deterministic_case(
     trace = api.ask(case.question, None, case.page_context)
     violations = forbidden_violations(gold.forbidden, trace.tools, trace.text)
     checks.append(Check("forbidden", not violations, ", ".join(violations) or "none"))
-    if gold.path in ("A", "B"):
+    if gold.path in ("A", "B") and route is not None:
         checks.append(Check("api-path", trace.path == "B", f"path {trace.path} without a model"))
         checks.append(Check("api-outcome", trace.outcome == gold.outcome, f"{trace.outcome}"))
     elif gold.outcome in ("DECLINE", "DENIED"):
@@ -350,6 +362,7 @@ def compare(
     """
     names = config_names(configs)
     by_id = {c.id: c for c in cases}
+    cases = [c for c in cases if c.level != "deterministic"]  # routing checks only
     results: dict[str, list[CaseResult]] = {n: [] for n in names}
     with ExitStack() as stack:
         apis = [stack.enter_context(env.api(providers(), config=c)) for c in configs]
@@ -420,6 +433,8 @@ def _score_run(env: EvalEnv, case: Case, trace: RunTrace, number: int) -> dict[s
     violations = forbidden_violations(gold.forbidden, trace.tools, trace.text)
     finished = trace.of("RUN_FINISHED")
     text_source = finished[0].get("text_source") if finished else None
+    tiers = [e.get("tier") for e in finished + trace.of("RUN_STARTED") if e.get("tier")]
+    tier = tiers[0] if tiers else (3 if trace.path == "C" else 1)
     rows = env.superuser.execute(USAGE_QUERY, (trace.run_id,)).fetchall() if trace.run_id else []
     calls = model_calls(rows, text_source)
     times = milestones(trace.events, trace.total_s)
@@ -428,6 +443,8 @@ def _score_run(env: EvalEnv, case: Case, trace: RunTrace, number: int) -> dict[s
         "path": trace.path,
         "outcome": trace.outcome,
         "text_source": text_source,
+        "tier": tier,
+        "gold_tier": gold.tier or (3 if gold.path == "C" else None),
         "tool": tool,
         "params": arguments,
         "tool_ok": tool == gold.tool,
@@ -520,9 +537,16 @@ def score(results: list[CaseResult]) -> dict[str, Any]:
         "injection_resistance": share([not run["forbidden"] for run in adversarial]),
         "grounding_violations": sum(bool(run["grounding_violations"]) for _, run in runs),
         "facts_present": share([not run["facts_missing"] for run in with_facts]),
-        "latency": {
-            "model": _latency([run for _, run in runs if run["path"] == "C"]),
-            "fast": _latency([run for _, run in runs if run["path"] in ("A", "B")]),
+        # ADR 0001 amendment 2: every milestone per tier, so a slow tier 3 is never averaged away.
+        "latency": {f"tier{t}": _latency([run for _, run in runs if run["tier"] == t]) for t in (1, 2, 3)},
+        "routing": {
+            "share": {f"tier{t}": sum(run["tier"] == t for _, run in runs) for t in (1, 2, 3)},
+            "tier2_accuracy": share(
+                [run["tool_ok"] and run["params_ok"] for _, run in runs if run["tier"] == 2]
+            ),
+            "tier2_abstention": share([run["tier"] != 2 for _, run in runs if run["gold_tier"] == 2]),
+            # A question that needs the model, answered without it (tier 1 or 2): must be 0.
+            "misrouted": sum(run["gold_tier"] == 3 and run["tier"] in (1, 2) for _, run in runs),
         },
         "cost": {
             "per_answer_p50_usd": pct(costs, 0.5),
@@ -530,6 +554,7 @@ def score(results: list[CaseResult]) -> dict[str, Any]:
             "total_usd": round(sum(costs), 6),
             "estimated_calls": sum(c["usage_estimated"] for c in calls),
             "by_stage": _calls_by_stage(calls),
+            "tier3_per_answer_p95_usd": pct([run["cost_usd"] for _, run in runs if run["tier"] == 3], 0.95),
         },
         "text_source": {
             s: sum(run["text_source"] == s for _, run in runs) for s in ("model", "template", "message")
@@ -792,8 +817,14 @@ def model_markdown(report: dict[str, Any]) -> str:
             + " | ".join(cells)
             + " |"
         )
-    lines += ["", "## Latency (seconds, p50 / p95)", "", "| Path | Milestone " + head, "|---|---" + rule]
-    for path in ("model", "fast"):
+    lines += [
+        "",
+        "## Latency per tier (seconds, p50 / p95)",
+        "",
+        "| Tier | Milestone " + head,
+        "|---|---" + rule,
+    ]
+    for path in ("tier1", "tier2", "tier3"):
         for milestone in ("first_progress", "first_highlight", "first_headline", "complete"):
             cells = []
             for c in configs:
@@ -814,15 +845,21 @@ def model_markdown(report: dict[str, Any]) -> str:
                 f"{group['without_headline']}, no highlights {group['without_highlights']}"
             )
         lines.append(f"| {path} | counts | " + " | ".join(cells) + " |")
-    lines += ["", "## Stages (seconds, p50)", "", "| Path | Stage " + head, "|---|---" + rule]
-    for path in ("model", "fast"):
+    lines += ["", "## Stages (seconds, p50)", "", "| Tier | Stage " + head, "|---|---" + rule]
+    for path in ("tier1", "tier2", "tier3"):
         groups = [c["metrics"]["latency"][path] for c in configs]
         keys = next((g["stages_p50"].keys() for g in groups if g), [])
         for key in keys:
             cells = [_fmt(g["stages_p50"][key]) if g else "no runs" for g in groups]
             lines.append(f"| {path} | {key} | " + " | ".join(cells) + " |")
     lines += ["", "## Cost (USD)", "", "| Measure " + head, "|---" + rule]
-    for key in ("per_answer_p50_usd", "per_answer_p95_usd", "total_usd", "estimated_calls"):
+    for key in (
+        "per_answer_p50_usd",
+        "per_answer_p95_usd",
+        "tier3_per_answer_p95_usd",
+        "total_usd",
+        "estimated_calls",
+    ):
         lines.append(f"| {key} | " + " | ".join(_fmt(c["metrics"]["cost"][key]) for c in configs) + " |")
     stages_seen = sorted({s for c in configs for s in c["metrics"]["cost"]["by_stage"]})
     for stage in stages_seen:
@@ -842,6 +879,7 @@ def model_markdown(report: dict[str, Any]) -> str:
         "|---" + rule,
         "| path | " + " | ".join(json.dumps(c["metrics"]["path_mix"]) for c in configs) + " |",
         "| text source | " + " | ".join(json.dumps(c["metrics"]["text_source"]) for c in configs) + " |",
+        "| routing | " + " | ".join(json.dumps(c["metrics"]["routing"]) for c in configs) + " |",
         "| unstable cases | "
         + " | ".join(", ".join(c["metrics"]["unstable_cases"]) or "none" for c in configs)
         + " |",

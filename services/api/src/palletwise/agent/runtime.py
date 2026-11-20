@@ -10,6 +10,7 @@ import contextvars
 import functools
 import json
 import logging
+from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -26,7 +27,7 @@ from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
 
 from palletwise import clock
-from palletwise.agent import fast_path, progress, templates
+from palletwise.agent import fast_path, progress, semantic_router, templates
 from palletwise.agent.events import EventCounter, RunEvent
 from palletwise.agent.guardrails import facts_missing, grounding_problems, instruction_echo, normalize_dashes
 from palletwise.agent.suggestions import STARTERS, Suggestion, suggest
@@ -135,6 +136,11 @@ class RuntimeConfig:
     # run started, the run finishes with the result's template answer instead of waiting for the
     # model's wording. None: wait for the model (the baseline).
     answer_deadline_s: float | None = None
+    # Tier 2 (ADR 0001 amendment 2): confidently recognised questions route without a model call.
+    semantic_router: bool = False
+    # Tier 3's agent model (tool choice and answer text), by logical name; None: the agent
+    # registry's primary. An experiment (amendment 2): kept only with its own quality gates met.
+    agent_model: str | None = None
 
     def __post_init__(self) -> None:
         unbuilt = [
@@ -164,6 +170,8 @@ class RuntimeConfig:
             "headline_first": self.headline_first,
             "headline_after_s": self.headline_after_s if self.headline_first else None,
             "answer_deadline_s": self.answer_deadline_s,
+            "semantic_router": self.semantic_router,
+            "agent_model": self.agent_model,
         }
 
 
@@ -193,6 +201,9 @@ class RunState:
     # Who wrote the answer text: the model, or a deterministic template (path B, a failed or
     # ungrounded model answer, a spent budget), or a fixed message (declines, denials).
     text_source: Literal["model", "template", "message"] | None = None
+    # How the tool was chosen (ADR 0001 amendment 2): 1 exact route or suggestion, 2 the semantic
+    # router, 3 the model (or no model available).
+    tier: Literal[1, 2, 3] | None = None
     results: list[tuple[str, ResultEnvelope]] = field(default_factory=lambda: [])
     suggestions: list[Suggestion] = field(default_factory=lambda: [])
     error_code: str | None = None
@@ -219,6 +230,39 @@ class RunState:
 # ---------------------------------------------------------------- hedged model (ADR 0001 change 5)
 
 
+@dataclass
+class CircuitBreaker:
+    """Stops speculative calls while the primary is failing (ADR 0001 amendment 2).
+
+    Tracks the primary's recent outcomes; a failure is a provider or transport error, timeouts
+    included (a slow answer is not a failure: that is what hedging is for). At `threshold` failures
+    over the window, hedging stops for `cooldown_s`, so duplicate calls never amplify an outage; the
+    normal fallback still runs when the primary actually fails. State is per API process (v1).
+    """
+
+    window: int = 20
+    min_samples: int = 5
+    threshold: float = 0.5
+    cooldown_s: float = 60.0
+    _outcomes: "deque[bool]" = field(default_factory=lambda: deque[bool]())
+    _open_until: float = 0.0
+
+    def __post_init__(self) -> None:
+        self._outcomes = deque(maxlen=self.window)
+
+    def allows_hedging(self) -> bool:
+        return clock.monotonic() >= self._open_until
+
+    def record(self, ok: bool) -> None:
+        self._outcomes.append(ok)
+        failures = sum(not o for o in self._outcomes)
+        if len(self._outcomes) >= self.min_samples and failures / len(self._outcomes) >= self.threshold:
+            self._open_until = clock.monotonic() + self.cooldown_s
+            self._outcomes.clear()
+            metrics.guardrail_triggers.labels(kind="hedge_breaker_open").inc()
+            log.warning("primary model failing; hedging paused for %.0f s", self.cooldown_s)
+
+
 class HedgedModel(WrapperModel):
     """The primary model, with the fallback started alongside it when the primary is slow.
 
@@ -235,11 +279,13 @@ class HedgedModel(WrapperModel):
         fallback: Model,
         hedge_after_s: float,
         fallback_on: tuple[type[BaseException], ...],
+        breaker: CircuitBreaker | None = None,
     ) -> None:
         super().__init__(primary)
         self._fallback = fallback
         self._after = hedge_after_s
         self._fallback_on = fallback_on
+        self._breaker = breaker or CircuitBreaker()
 
     async def request(
         self,
@@ -250,13 +296,26 @@ class HedgedModel(WrapperModel):
         def start(model: Model) -> "asyncio.Task[ModelResponse]":
             return asyncio.create_task(model.request(messages, model_settings, model_request_parameters))
 
+        if not self._breaker.allows_hedging():
+            # Breaker open: no speculative call; the fallback runs only if the primary fails.
+            try:
+                response = await self.wrapped.request(messages, model_settings, model_request_parameters)
+            except self._fallback_on:
+                self._breaker.record(False)
+                return await self._fallback.request(messages, model_settings, model_request_parameters)
+            self._breaker.record(True)
+            return response
+
         tasks = [start(self.wrapped)]
         try:
             done, _ = await asyncio.wait(tasks, timeout=self._after)
             if done:
                 error = tasks[0].exception()
                 if error is None or not isinstance(error, self._fallback_on):
+                    if error is None:
+                        self._breaker.record(True)
                     return tasks[0].result()  # answered in time, or a bug that must not be hidden
+                self._breaker.record(False)
             metrics.guardrail_triggers.labels(kind="hedge").inc()
             tasks.append(start(self._fallback))
             remaining = {t for t in tasks if not t.done()}
@@ -265,6 +324,8 @@ class HedgedModel(WrapperModel):
                 done, remaining = await asyncio.wait(remaining, return_when=asyncio.FIRST_COMPLETED)
                 for finished in done:
                     error = finished.exception()
+                    if finished is tasks[0]:
+                        self._breaker.record(error is None)  # the primary's own outcome
                     if error is None:
                         return finished.result()  # the first successful response, and only it
                     if not isinstance(error, self._fallback_on):
@@ -483,8 +544,10 @@ class CopilotRuntime:
         provider: LLMProvider,
         run_timeout: float,
         config: RuntimeConfig | None = None,
+        breaker: CircuitBreaker | None = None,
     ) -> None:
         self.config = config or RuntimeConfig()
+        self.breaker = breaker or CircuitBreaker()  # shared by every run of this process
         self._registry = registry
         self._gateway = gateway
         self._provider = provider
@@ -505,11 +568,13 @@ class CopilotRuntime:
         """The run's events in order. Raises CancelledError when the run is cancelled."""
         events = EventCounter()
         state.started = clock.monotonic()
-        route = self._route(request)
+        route = self._route(request, state)
         lite = self._provider.model(LITE_MODEL) if route else None
-        primary = None if route else self._provider.model(request.agent.primary_model)
+        primary = (
+            None if route else self._provider.model(self.config.agent_model or request.agent.primary_model)
+        )
         state.path = ("A" if lite else "B") if route else ("C" if primary else "B")
-        yield events.make("RUN_STARTED", run_id=str(request.run.run_id), path=state.path)
+        yield events.make("RUN_STARTED", run_id=str(request.run.run_id), path=state.path, tier=state.tier)
 
         queue: asyncio.Queue[RunEvent | None] = asyncio.Queue()
 
@@ -566,17 +631,20 @@ class CopilotRuntime:
         if state.outcome != "ERROR":
             yield events.make("RUN_FINISHED", run_id=str(request.run.run_id), trace_id=request.run.trace_id,
                               path=state.path, outcome=state.outcome,
-                              text_source=state.text_source)  # fmt: skip
+                              text_source=state.text_source, tier=state.tier)  # fmt: skip
 
     # ------------------------------------------------------------ routing
 
-    def _route(self, request: RunRequest) -> fast_path.Route | None:
-        if request.suggestion is not None:
-            if request.suggestion.tool not in self._tool_names:
-                return None
-            return fast_path.Route("suggestion", request.suggestion.tool, dict(request.suggestion.arguments))
-        found = fast_path.route(request.question)
-        return found if found and found.tool in self._tool_names else None
+    def _route(self, request: RunRequest, state: RunState) -> fast_path.Route | None:
+        """Tier 1, then tier 2; None leaves the question to the model (tier 3)."""
+        route, state.tier = choose_route(
+            request.question,
+            request.suggestion,
+            request.page_context,
+            self._tool_names,
+            semantic=self.config.semantic_router,
+        )
+        return route
 
     # ------------------------------------------------------------ paths A and B
 
@@ -674,6 +742,7 @@ class CopilotRuntime:
                 MeteredModel(fallback, meter, "AGENT", state),
                 self.config.hedge_after_s,
                 fallback_on=(ModelAPIError, httpx.TransportError),
+                breaker=self.breaker,
             )
         return FallbackModel(
             model,
@@ -951,6 +1020,34 @@ class CopilotRuntime:
             else [s for s in STARTERS if s.tool in self._tool_names]
         )
         await queue.put(events.make("pw.suggestions", suggestions=[s.as_json() for s in state.suggestions]))
+
+
+def choose_route(
+    question: str,
+    suggestion: Suggestion | None,
+    page_context: dict[str, Any] | None,
+    tool_names: frozenset[str],
+    *,
+    semantic: bool,
+) -> tuple[fast_path.Route | None, Literal[1, 2, 3]]:
+    """How the tool is chosen (ADR 0001 amendment 2), shared by the runtime and the evaluation:
+    tier 1 a suggestion or exact route, tier 2 the semantic router, tier 3 the model (no route)."""
+    if suggestion is not None:
+        if suggestion.tool not in tool_names:
+            return None, 3
+        return fast_path.Route("suggestion", suggestion.tool, dict(suggestion.arguments)), 1
+    found = fast_path.route(question)
+    if found and found.tool in tool_names:
+        return found, 1
+    if semantic and not page_context:
+        # With page context, "this" may name the selected location: the model decides.
+        decision = semantic_router.router().decide(question)
+        log.info("semantic router: %s (score %.2f, margin %.2f)", decision.reason, decision.score,
+                 decision.margin)  # fmt: skip
+        if decision.route is not None and decision.route.tool in tool_names:
+            route = decision.route
+            return fast_path.Route(f"semantic:{route.name}", route.tool, dict(route.arguments)), 2
+    return None, 3
 
 
 class _PastDeadline(Exception):

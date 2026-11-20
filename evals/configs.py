@@ -20,6 +20,27 @@ CONFIGS: dict[str, RuntimeConfig] = {
     "fast-answer": RuntimeConfig(
         name="fast-answer", headline_first=True, hedge_after_s=4.0, answer_deadline_s=7.0
     ),
+    # ADR 0001 amendment 2 on top: tier 2, the semantic router, before the model.
+    "three-tier": RuntimeConfig(
+        name="three-tier", headline_first=True, hedge_after_s=4.0, answer_deadline_s=7.0, semantic_router=True
+    ),
+    # Amendment 2 tuning: the hedge trigger near the p90 of healthy tool choice (5.4 s) instead of 4 s.
+    "three-tier-p90": RuntimeConfig(
+        name="three-tier-p90",
+        headline_first=True,
+        hedge_after_s=5.4,
+        answer_deadline_s=7.0,
+        semantic_router=True,
+    ),
+    # Amendment 2 experiment: Flash-Lite as tier 3's agent model, kept only with its own gates met.
+    "three-tier-lite": RuntimeConfig(
+        name="three-tier-lite",
+        headline_first=True,
+        hedge_after_s=4.0,
+        answer_deadline_s=7.0,
+        semantic_router=True,
+        agent_model="gemini-flash-lite",
+    ),
     # ADR 0001 change 4 on top: minimal thinking for the agent, kept only if tool and parameter
     # accuracy hold.
     "headline-hedged-minimal": RuntimeConfig(
