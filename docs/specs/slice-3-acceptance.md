@@ -1,6 +1,6 @@
 # Slice 3: Acceptance Criteria
 
-**Status:** Revised after the product owner review of 2026-11-20 (D2, D4 to D8 approved; D1 and D3 revised, awaiting confirmation; lifecycle and event safeguards added)
+**Status:** Approved by the product owner on 2026-11-20 with revisions (D1 and D3 revised and confirmed; lifecycle and event safeguards added)
 **Goal:** PalletWise tells the Warehouse Manager what needs attention before they ask: a ranked exceptions inbox that updates live, a short daily brief on the first visit of the day, and a search box that finds any SKU, bin or order in one step (vision principle 4, "tell, do not make them ask").
 
 This document is a plan against the approved specifications. It does not redefine them. Where a decision below refines a spec, the spec gets a change-log entry when the work lands; the spec stays the source of truth.
@@ -148,3 +148,4 @@ A full event outbox with replayable payloads is not built: payload-free hints re
 |---|---|
 | 2026-11-20 | Draft for product owner approval |
 | 2026-11-20 | Product owner review: D1 approved with stream safeguards (2.1; durable per-site change sequence in place of a payload outbox, consistent with agent spec 9.2); D2 approved with fields and uniqueness (2.2), per Manager; D3 revised (2.3; the clock boundary added to the evaluation key); D4 approved, Warehouse and Copilot unchanged; D5 to D8 approved with details (same persisted records, deterministic brief selection with reasons, exact identifiers first); exception lifecycle added (2.4) |
+| 2026-11-20 | Product owner confirmed the D1 and D3 revisions; approved |
