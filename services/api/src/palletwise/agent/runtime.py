@@ -28,7 +28,7 @@ from pydantic_ai.settings import ModelSettings
 from palletwise import clock
 from palletwise.agent import fast_path, progress, templates
 from palletwise.agent.events import EventCounter, RunEvent
-from palletwise.agent.guardrails import facts_missing, grounding_problems, normalize_dashes
+from palletwise.agent.guardrails import facts_missing, grounding_problems, instruction_echo, normalize_dashes
 from palletwise.agent.suggestions import STARTERS, Suggestion, suggest
 from palletwise.contracts.results import ResultEnvelope, ResultStatus
 from palletwise.llm import LLMProvider, ResolvedModel
@@ -608,7 +608,10 @@ class CopilotRuntime:
                 text = f"{templates.template_answer(route.tool, result)} {BUDGET_TEXT}"
             except Exception:
                 log.warning("wording model failed; using the template", exc_info=True)
-            if text and self._drops_key_facts(route.tool, result, text):
+            if text and (
+                self._echoes_instructions(text, request.question)
+                or self._drops_key_facts(route.tool, result, text)
+            ):
                 text = None
             if text is None or state.budget_exhausted:
                 state.path = "B"
@@ -748,6 +751,8 @@ class CopilotRuntime:
             text = ""
 
         last = state.results[-1] if state.results else None
+        if text and self._echoes_instructions(text, request.question):
+            text = ""
         if text and last is not None and self._drops_key_facts(last[0], last[1], text):
             text = ""
         if text and last is not None:
@@ -845,6 +850,16 @@ class CopilotRuntime:
             if not task.done():
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
+
+    @staticmethod
+    def _echoes_instructions(text: str, question: str) -> bool:
+        """Model prose that repeats an instruction found in data is not shown (always on): the
+        template or a fixed message is shown instead (FR-COP-12)."""
+        echoed = instruction_echo(text, question)
+        if echoed:
+            metrics.guardrail_triggers.labels(kind="instruction_echo").inc()
+            log.warning("answer repeats instruction text from data %s; not shown", echoed)
+        return bool(echoed)
 
     def _drops_key_facts(self, tool: str, result: ResultEnvelope, text: str) -> bool:
         """Model wording that leaves out a key fact of its result is not shown; the template,
