@@ -64,7 +64,7 @@ def test_the_prompt_migration_moves_only_system_seeded_agents(
     prompts = dict(db.execute(
         "SELECT tenant_id, prompt_version FROM pw.agent WHERE tenant_id = ANY(%s)", ([seeded, customized],)
     ).fetchall())  # fmt: skip
-    assert prompts == {seeded: "system.v2", customized: "system.v1"}
+    assert prompts == {seeded: "system.v3", customized: "system.v1"}  # v1 to v2 to v3
 
 
 def test_missing_tenant_context_fails_closed(connect_as: Connect) -> None:

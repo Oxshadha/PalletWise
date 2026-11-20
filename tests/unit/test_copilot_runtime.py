@@ -1129,3 +1129,65 @@ def test_the_row_count_of_a_totals_result_is_not_a_grounded_count() -> None:
     )
     text = "1 product is worth more than 50,000, with a stock value of 5,728,960.27."
     assert "number 1" in grounding_problems(text, [totals], "Show only the ones worth more than 50,000")
+
+
+# ---------------------------------------------------------------- safeguards A and B (ADR 0001)
+
+
+def test_a_follow_up_on_a_product_list_keeps_its_breakdown() -> None:
+    from palletwise.agent.guardrails import shape_problem
+
+    total = {"measures": ["stock_value"], "filters": [{"field": "stock_value", "op": ">", "value": 50000}],
+             "scope": {"working_set": True}}  # fmt: skip
+    assert shape_problem("Show only the ones worth more than 50,000", "query_inventory", total, True)
+    listed = {**total, "dimensions": ["product"]}
+    assert shape_problem("Show only the ones worth more than 50,000", "query_inventory", listed, True) is None
+    # The user asked for a total: allowed.
+    assert shape_problem("How much are those worth in total?", "query_inventory", total, True) is None
+    # Not a follow-up on products: not this rule's concern.
+    assert (
+        shape_problem("Total stock value?", "query_inventory", {"measures": ["stock_value"]}, False) is None
+    )
+
+
+def test_the_shape_rule_stops_the_query_and_tells_the_model_how_to_fix_it() -> None:
+    from dataclasses import replace
+
+    from palletwise.contracts.results import WorkingSet
+
+    seen: list[str] = []
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        returns = [p for m in messages for p in getattr(m, "parts", []) if isinstance(p, ToolReturnPart)]
+        if not returns:  # first: a total over the working set
+            return ModelResponse(parts=[ToolCallPart("query_inventory", {
+                "measures": ["stock_value"], "scope": {"working_set": True}})])  # fmt: skip
+        seen.append(str(returns[-1].content))
+        return ModelResponse(parts=[TextPart("Done.")])
+
+    gateway = FakeGateway()
+    ws = WorkingSet(run_id=uuid4(), tool="get_low_stock", created_at=datetime.now(UTC), products=(uuid4(),))
+    req = request("Show only the ones worth more than 50,000")
+    req = replace(req, run=replace(req.run, working_set=ws))
+    runtime = CopilotRuntime(
+        v1_tools(), gateway, FakeProvider(gemini_flash=FunctionModel(model)), run_timeout=10
+    )
+
+    async def collect() -> list[RunEvent]:
+        return [e async for e in runtime.run(req, FakeMeter(), RunState())]
+
+    asyncio.run(collect())
+    assert gateway.calls == []  # the total was never run
+    assert seen and "product dimension" in seen[0]
+
+
+def test_a_stated_count_must_be_a_count_in_the_data() -> None:
+    from palletwise.agent.guardrails import count_problems, grounding_problems
+
+    result = locations_result()  # two locations, each with an on-hand quantity
+    assert count_problems("SKU-102 is stored in 2 locations.", [result], "") == []
+    # 7 is in the data, but as units on hand, not as a number of locations.
+    assert count_problems("SKU-102 is stored in 7 locations.", [result], "") == ["count 7 locations"]
+    assert "count 7 locations" in grounding_problems("SKU-102 is stored in 7 locations.", [result], "")
+    # A count the user gave is theirs to repeat.
+    assert count_problems("Here are the top 5 products.", [result], "Show the top 5 products") == []

@@ -145,8 +145,8 @@ def passing_metrics() -> dict:  # type: ignore[type-arg]
         "facts_present": 1.0,
         "routing": {"misrouted": 0},
         "latency": {
-            "tier1": {"first_highlight_p95": 0.4, "complete_p95": 2.0},
-            "tier2": {"first_highlight_p95": 0.4, "complete_p95": 2.0},
+            "tier1": {"first_highlight_p95": 0.4, "first_headline_p95": 1.5, "complete_p95": 2.0},
+            "tier2": {"first_highlight_p95": 0.4, "first_headline_p95": 1.5, "complete_p95": 2.0},
             "tier3": lat,
         },
         "cost": {"per_answer_p95_usd": 0.002},
@@ -187,8 +187,8 @@ def test_a_gate_without_runs_is_reported_never_passed_silently() -> None:
 def test_the_gates_are_the_approved_ones() -> None:
     by_metric = {g.metric: (g.op, g.threshold) for g in GATES}
     assert by_metric["latency.tier3.first_progress_p95"] == ("<=", 1.0)
-    assert by_metric["latency.tier3.first_highlight_p95"] == ("<=", 3.0)
-    assert by_metric["latency.tier3.first_headline_p95"] == ("<=", 4.0)
+    assert by_metric["latency.tier3.first_highlight_p95"] == ("<=", 7.0)  # amended 2026-11-20
+    assert by_metric["latency.tier3.first_headline_p95"] == ("<=", 7.0)
     assert by_metric["latency.tier3.complete_p95"] == ("<=", 8.0)
     assert by_metric["cost.per_answer_p95_usd"] == ("<=", 0.003)  # reported, not blocking
     assert by_metric["facts_present"] == (">=", 1.0)

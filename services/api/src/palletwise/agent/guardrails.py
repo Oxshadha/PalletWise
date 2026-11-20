@@ -10,7 +10,7 @@ import unicodedata
 from collections.abc import Iterable
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from palletwise.contracts.results import ResultEnvelope
@@ -146,6 +146,8 @@ def grounding_problems(text: str, results: list[ResultEnvelope], question: str) 
     for identifier in IDENTIFIER.findall(text):
         if identifier.upper() not in known:
             problems.append(f"identifier {identifier}")
+    if results:  # a stated count must be a count in the data (safeguard B)
+        problems.extend(count_problems(text, results, question))
     return problems
 
 
@@ -199,3 +201,67 @@ def instruction_echo(text: str, question: str) -> list[str]:
     """Instruction markers in the answer that the user's own question did not contain."""
     body, asked = normalize_fact_text(text), normalize_fact_text(question)
     return [m for m in INSTRUCTION_MARKERS if m in body and m not in asked]
+
+
+# ---------------------------------------------------------------- question shape (ADR 0001 safeguard A)
+
+_TOTAL_WORDS = re.compile(
+    r"\b(total|totals|sum|overall|altogether|combined|in all|aggregate)\b|\bhow much\b", re.IGNORECASE
+)
+
+
+def shape_problem(
+    question: str, tool: str, arguments: dict[str, Any], has_working_products: bool
+) -> str | None:
+    """A follow-up on a list of products must stay a list unless the user asks for a total.
+
+    The working set already carries the previous answer's filters (its products passed them), so
+    the shape to keep is the breakdown: a query on the working set without a dimension turns a list
+    into one total ("1 product worth more than 50,000"). Deterministic, from the question's words.
+    """
+    if tool != "query_inventory" or not has_working_products:
+        return None
+    scope = arguments.get("scope")
+    on_working_set = isinstance(scope, dict) and cast(dict[str, Any], scope).get("working_set") is True
+    if not on_working_set or arguments.get("dimensions"):
+        return None
+    if _TOTAL_WORDS.search(question):
+        return None
+    return (
+        "The user asked about the products of the previous answer, not for a total: add the "
+        'product dimension ("dimensions": ["product"]) and keep the other arguments.'
+    )
+
+
+# ---------------------------------------------------------------- stated counts (ADR 0001 safeguard B)
+
+_COUNT = re.compile(
+    r"\b(\d[\d,]*)\s+(products?|items?|skus?|locations?|bins?|orders?|zones?|lines?|categories|category)\b",
+    re.IGNORECASE,
+)
+_COUNT_COLUMNS = ("product", "bin", "location", "order", "zone", "line", "categor", "item")
+
+
+def count_problems(text: str, results: list[ResultEnvelope], question: str) -> list[str]:
+    """A stated count of products, items, locations, orders or zones must be a count in the data:
+    the row count of a result with a breakdown, a count column (such as "Products" or "Locations
+    over capacity"), or a number the user gave. Any other matching number is not evidence."""
+    allowed: set[Decimal] = {_parse(t) for t in _numbers_in(question)}
+    for result in results:
+        if result.columns and result.columns[0].type not in ("integer", "number"):
+            allowed.add(Decimal(result.row_count))
+        counted = [
+            c.key
+            for c in result.columns
+            if c.type == "integer" and any(w in (c.key + " " + c.label).lower() for w in _COUNT_COLUMNS)
+        ]
+        for row in result.rows:
+            for key in counted:
+                if (d := _decimal(row.get(key))) is not None:
+                    allowed.add(d)
+    problems: list[str] = []
+    for number, noun in _COUNT.findall(IDENTIFIER.sub(" ", text)):
+        with contextlib.suppress(InvalidOperation):
+            if _parse(number) not in allowed:
+                problems.append(f"count {number} {noun}")
+    return problems

@@ -257,6 +257,41 @@ answers per tier; tier-2 accuracy and abstention rate; misrouted qualified quest
 highlight, headline and complete p95 per tier; overall quality and injection resistance; overall
 and tier-3 cost p95.
 
+## Amendment 3, 2026-11-20 (product owner): targets from measurement, prompt v3, close the runtime work
+
+**Why.** Four comparisons on the same cases (reports `2026-11-20-*`) moved tier 3 from 40.8 s to
+6.4 to 9 s complete p95 and required facts from 0.87 to 0.993, but tier 3 highlights and headline
+stayed at 6 to 8 s p95. The cause is the model choosing a tool: 3.5 s p95 for Flash-Lite and 6.9 s
+for 3.8 Flash on their own, consistent with published agent measurements (a tool-call model step of
+4.4 s p95; multi-step agents commonly 5 to 30 s at p95). The original 3 s and 4 s tier-3 targets came
+from the requirements, not from evidence.
+
+**Decisions.**
+
+1. **Targets per tier** (NFR-PERF-02 amended): tiers 1 and 2, highlights 1 s, headline 3 s, complete
+   3 s; tier 3, highlights 7 s, headline 7 s, complete 8 s; all p95, per tier. Correctness gates are
+   unchanged: required facts 100 percent, injection 100 percent, grounding violations 0, tool and
+   parameter accuracy and highlight F1 at their thresholds.
+2. **Prompt v3** (`system.v3`): keep the question's shape (a follow-up on a product list stays a
+   list unless a total is asked for), keep every condition the user gives, decline change and
+   restricted requests without looking up something else, and never state a count for a total.
+3. **Safeguard A, deterministic.** A query on the working set without a breakdown is not run when
+   the question does not ask for a total; the model is told to add the product dimension. The
+   working set already carries the previous answer's filters (its products passed them), so the
+   breakdown is what must be kept.
+4. **Safeguard B, deterministic.** A stated count of products, items, locations, orders or zones
+   must be a count in the data (a breakdown's row count, a count column, or a number the user gave),
+   not any matching number. Broader meaning-aware grounding is a tracked follow-up.
+5. **Permissions never depend on the prompt.** They are enforced by OPA and `tools.executor`; the
+   model has no write tools. The prompt's decline rule is courtesy, not the boundary.
+6. **One final comparison**, tier-3 cases only, one run per case: 3.8 Flash (hedge 4 s, provisional)
+   against Flash-Lite (hedge 2.5 s), both on prompt v3. Quality first, then cost. If results are
+   close or a critical gate is ambiguous, the safer model is chosen and the uncertainty recorded; no
+   further optimisation cycle starts automatically. One run supports a provisional decision, not a
+   statistical claim.
+7. **Then the runtime work closes** and Slice 2 resumes: 7b input classifier, 7c wording cache, 7d
+   180-day performance, the Slice 2 pull request, then Slice 3.
+
 ## Status
 
 Accepted, 2026-11-19, by the product owner, with the conditions above. Implementation is gated on the

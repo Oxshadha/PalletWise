@@ -53,6 +53,25 @@ CONFIGS: dict[str, RuntimeConfig] = {
         semantic_router=True,
         agent_model="gemini-flash-lite",
     ),
+    # The final comparison (amendment 3), both on prompt v3: 3.8 Flash with the provisional 4 s
+    # trigger, and Flash-Lite with a trigger near its own p90 of tool choice (2.5 s).
+    "final-flash": RuntimeConfig(
+        name="final-flash",
+        headline_first=True,
+        hedge_after_s=4.0,
+        answer_deadline_s=7.0,
+        routed_answer_deadline_s=2.5,
+        semantic_router=True,
+    ),
+    "final-lite": RuntimeConfig(
+        name="final-lite",
+        headline_first=True,
+        hedge_after_s=2.5,
+        answer_deadline_s=7.0,
+        routed_answer_deadline_s=2.5,
+        semantic_router=True,
+        agent_model="gemini-flash-lite",
+    ),
     # ADR 0001 change 4 on top: minimal thinking for the agent, kept only if tool and parameter
     # accuracy hold.
     "headline-hedged-minimal": RuntimeConfig(

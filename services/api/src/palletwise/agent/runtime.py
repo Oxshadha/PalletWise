@@ -29,7 +29,13 @@ from pydantic_ai.settings import ModelSettings
 from palletwise import clock
 from palletwise.agent import fast_path, progress, semantic_router, templates
 from palletwise.agent.events import EventCounter, RunEvent
-from palletwise.agent.guardrails import facts_missing, grounding_problems, instruction_echo, normalize_dashes
+from palletwise.agent.guardrails import (
+    facts_missing,
+    grounding_problems,
+    instruction_echo,
+    normalize_dashes,
+    shape_problem,
+)
 from palletwise.agent.suggestions import STARTERS, Suggestion, suggest
 from palletwise.contracts.results import ResultEnvelope, ResultStatus
 from palletwise.llm import LLMProvider, ResolvedModel
@@ -771,6 +777,13 @@ class CopilotRuntime:
 
         def make_tool(name: str, description: str, schema: dict[str, Any]) -> Tool[Any]:
             async def call(**arguments: Any) -> str:
+                ws = request.run.working_set
+                problem = shape_problem(request.question, name, arguments, bool(ws and ws.products))
+                if problem is not None:
+                    # Not run: the model is told how to keep the question's shape (safeguard A).
+                    metrics.guardrail_triggers.labels(kind="question_shape").inc()
+                    log.info("query would change the question's shape; asking the model to fix it")
+                    return data_block({"error": problem})
                 result = await self._call_tool(request, name, arguments, state, events, queue)
                 if result.outcome is not Outcome.OK:
                     failed.append(result)

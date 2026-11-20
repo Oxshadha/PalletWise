@@ -13,6 +13,7 @@ from evals.configs import named
 from evals.environment import standalone
 from evals.runner import (
     REPORTS_DIR,
+    TOOL_NAMES,
     ConfigRun,
     compare,
     config_names,
@@ -22,6 +23,7 @@ from evals.runner import (
     write_model_report,
     write_report,
 )
+from palletwise.agent.runtime import choose_route
 from palletwise.llm import DisabledProvider, build_provider
 from palletwise.settings import LlmSettings
 
@@ -35,6 +37,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--report-dir", type=Path, default=REPORTS_DIR)
     parser.add_argument("--config", default="baseline", help="model level: one named configuration")
     parser.add_argument("--compare", default=None, help="model level: named configurations, comma separated")
+    parser.add_argument(
+        "--tier3-only",
+        action="store_true",
+        help="model level: only the cases the three-tier runtime leaves to the model (tier 3)",
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
 
@@ -54,6 +61,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"model gate: PENDING (provider unavailable). Report: {paths[1]}")
         return 3
+
+    if args.tier3_only:
+        cases = [
+            c
+            for c in cases
+            if choose_route(c.question, None, c.page_context, TOOL_NAMES, semantic=True)[0] is None
+        ]
+        hashes["selection"] = "tier3-only"
 
     with standalone() as env:
         if args.write_golden:
