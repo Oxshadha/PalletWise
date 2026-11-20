@@ -347,3 +347,33 @@
   display: grid;
   gap: var(--pw-space-2);
 }
+
+/* Live progress while an answer is prepared (pw.status): plain words, one quiet pulsing dot. */
+.pw-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pw-space-2);
+  color: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-md);
+}
+
+.pw-progress-dot {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pw-progress-dot {
+    animation: pw-progress-pulse 1.2s var(--pw-ease) infinite;
+  }
+}
+
+@keyframes pw-progress-pulse {
+  50% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+}

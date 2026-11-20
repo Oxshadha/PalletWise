@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 EventType = Literal[
     "RUN_STARTED",
+    "pw.status",
     "TOOL_CALL_START",
     "TOOL_CALL_END",
     "pw.result",

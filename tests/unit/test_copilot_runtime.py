@@ -194,9 +194,12 @@ def test_fast_path_without_a_model_uses_the_template() -> None:
     events, state, gateway, _ = run("Where is SKU-102 stored?", FakeProvider())
     assert types(events) == [
         "RUN_STARTED",
+        "pw.status",
+        "pw.status",
         "TOOL_CALL_START",
         "TOOL_CALL_END",
         "pw.result",
+        "pw.status",
         "TEXT_MESSAGE_START",
         "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_END",
@@ -208,7 +211,8 @@ def test_fast_path_without_a_model_uses_the_template() -> None:
     assert gateway.calls == [("find_product_locations", {"sku": "SKU-102"})]
     assert text_of(events) == "SKU-102 is stored in 2 locations: A8-01-02 (7 on hand), B1-02-02 (1 on hand)."
     assert state.suggestions[0].label == "What else is in A8-01-02?"
-    assert len(events[3].data["result"]["highlights"]) == 2
+    result = next(e for e in events if e.type == "pw.result")
+    assert len(result.data["result"]["highlights"]) == 2
 
 
 def test_path_a_words_with_the_small_model() -> None:
@@ -642,3 +646,46 @@ def test_a_runtime_choice_that_is_not_built_is_refused(choice: dict[str, Any]) -
 def test_the_baseline_configuration_is_the_default() -> None:
     runtime = CopilotRuntime(v1_tools(), FakeGateway(), FakeProvider(), run_timeout=10)
     assert runtime.config == RuntimeConfig() and runtime.config.as_json()["name"] == "baseline"
+
+
+# ---------------------------------------------------------------- ADR 0001 change 1: live progress
+
+
+def statuses(events: list[RunEvent]) -> list[tuple[str, str]]:
+    return [(e.data["stage"], e.data["label"]) for e in events if e.type == "pw.status"]
+
+
+def test_progress_comes_first_before_any_model_call_or_tool() -> None:
+    events, _, _, _ = run(
+        "Which bins hold the wireless mouse?",
+        FakeProvider(gemini_flash=tool_then_say("SKU-102 is in A8-01-02 with 7 units.")),
+    )
+    assert types(events)[:2] == ["RUN_STARTED", "pw.status"]
+    assert statuses(events) == [
+        ("reading", "Reading the question"),
+        ("checking", "Finding where the product is stored"),
+        ("reviewing", "Reviewing the results"),
+    ]
+
+
+def test_path_a_says_it_is_writing_the_answer() -> None:
+    events, _, _, _ = run(
+        "Where is SKU-102 stored?", FakeProvider(gemini_flash_lite=say("SKU-102 is in A8-01-02."))
+    )
+    assert [stage for stage, _ in statuses(events)] == ["reading", "checking", "reviewing", "writing"]
+
+
+def test_progress_labels_never_name_a_tool_or_carry_model_text() -> None:
+    from palletwise.agent import progress
+
+    tools = {t.name for t in v1_tools()}
+    assert tools <= set(progress.TOOL_LABELS)  # every tool has a business label
+    labels = set(progress.TOOL_LABELS.values()) | set(progress.STAGE_LABELS.values())
+    for text in labels:
+        assert "_" not in text and not any(t in text for t in tools), text
+        assert not any(d in text for d in (chr(0x2013), chr(0x2014))), text
+    events, _, _, _ = run(
+        "Which bins hold the wireless mouse?",
+        FakeProvider(gemini_flash=tool_then_say("SKU-102 is in A8-01-02 with 7 units.")),
+    )
+    assert {label for _, label in statuses(events)} <= labels

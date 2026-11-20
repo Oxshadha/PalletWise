@@ -26,7 +26,7 @@ from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
 
 from palletwise import clock
-from palletwise.agent import fast_path, templates
+from palletwise.agent import fast_path, progress, templates
 from palletwise.agent.events import EventCounter, RunEvent
 from palletwise.agent.guardrails import grounding_problems, normalize_dashes
 from palletwise.agent.suggestions import STARTERS, Suggestion, suggest
@@ -433,6 +433,8 @@ class CopilotRuntime:
 
         async def work() -> None:
             try:
+                # Progress first, before any model call or tool (ADR 0001: first progress within 1 s).
+                await self._status(events, queue, "reading")
                 async with asyncio.timeout(self._run_timeout):
                     if route is not None:
                         await self._fast_path(request, route, lite, meter, state, events, queue)
@@ -494,6 +496,7 @@ class CopilotRuntime:
         result: ResultEnvelope = call.output
         text = None
         if lite is not None:
+            await self._status(events, queue, "writing")
             try:
                 text = await self._word(request, route.tool, result, lite, meter, state)
             except BudgetExhausted:
@@ -679,6 +682,7 @@ class CopilotRuntime:
         # Numbered before any await, so failed and concurrent calls never share an id.
         state.tool_calls += 1
         call_id = f"{state.tool_calls}-{name}"
+        await self._status(events, queue, "checking", name)
         await queue.put(events.make("TOOL_CALL_START", tool_call_id=call_id, tool=name))
         try:
             result = await asyncio.to_thread(self._gateway.execute, request.run, name, arguments)
@@ -695,7 +699,18 @@ class CopilotRuntime:
             await queue.put(
                 events.make("pw.result", tool_call_id=call_id, result=envelope.model_dump(mode="json"))
             )
+        await self._status(events, queue, "reviewing")
         return result
+
+    @staticmethod
+    async def _status(
+        events: EventCounter,
+        queue: "asyncio.Queue[RunEvent | None]",
+        stage: progress.Stage,
+        tool: str | None = None,
+    ) -> None:
+        """A plain-language progress event from the fixed labels (never model text or tool names)."""
+        await queue.put(events.make("pw.status", stage=stage, label=progress.label(stage, tool)))
 
     async def _finish_failed_call(
         self,

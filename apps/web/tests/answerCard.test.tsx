@@ -14,6 +14,7 @@ function answer(overrides: Partial<Answer> = {}): Answer {
     path: "B",
     outcome: "ANSWER",
     text: "SKU-102 is stored in 2 locations.",
+    progress: null,
     results: [envelope([BIN_A, BIN_B], 12)],
     suggestions: [],
     error: null,
@@ -115,5 +116,34 @@ describe("answer card (UX spec 7)", () => {
     expect(screen.getByText("Stock value (LKR)")).toBeTruthy();
     expect(screen.getByText("12,500")).toBeTruthy();
     expect(container.textContent).toContain("Settings version 2.");
+  });
+
+  it("shows live progress while the answer is prepared, and the answer once it arrives", () => {
+    const { rerender } = render(
+      <AnswerCard
+        answer={answer({
+          status: "streaming",
+          text: "",
+          results: [],
+          progress: "Checking pick locations against their minimums",
+        })}
+        siteId="s"
+        active={false}
+        onShowOnMap={() => undefined}
+        onSuggestion={() => undefined}
+      />,
+    );
+    expect(screen.getByText("Checking pick locations against their minimums")).toBeTruthy();
+    rerender(
+      <AnswerCard
+        answer={answer({ status: "streaming", progress: "Writing the answer" })}
+        siteId="s"
+        active={false}
+        onShowOnMap={() => undefined}
+        onSuggestion={() => undefined}
+      />,
+    );
+    expect(screen.queryByText("Writing the answer")).toBeNull();
+    expect(screen.getByText("SKU-102 is stored in 2 locations.")).toBeTruthy();
   });
 });

@@ -192,7 +192,13 @@ export function AnswerCard({
           <p className="pw-outcome">{OUTCOME_LABEL[answer.outcome]}</p>
         )}
         <div className="pw-answer-text" aria-live="polite">
-          {answer.text || (streaming ? <span className="pw-muted">Answering...</span> : null)}
+          {answer.text ||
+            (streaming ? (
+              <span className="pw-progress">
+                <span className="pw-progress-dot" aria-hidden="true" />
+                {answer.progress ?? "Answering..."}
+              </span>
+            ) : null)}
         </div>
         {answer.status === "cancelled" && <p className="pw-muted">Stopped.</p>}
         {answer.error && (
