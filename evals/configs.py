@@ -5,24 +5,37 @@ choices: RuntimeConfig refuses choices that are not built, so a comparison never
 candidate that silently ran as the baseline.
 """
 
-from palletwise.agent.runtime import RuntimeConfig
+from palletwise.agent.runtime import PRODUCTION_RUNTIME, RuntimeConfig
+
+# The agent model the comparisons before the final one ran on: since migration 0018 the registry's
+# primary is Flash-Lite, so these setups name 3.8 Flash to stay reproducible.
+PINNED = "gemini-flash"
 
 CONFIGS: dict[str, RuntimeConfig] = {
-    "baseline": RuntimeConfig(name="baseline"),
+    # What the copilot ships with (ADR 0001 amendment 3).
+    "production": PRODUCTION_RUNTIME,
+    "baseline": RuntimeConfig(name="baseline", agent_model=PINNED),
     # ADR 0001 change 2: the template headline at 3 s when the answer is late, and model wording
     # shown only with every key fact of its result.
-    "headline-first": RuntimeConfig(name="headline-first", headline_first=True),
+    "headline-first": RuntimeConfig(name="headline-first", headline_first=True, agent_model=PINNED),
     # ADR 0001 change 5 on top: the fallback model starts alongside a primary that has not answered
     # in 4 s (about the healthy p95 of a model call), and the first good response wins.
-    "headline-hedged": RuntimeConfig(name="headline-hedged", headline_first=True, hedge_after_s=4.0),
+    "headline-hedged": RuntimeConfig(
+        name="headline-hedged", headline_first=True, hedge_after_s=4.0, agent_model=PINNED
+    ),
     # The answer deadline of ADR 0001 section 6 on top: 7 s after the question, with a result in,
     # the template answer is final unless the model's wording has arrived (target: 8 s p95).
     "fast-answer": RuntimeConfig(
-        name="fast-answer", headline_first=True, hedge_after_s=4.0, answer_deadline_s=7.0
+        name="fast-answer", headline_first=True, hedge_after_s=4.0, answer_deadline_s=7.0, agent_model=PINNED
     ),
     # ADR 0001 amendment 2 on top: tier 2, the semantic router, before the model.
     "three-tier": RuntimeConfig(
-        name="three-tier", headline_first=True, hedge_after_s=4.0, answer_deadline_s=7.0, semantic_router=True
+        name="three-tier",
+        headline_first=True,
+        hedge_after_s=4.0,
+        answer_deadline_s=7.0,
+        semantic_router=True,
+        agent_model=PINNED,
     ),
     # Three-tier with a routed answer deadline: questions routed without the model (tiers 1 and 2)
     # answer with the template when the small model's wording is not ready 2.5 s after the question
@@ -34,6 +47,7 @@ CONFIGS: dict[str, RuntimeConfig] = {
         answer_deadline_s=7.0,
         routed_answer_deadline_s=2.5,
         semantic_router=True,
+        agent_model=PINNED,
     ),
     # Amendment 2 tuning: the hedge trigger near the p90 of healthy tool choice (5.4 s) instead of 4 s.
     "three-tier-p90": RuntimeConfig(
@@ -42,6 +56,7 @@ CONFIGS: dict[str, RuntimeConfig] = {
         hedge_after_s=5.4,
         answer_deadline_s=7.0,
         semantic_router=True,
+        agent_model=PINNED,
     ),
     # Amendment 2 experiment: Flash-Lite as tier 3's agent model, kept only with its own gates met.
     "three-tier-lite": RuntimeConfig(
@@ -62,6 +77,7 @@ CONFIGS: dict[str, RuntimeConfig] = {
         answer_deadline_s=7.0,
         routed_answer_deadline_s=2.5,
         semantic_router=True,
+        agent_model=PINNED,
     ),
     "final-lite": RuntimeConfig(
         name="final-lite",
@@ -75,7 +91,11 @@ CONFIGS: dict[str, RuntimeConfig] = {
     # ADR 0001 change 4 on top: minimal thinking for the agent, kept only if tool and parameter
     # accuracy hold.
     "headline-hedged-minimal": RuntimeConfig(
-        name="headline-hedged-minimal", headline_first=True, hedge_after_s=4.0, agent_thinking="minimal"
+        name="headline-hedged-minimal",
+        headline_first=True,
+        hedge_after_s=4.0,
+        agent_thinking="minimal",
+        agent_model=PINNED,
     ),
 }
 

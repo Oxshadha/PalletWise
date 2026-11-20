@@ -62,7 +62,7 @@ evals:
 # from .env; without them it writes a pending report and exits 3 (never a silent pass).
 # CONFIG=name runs one runtime configuration; COMPARE=a,b compares several on the same cases
 # (ADR 0001), for example COMPARE=baseline,baseline for an A/A noise run.
-CONFIG ?= baseline
+CONFIG ?= production
 evals-model:
 	@sa=$$(grep -E '^GCP_SA_FILE=' .env 2>/dev/null | cut -d= -f2-); \
 	project=$$(grep -E '^GCP_PROJECT_ID=' .env 2>/dev/null | cut -d= -f2-); \

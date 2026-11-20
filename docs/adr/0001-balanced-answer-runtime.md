@@ -292,8 +292,34 @@ from the requirements, not from evidence.
 7. **Then the runtime work closes** and Slice 2 resumes: 7b input classifier, 7c wording cache, 7d
    180-day performance, the Slice 2 pull request, then Slice 3.
 
+## Decision of the final comparison, 2026-11-20
+
+Report `2026-11-20-b7ee94a-compare-final-flash-vs-final-lite` (tier-3 cases, one run each, prompt v3):
+
+| Gate | 3.8 Flash | Flash-Lite |
+|---|---|---|
+| Tool / parameter accuracy | 0.975 / 0.975 | 1.0 / 0.975 |
+| Highlight F1, injection, grounding, required facts | pass | pass |
+| Tier 3 highlights p95 (7 s) | 8.4 s, fail | 3.1 s, pass |
+| Tier 3 headline p95 (7 s) | 6.8 s, pass | 4.1 s, pass |
+| Tier 3 complete p95 (8 s) | 7.1 s, pass | 5.4 s, pass |
+| Cost p95, tier-3 cases (reported) | 0.0158 USD | 0.0126 USD |
+
+**Chosen: Flash-Lite** as the copilot's primary model (quality first, then latency, then cost), with
+the registry fallback `gemini-flash-fallback` and a 2.5 s hedge (near its p90 of tool choice), headline
+first, the 7 s and 2.5 s answer deadlines and the semantic router (`PRODUCTION_RUNTIME`). Migration
+`0018_agent_flash_lite` sets the primary for system-seeded agents, so the Admin view names the model
+that answers. The 4 s hedge for 3.8 Flash is not adopted.
+
+**Uncertainty, recorded:** one run of 40 cases supports a provisional decision, not a statistical
+claim. The deciding gap is large (highlights 3.1 against 8.4 s); the quality gates are equal. Neither
+model is under 0.003 USD on the tier-3 selection alone, which holds only the costliest questions; the
+last full run with Flash-Lite measured 0.0023 USD overall. Cost stays reported, not gating.
+
+**The runtime work is closed.** Follow-ups, tracked rather than blocking: meaning-aware grounding
+beyond stated counts; a repeat of the final comparison when the provider's models change.
+
 ## Status
 
-Accepted, 2026-11-19, by the product owner, with the conditions above. Implementation is gated on the
-comparison of section 3 being able to measure quality, the four latency milestones and total cost on
-the same cases.
+Accepted, 2026-11-19, by the product owner; amended 2026-11-20 (amendments 1 to 3) and decided by the
+final comparison: Flash-Lite as primary, `PRODUCTION_RUNTIME`. The runtime work is closed.

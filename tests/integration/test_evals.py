@@ -35,7 +35,7 @@ def test_deterministic_gate_passes(tmp_path: Path) -> None:
     failed = {c["case"]: [k for k in c["checks"] if not k["ok"]] for c in data["cases"] if not c["passed"]}
     assert done.returncode == 0, failed or done.stderr[-2000:]
     assert data["status"] == "pass"
-    assert len(data["cases"]) >= 60
+    assert len(data["cases"]) >= 90  # the four sets, under the production runtime
 
 
 @pytest.fixture

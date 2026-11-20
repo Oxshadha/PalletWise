@@ -50,7 +50,8 @@ class ScriptedProvider:
 
 def main(directory: Path) -> None:
     cases = [c for c in load_set("core")[0] if c.id in CASES]
-    configs = [RuntimeConfig(), RuntimeConfig()]  # an A/A run: the comparison path itself
+    # An A/A run: the comparison path itself. The scripted agent model is registered as gemini-flash.
+    configs = [RuntimeConfig(agent_model="gemini-flash"), RuntimeConfig(agent_model="gemini-flash")]
     with standalone() as env:
         compared = compare(env, cases, ScriptedProvider, configs, runs=2)
         entries = [

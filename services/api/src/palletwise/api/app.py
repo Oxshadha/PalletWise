@@ -9,7 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Response, status
 from pydantic import BaseModel
 
-from palletwise.agent.runtime import CopilotRuntime
+from palletwise.agent.runtime import PRODUCTION_RUNTIME, CopilotRuntime
 from palletwise.api import auth_routes, copilot, sites
 from palletwise.api.observability import request_span
 from palletwise.api.security import CurrentPrincipal, csrf_middleware, require_session, site_in_scope
@@ -70,7 +70,9 @@ def build_copilot() -> copilot.CopilotServices:
     executor = ToolExecutor(tools, agents, PolicyClient(PolicySettings()), audit, read_pool, limiter)
     llm = LlmSettings()
     return copilot.CopilotServices(
-        runtime=CopilotRuntime(tools, executor, build_provider(llm), llm.run_timeout_seconds),
+        runtime=CopilotRuntime(
+            tools, executor, build_provider(llm), llm.run_timeout_seconds, config=PRODUCTION_RUNTIME
+        ),
         agents=agents,
         conversations=ConversationStore(role_pool("PW_MEMORY")),
         ledger=UsageLedger(app_pool),

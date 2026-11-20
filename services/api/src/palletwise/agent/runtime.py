@@ -189,6 +189,19 @@ class RuntimeConfig:
         }
 
 
+# The runtime the copilot ships with (ADR 0001 amendment 3, final comparison 2026-11-20-b7ee94a):
+# headline first, a 2.5 s hedge on the registry's primary (Flash-Lite), the answer deadlines and the
+# semantic router. The agent model comes from the agent registry, so the Admin view names it.
+PRODUCTION_RUNTIME = RuntimeConfig(
+    name="production",
+    headline_first=True,
+    hedge_after_s=2.5,
+    answer_deadline_s=7.0,
+    routed_answer_deadline_s=2.5,
+    semantic_router=True,
+)
+
+
 @dataclass(frozen=True, slots=True)
 class HistoryTurn:
     question: str

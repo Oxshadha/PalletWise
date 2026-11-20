@@ -26,7 +26,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from support import load_site, provision_site
 
 from evals.fake_idp import CLIENT_ID, CLIENT_SECRET, ISSUER, SIGNING_KEY, FakeIdp
-from palletwise.agent.runtime import BUDGET_TEXT, CopilotRuntime
+from palletwise.agent.runtime import BUDGET_TEXT, CopilotRuntime, RuntimeConfig
 from palletwise.api import copilot, sites
 from palletwise.api.app import create_app
 from palletwise.auth.crypto import KeyRing
@@ -160,7 +160,11 @@ def env(ready_site: Site, connect_session: Connect, opa_url: str) -> Generator[E
         limiter,
     )
     services = copilot.CopilotServices(
-        runtime=CopilotRuntime(v1_tools(), executor, models, run_timeout=30),
+        # The scripted agent model is registered as gemini-flash: name it, since the registry's
+        # primary is Flash-Lite (ADR 0001), which these tests script as the path A wording model.
+        runtime=CopilotRuntime(
+            v1_tools(), executor, models, run_timeout=30, config=RuntimeConfig(agent_model="gemini-flash")
+        ),
         agents=agents,
         conversations=ConversationStore(role_pool("PW_MEMORY")),
         ledger=UsageLedger(app_pool),

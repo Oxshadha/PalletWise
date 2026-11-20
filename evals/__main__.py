@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--write-golden", action="store_true")
     parser.add_argument("--report-dir", type=Path, default=REPORTS_DIR)
-    parser.add_argument("--config", default="baseline", help="model level: one named configuration")
+    parser.add_argument("--config", default="production", help="one named runtime configuration")
     parser.add_argument("--compare", default=None, help="model level: named configurations, comma separated")
     parser.add_argument(
         "--tier3-only",
@@ -46,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.WARNING)
 
     sha = git_sha()  # at the start: a commit made during a long run must not relabel it
-    names = args.sets or ["core", "adversarial", "operations"]
+    names = args.sets or ["core", "adversarial", "operations", "routing"]
     cases, hashes = [], {}
     for name in names:
         found, digest = load_set(name)

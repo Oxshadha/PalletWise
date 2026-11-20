@@ -139,7 +139,7 @@ def test_every_new_tenant_gets_an_active_copilot(gov: Gov) -> None:
     assert agent is not None and agent.active
     assert agent.allowed_scopes == ("inventory.read", "orders.read", "proposal.create")
     # Flash-Lite words path A answers; the tool-using fallback is the full Flash model.
-    assert (agent.primary_model, agent.fallback_model) == ("gemini-flash", "gemini-flash-fallback")
+    assert (agent.primary_model, agent.fallback_model) == ("gemini-flash-lite", "gemini-flash-fallback")
     assert agent.prompt_version == "system.v3"  # question shape and conditions (ADR 0001)
 
 
