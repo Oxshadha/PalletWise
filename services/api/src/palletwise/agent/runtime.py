@@ -27,7 +27,7 @@ from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
 
 from palletwise import clock
-from palletwise.agent import fast_path, progress, semantic_router, templates
+from palletwise.agent import fast_path, input_classifier, progress, semantic_router, templates
 from palletwise.agent.events import EventCounter, RunEvent
 from palletwise.agent.guardrails import (
     facts_missing,
@@ -147,6 +147,9 @@ class RuntimeConfig:
     routed_answer_deadline_s: float | None = None
     # Tier 2 (ADR 0001 amendment 2): confidently recognised questions route without a model call.
     semantic_router: bool = False
+    # The input classifier (D6): declines clear injection, change, restricted and off-topic messages
+    # that no route recognised, without a model call. Advisory, never a security boundary.
+    input_classifier: bool = False
     # Tier 3's agent model (tool choice and answer text), by logical name; None: the agent
     # registry's primary. An experiment (amendment 2): kept only with its own quality gates met.
     agent_model: str | None = None
@@ -186,6 +189,7 @@ class RuntimeConfig:
             "routed_answer_deadline_s": self.routed_answer_deadline_s,
             "semantic_router": self.semantic_router,
             "agent_model": self.agent_model,
+            "input_classifier": self.input_classifier,
         }
 
 
@@ -199,6 +203,7 @@ PRODUCTION_RUNTIME = RuntimeConfig(
     answer_deadline_s=7.0,
     routed_answer_deadline_s=2.5,
     semantic_router=True,
+    input_classifier=True,
 )
 
 
@@ -596,9 +601,14 @@ class CopilotRuntime:
         events = EventCounter()
         state.started = clock.monotonic()
         route = self._route(request, state)
+        verdict = self._classify(request, route)
+        if verdict.declines:
+            state.tier = 1  # decided without a model
         lite = self._provider.model(LITE_MODEL) if route else None
         primary = (
-            None if route else self._provider.model(self.config.agent_model or request.agent.primary_model)
+            None
+            if route or verdict.declines
+            else self._provider.model(self.config.agent_model or request.agent.primary_model)
         )
         state.path = ("A" if lite else "B") if route else ("C" if primary else "B")
         yield events.make("RUN_STARTED", run_id=str(request.run.run_id), path=state.path, tier=state.tier)
@@ -616,7 +626,9 @@ class CopilotRuntime:
                 # Progress first, before any model call or tool (ADR 0001: first progress within 1 s).
                 await self._status(events, queue, "reading")
                 async with asyncio.timeout(self._run_timeout):
-                    if route is not None:
+                    if verdict.declines:
+                        await self._finish(state, events, queue, verdict.message, "DECLINE", None, None)
+                    elif route is not None:
                         await self._fast_path(request, route, lite, meter, state, events, queue)
                     elif primary is not None:
                         await self._model_path(request, primary, meter, state, events, queue)
@@ -661,6 +673,17 @@ class CopilotRuntime:
                               text_source=state.text_source, tier=state.tier)  # fmt: skip
 
     # ------------------------------------------------------------ routing
+
+    def _classify(self, request: RunRequest, route: fast_path.Route | None) -> input_classifier.Verdict:
+        """The input classifier (advisory, D6): only for messages no route recognised; it can only
+        decline, never grant, and the deterministic boundaries apply to everything else."""
+        if not self.config.input_classifier or route is not None or request.suggestion is not None:
+            return input_classifier.Verdict(None)
+        verdict = input_classifier.classify(request.question)
+        if verdict.declines:
+            metrics.guardrail_triggers.labels(kind="classifier").inc()
+            log.info("input classifier declines: %s (%s)", verdict.kind, verdict.reason)
+        return verdict
 
     def _route(self, request: RunRequest, state: RunState) -> fast_path.Route | None:
         """Tier 1, then tier 2; None leaves the question to the model (tier 3)."""

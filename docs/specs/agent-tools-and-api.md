@@ -106,7 +106,7 @@ Every tool is declared once:
 ## 5. Agent runtime
 
 - **Framework**: Pydantic AI behind an `AgentRuntime` interface; models behind an `LLMProvider` interface. Neither leaks into tools or the semantic layer.
-- **Models**: primary Gemini Flash (3.8 Flash candidate, confirmed by NFR-QLT-03); Flash-Lite for path A wording and the input classifier; fallback model from the agent registry.
+- **Models**: primary Flash-Lite (`gemini-flash-lite`, chosen by the ADR 0001 final comparison), which also words path A; fallback from the agent registry (`gemini-flash-fallback`). The input classifier is deterministic and uses no model.
 - **Prompt**: `copilot/prompts/system.v{n}.md`, versioned; the version is recorded on every run; changes pass the evaluation gate.
 - **Limits per run**: at most 5 tool calls, a token cap, low temperature, a per-call timeout and a total run timeout.
 - **Context given to the model** (context only, never used for authorization, which always uses the verified server-side identity of section 7):
@@ -124,7 +124,7 @@ Security is enforced by deterministic boundaries. The classifier helps decide wh
 | Stage | Check | On failure |
 |---|---|---|
 | Input | length at most 1,000 characters; Unicode normalized; rate limit | rejected with a message |
-| Input | Flash-Lite classifier: out of scope or injection attempt (**advisory**) | polite decline; logged |
+| Input | Deterministic classifier (`agent/input_classifier.py`), only for messages no route recognised: injection markers, change requests, restricted information, clearly off-topic requests (**advisory**; abstains when unsure) | polite fixed decline without a model call; logged and counted |
 | Every tool call | agent status active (kill switch rechecked per call, so a suspension stops a run within one step) | run stopped with the suspension message |
 | Every tool call | arguments validated against `input_model` | error returned to the model, counts as a step |
 | Every tool call | policy decision (section 7) | denied, audited, the model is told it is not permitted |
@@ -396,3 +396,4 @@ CWM 11.3 names a `pw_memory` role for "conversation tables (other spec)", but no
 | 2026-11-20 | Three-tier comparison findings: (1) templates name a product by SKU alone when its name carries instruction text (eval IND-003: the bin-contents template quoted the poisoned name after the model's prose was refused); (2) a query result without a breakdown answers with its totals ("In total: stock value ...") instead of "1 row found, led by ..."; (3) `RuntimeConfig.routed_answer_deadline_s` gives questions routed without the model (tiers 1 and 2) their own answer deadline against the fast path target. |
 | 2026-11-20 | ADR 0001 amendment 3: prompt `system.v3` (migration `0017_prompt_v3`, system-seeded rows only); safeguard A (`guardrails.shape_problem`: a working-set query without a breakdown is not run unless the question asks for a total) and safeguard B (`guardrails.count_problems`: a stated count must be a count in the data), both deterministic. |
 | 2026-11-20 | Final comparison decided (ADR 0001): the copilot's primary model is Flash-Lite (`gemini-flash-lite`, migration `0018_agent_flash_lite`, system-seeded agents only), fallback `gemini-flash-fallback`; the app runs `PRODUCTION_RUNTIME` (headline first, 2.5 s hedge with the circuit breaker, answer deadlines 7 s and 2.5 s, semantic router). |
+| 2026-11-20 | Slice 2 step 7b, product owner direction: the input classifier is deterministic, not a Flash-Lite call (no added latency, the same verdict every time). It runs only on messages no route recognised, so a real question carrying an injection is still answered under the deterministic boundaries (eval INJ-003); it declines only clear injection, change, restricted and off-topic messages with a fixed message and never grants anything (Slice 2 D6). Behind `RuntimeConfig.input_classifier`, on in `PRODUCTION_RUNTIME`. |
