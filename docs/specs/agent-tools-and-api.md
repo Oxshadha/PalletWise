@@ -357,6 +357,18 @@ CWM 11.3 names a `pw_memory` role for "conversation tables (other spec)", but no
 - No authorization fingerprint in the key: a lookup happens only after this user's authorized tool call produced this exact result, so reused wording restates only data the user already received. Adding scopes would split the cache without adding protection.
 - Only wording that passed the grounding check is stored.
 
+**Built in Slice 2 step 7c.** Path A wording only (one question, one result), behind
+`RuntimeConfig.wording_cache` (on in `PRODUCTION_RUNTIME`). The runtime builds the key material after
+the authorized tool call (tenant, site, tool, normalized arguments, the SHA-256 of exactly what the
+model saw of the result, the normalized question, wording prompt, model, template, settings and cache
+versions, locale and units); the API adapter adds the semantic model version and hashes it; the store
+(`db/cache_repo.py`, role `pw_cache`, table `pw.wording_cache` with forced row-level security) keeps
+only the hash, with a 24 hour TTL, at most 5,000 entries per tenant (least recently used first) and
+expired rows removed on write. Only wording that passed grounding, the key-fact rule and the
+instruction-echo guard is stored, and a hit is checked again against the current result before it is
+shown (`text_source = "cache"`). A cache failure is a miss, never an error. The evaluation measures
+uncached answers: its runtime has no cache store.
+
 **Learned routes (Slice 3 or later).** Never learned automatically from how often something is asked, and never promoted by a user message. A candidate route is promoted only after it passes a fixed evaluation set, under explicit promotion rules, versioned with rollback, isolated per tenant. A learned route only chooses the tool; the call still runs through `tools.executor`.
 
 **Storage.** PostgreSQL first, behind a cache interface so Redis can replace it without touching the copilot: forced RLS per tenant, keys as above, a TTL with cleanup, a size bound per tenant, a cache version that invalidates every entry, and no credentials, tokens or personal data beyond what the key requires.
@@ -397,3 +409,4 @@ CWM 11.3 names a `pw_memory` role for "conversation tables (other spec)", but no
 | 2026-11-20 | ADR 0001 amendment 3: prompt `system.v3` (migration `0017_prompt_v3`, system-seeded rows only); safeguard A (`guardrails.shape_problem`: a working-set query without a breakdown is not run unless the question asks for a total) and safeguard B (`guardrails.count_problems`: a stated count must be a count in the data), both deterministic. |
 | 2026-11-20 | Final comparison decided (ADR 0001): the copilot's primary model is Flash-Lite (`gemini-flash-lite`, migration `0018_agent_flash_lite`, system-seeded agents only), fallback `gemini-flash-fallback`; the app runs `PRODUCTION_RUNTIME` (headline first, 2.5 s hedge with the circuit breaker, answer deadlines 7 s and 2.5 s, semantic router). |
 | 2026-11-20 | Slice 2 step 7b, product owner direction: the input classifier is deterministic, not a Flash-Lite call (no added latency, the same verdict every time). It runs only on messages no route recognised, so a real question carrying an injection is still answered under the deterministic boundaries (eval INJ-003); it declines only clear injection, change, restricted and off-topic messages with a fixed message and never grants anything (Slice 2 D6). Behind `RuntimeConfig.input_classifier`, on in `PRODUCTION_RUNTIME`. |
+| 2026-11-20 | Slice 2 step 7c: the answer-wording cache built as section 14b and D4 describe; new database role `pw_cache` (AGENTS.md rule 7), migration `0019_wording_cache`; `RUN_FINISHED.text_source` may be `cache`. |

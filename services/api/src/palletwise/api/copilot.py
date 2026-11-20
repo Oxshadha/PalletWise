@@ -6,6 +6,7 @@ when it ends, including cancelled and failed runs.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -40,6 +41,7 @@ from palletwise.auth.service import AuthService, DelegationRefused, SessionEnded
 from palletwise.db import status_repo
 from palletwise.db.agent_repo import AgentRecord, AgentRegistry
 from palletwise.db.audit_repo import AuditEntry, AuditLog
+from palletwise.db.cache_repo import WordingCacheStore
 from palletwise.db.connection import Pool
 from palletwise.db.copilot_repo import (
     ConversationStore,
@@ -50,6 +52,7 @@ from palletwise.db.copilot_repo import (
     UsageRecord,
 )
 from palletwise.llm import estimated_cost
+from palletwise.semantic.model import semantic_model
 from palletwise.telemetry import metrics
 from palletwise.telemetry.setup import user_hash
 from palletwise.telemetry.tracing import current_trace_id, tracer
@@ -158,6 +161,30 @@ def services(request: Request) -> CopilotServices:
 
 Services = Annotated[CopilotServices, Depends(services)]
 Auth = Annotated[AuthService, Depends(auth_service)]
+
+
+@dataclass
+class WordingCacheAdapter:
+    """The runtime's WordingCache port on the PostgreSQL store (agent spec 14b, Slice 2 D4).
+
+    Adds the semantic model's version to the runtime's key material, then hashes it: the store keeps
+    only the hash. The material already holds tenant, site, tool, arguments, result hash, question,
+    prompt, model, template, settings and cache versions, locale and units.
+    """
+
+    store: WordingCacheStore
+
+    @staticmethod
+    def key(material: dict[str, Any]) -> str:
+        canonical = json.dumps({**material, "semantic_model": semantic_model().version}, sort_keys=True,
+                               default=str)  # fmt: skip
+        return hashlib.sha256(canonical.encode()).hexdigest()
+
+    def get(self, tenant: UUID, site: UUID, material: dict[str, Any]) -> str | None:
+        return self.store.get(tenant, self.key(material))
+
+    def put(self, tenant: UUID, site: UUID, material: dict[str, Any], tool: str, wording: str) -> None:
+        self.store.put(tenant, site, self.key(material), tool, wording)
 
 
 @dataclass

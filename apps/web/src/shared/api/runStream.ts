@@ -34,7 +34,7 @@ export type RunEvent = Base &
         trace_id: string;
         path: string;
         outcome: string;
-        text_source?: "model" | "template" | "message" | null;
+        text_source?: "model" | "template" | "message" | "cache" | null;
       }
     | { type: "RUN_ERROR"; code: string; message: string; trace_id: string }
   );

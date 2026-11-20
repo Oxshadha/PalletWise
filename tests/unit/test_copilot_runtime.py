@@ -1222,3 +1222,120 @@ def test_the_classifier_is_off_unless_configured() -> None:
     model = tool_then_say("SKU-102 is in A8-01-02 with 7 units.")
     _, state, _, _ = run("Write me a poem about forklifts", FakeProvider(gemini_flash=model))
     assert state.tier == 3  # the model decides, as before
+
+
+# ---------------------------------------------------------------- answer-wording cache (spec 14b, D4)
+
+
+class MemoryCache:
+    """The WordingCache port in memory; keys are the runtime's material, as the adapter would hash."""
+
+    def __init__(self, fail: bool = False) -> None:
+        self.entries: dict[str, str] = {}
+        self.fail = fail
+
+    @staticmethod
+    def key(material: dict[str, Any]) -> str:
+        import json
+
+        return json.dumps(material, sort_keys=True, default=str)
+
+    def get(self, tenant: Any, site: Any, material: dict[str, Any]) -> str | None:
+        if self.fail:
+            raise ConnectionError("cache down")
+        return self.entries.get(self.key(material))
+
+    def put(self, tenant: Any, site: Any, material: dict[str, Any], tool: str, wording: str) -> None:
+        if self.fail:
+            raise ConnectionError("cache down")
+        self.entries[self.key(material)] = wording
+
+
+CACHED = RuntimeConfig(name="cached", wording_cache=True)
+WORDING = "SKU-102 is in A8-01-02 with 7 units and B1-02-02 with 1."
+
+
+SAME_SITE = request("seed")  # one tenant and site for the cache tests: the key includes both
+
+
+def cached_run(
+    question: str, lite: FunctionModel, cache: MemoryCache, gateway: FakeGateway | None = None
+) -> tuple[list[RunEvent], RunState, FakeMeter]:
+    from dataclasses import replace
+
+    meter, state = FakeMeter(), RunState()
+    req = replace(SAME_SITE, question=question, run=replace(SAME_SITE.run, run_id=uuid4()))
+    runtime = CopilotRuntime(
+        v1_tools(), gateway or FakeGateway(), FakeProvider(gemini_flash_lite=lite), run_timeout=10,
+        config=CACHED, cache=cache,
+    )  # fmt: skip
+
+    async def collect() -> list[RunEvent]:
+        return [e async for e in runtime.run(req, meter, state)]
+
+    return asyncio.run(collect()), state, meter
+
+
+def test_another_tenant_never_reads_the_entry() -> None:
+    from dataclasses import replace
+
+    cache = MemoryCache()
+    cached_run("Where is SKU-102 stored?", say(WORDING), cache)
+    other = replace(SAME_SITE.run, tenant=uuid4())
+    runtime = CopilotRuntime(v1_tools(), FakeGateway(), FakeProvider(gemini_flash_lite=say(WORDING)),
+                             run_timeout=10, config=CACHED, cache=cache)  # fmt: skip
+    state = RunState()
+
+    async def collect() -> list[RunEvent]:
+        req = replace(SAME_SITE, question="Where is SKU-102 stored?", run=other)
+        return [e async for e in runtime.run(req, FakeMeter(), state)]
+
+    asyncio.run(collect())
+    assert state.text_source == "model" and len(cache.entries) == 2  # its own entry, never the first
+
+
+def test_a_repeated_question_on_the_same_result_reuses_the_wording_without_a_model_call() -> None:
+    cache = MemoryCache()
+    events, state, meter = cached_run("Where is SKU-102 stored?", say(WORDING), cache)
+    assert text_of(events) == WORDING and state.text_source == "model" and len(cache.entries) == 1
+    gateway = FakeGateway()
+    events, state, meter = cached_run("where is sku-102 stored", FunctionModel(never_called), cache, gateway)
+    assert text_of(events) == WORDING and state.text_source == "cache" and state.path == "A"
+    assert meter.settled == []  # no model call
+    assert gateway.calls == [("find_product_locations", {"sku": "SKU-102"})]  # the tool still ran (14b)
+
+
+def test_a_settings_change_or_another_question_misses() -> None:
+    cache = MemoryCache()
+    cached_run("Where is SKU-102 stored?", say(WORDING), cache)
+
+    class NewSettings(FakeGateway):
+        def execute(self, run: RunContext, name: str, arguments: dict[str, Any]) -> ToolCallResult:
+            result = super().execute(run, name, arguments)
+            evidence = result.output.evidence.model_copy(update={"settings_version_id": uuid4()})
+            return ToolCallResult(Outcome.OK, name, result.output.model_copy(update={"evidence": evidence}))
+
+    _, state, _ = cached_run("Where is SKU-102 stored?", say(WORDING), cache, NewSettings())
+    assert state.text_source == "model" and len(cache.entries) == 2  # D4: visibly a miss
+    _, state, _ = cached_run("Which bins hold SKU-102?", say(WORDING), cache)
+    assert state.text_source != "cache"
+
+
+def test_ungrounded_wording_is_never_stored() -> None:
+    cache = MemoryCache()
+    _, state, _ = cached_run("Where is SKU-102 stored?", say("SKU-102 has 99 units."), cache)
+    assert state.text_source == "template" and cache.entries == {}
+
+
+def test_a_cached_entry_that_no_longer_fits_the_result_is_not_used() -> None:
+    cache = MemoryCache()
+    cached_run("Where is SKU-102 stored?", say(WORDING), cache)
+    for key in cache.entries:
+        cache.entries[key] = "SKU-102 has 99 units."  # tampered or stale
+    events, state, _ = cached_run("Where is SKU-102 stored?", say(WORDING), cache)
+    assert text_of(events) == WORDING and state.text_source == "model"
+
+
+def test_a_failing_cache_never_breaks_an_answer() -> None:
+    events, state, _ = cached_run("Where is SKU-102 stored?", say(WORDING), MemoryCache(fail=True))
+    assert state.outcome == "ANSWER" and text_of(events) == WORDING

@@ -8,6 +8,7 @@ and writes short answer text; highlights, numbers and suggestions come from the 
 import asyncio
 import contextvars
 import functools
+import hashlib
 import json
 import logging
 from collections import deque
@@ -16,6 +17,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal, Protocol
+from uuid import UUID
 
 import httpx
 from pydantic_ai import Agent, Tool, UsageLimits
@@ -48,6 +50,10 @@ log = logging.getLogger(__name__)
 
 PROMPTS = Path(__file__).with_name("prompts")
 LITE_MODEL = "gemini-flash-lite"
+# Versions in the wording cache key (spec 14b): bump one to invalidate entries written under it.
+WORDING_CACHE_VERSION = 1
+WORDING_PROMPT_VERSION = "wording.v1"
+LOCALE, UNITS = "en", "metric"
 MODEL_ROWS = 20  # rows of a result shown to the model; the UI shows all of them
 # max_tokens caps thinking and answer together (verified on gemini-3.8-flash), so it is also the
 # upper bound used for the budget reservation. Thinking stays low: answers are short and grounded
@@ -102,6 +108,15 @@ class ModelMeter(Protocol):
         ...
 
 
+class WordingCache(Protocol):
+    """The answer-wording cache store, provided by the API (spec 14b). The material is everything
+    the runtime knows the wording depends on; the store adds the semantic model version and hashes."""
+
+    def get(self, tenant: UUID, site: UUID, material: dict[str, Any]) -> str | None: ...
+
+    def put(self, tenant: UUID, site: UUID, material: dict[str, Any], tool: str, wording: str) -> None: ...
+
+
 class ToolGateway(Protocol):
     def execute(self, run: RunContext, name: str, arguments: dict[str, Any]) -> ToolCallResult: ...
 
@@ -147,6 +162,9 @@ class RuntimeConfig:
     routed_answer_deadline_s: float | None = None
     # Tier 2 (ADR 0001 amendment 2): confidently recognised questions route without a model call.
     semantic_router: bool = False
+    # The answer-wording cache (spec 14b, D4): path A wording reused for the same question on the
+    # same result after a fresh authorized tool call; needs a cache store from the API.
+    wording_cache: bool = False
     # The input classifier (D6): declines clear injection, change, restricted and off-topic messages
     # that no route recognised, without a model call. Advisory, never a security boundary.
     input_classifier: bool = False
@@ -190,6 +208,7 @@ class RuntimeConfig:
             "semantic_router": self.semantic_router,
             "agent_model": self.agent_model,
             "input_classifier": self.input_classifier,
+            "wording_cache": self.wording_cache,
         }
 
 
@@ -204,6 +223,7 @@ PRODUCTION_RUNTIME = RuntimeConfig(
     routed_answer_deadline_s=2.5,
     semantic_router=True,
     input_classifier=True,
+    wording_cache=True,
 )
 
 
@@ -232,7 +252,7 @@ class RunState:
     answer_text: str | None = None
     # Who wrote the answer text: the model, or a deterministic template (path B, a failed or
     # ungrounded model answer, a spent budget), or a fixed message (declines, denials).
-    text_source: Literal["model", "template", "message"] | None = None
+    text_source: Literal["model", "template", "message", "cache"] | None = None
     # How the tool was chosen (ADR 0001 amendment 2): 1 exact route or suggestion, 2 the semantic
     # router, 3 the model (or no model available).
     tier: Literal[1, 2, 3] | None = None
@@ -577,8 +597,10 @@ class CopilotRuntime:
         run_timeout: float,
         config: RuntimeConfig | None = None,
         breaker: CircuitBreaker | None = None,
+        cache: "WordingCache | None" = None,
     ) -> None:
         self.config = config or RuntimeConfig()
+        self._cache = cache
         self.breaker = breaker or CircuitBreaker()  # shared by every run of this process
         self._registry = registry
         self._gateway = gateway
@@ -714,6 +736,12 @@ class CopilotRuntime:
             return
         result: ResultEnvelope = call.output
         text = None
+        material = self._cache_material(request, route.tool, result, lite) if lite is not None else None
+        cached = await self._cached_wording(request, route.tool, result, material)
+        if cached is not None:
+            await self._finish(state, events, queue, cached, card_outcome(result), route.tool, result,
+                               source="cache")  # fmt: skip
+            return
         if lite is not None:
             await self._status(events, queue, "writing")
             try:
@@ -733,6 +761,8 @@ class CopilotRuntime:
                 text = None
             if text is None or state.budget_exhausted:
                 state.path = "B"
+            elif material is not None:
+                await self._store_wording(request, route.tool, material, text)
         await self._finish(state, events, queue, text or templates.template_answer(route.tool, result),
                            card_outcome(result), route.tool, result,
                            source="model" if text else "template")  # fmt: skip
@@ -957,6 +987,74 @@ class CopilotRuntime:
             self._schedule_headline(state, events, queue, name, result.output)
         return result
 
+    # ------------------------------------------------------------ answer-wording cache (spec 14b, D4)
+
+    def _cache_material(
+        self, request: RunRequest, tool: str, result: ResultEnvelope, lite: ResolvedModel
+    ) -> dict[str, Any] | None:
+        """What the wording depends on, for the cache key. The lookup happens here, after this
+        user's authorized tool call ran on current data (spec 14b). No authorization fingerprint
+        (D4); the settings version is explicit, so a settings change misses."""
+        if not (self.config.wording_cache and self._cache and result.status is ResultStatus.OK):
+            return None
+        arguments = {k: v for k, v in result.normalized_request.items() if k != "working_set_from"}
+        seen = json.dumps(model_view(result), sort_keys=True, default=str)  # exactly what the model saw
+        return {
+            "cache_version": WORDING_CACHE_VERSION,
+            "tenant": str(request.run.tenant),
+            "site": str(request.run.site),
+            "tool": tool,
+            "arguments": arguments,
+            "result": hashlib.sha256(seen.encode()).hexdigest(),
+            "question": fast_path.normalize(request.question),
+            "prompt": WORDING_PROMPT_VERSION,
+            "model": lite.name,
+            "templates": templates.TEMPLATES_VERSION,
+            "locale": LOCALE,
+            "units": UNITS,
+            "settings": str(result.evidence.settings_version_id),
+        }
+
+    async def _cached_wording(
+        self, request: RunRequest, tool: str, result: ResultEnvelope, material: dict[str, Any] | None
+    ) -> str | None:
+        """Cached wording, checked again against the current result; any doubt or failure is a miss."""
+        if material is None or self._cache is None:
+            return None
+        try:
+            text = await asyncio.to_thread(self._cache.get, request.run.tenant, request.run.site, material)
+        except Exception:
+            log.warning("wording cache unavailable; asking the model", exc_info=True)
+            metrics.wording_cache.labels(outcome="error").inc()
+            return None
+        if text is None:
+            metrics.wording_cache.labels(outcome="miss").inc()
+            return None
+        if (
+            grounding_problems(text, [result], request.question)
+            or instruction_echo(text, request.question)
+            or facts_missing(templates.key_facts(tool, result), text)
+        ):
+            metrics.wording_cache.labels(outcome="rejected").inc()
+            return None
+        metrics.wording_cache.labels(outcome="hit").inc()
+        return text
+
+    async def _store_wording(
+        self, request: RunRequest, tool: str, material: dict[str, Any], text: str
+    ) -> None:
+        """Only wording that passed grounding and the output guards reaches here."""
+        if self._cache is None:
+            return
+        try:
+            await asyncio.to_thread(
+                self._cache.put, request.run.tenant, request.run.site, material, tool, text
+            )
+            metrics.wording_cache.labels(outcome="store").inc()
+        except Exception:
+            log.warning("wording cache unavailable; not stored", exc_info=True)
+            metrics.wording_cache.labels(outcome="error").inc()
+
     # ------------------------------------------------------------ headline first (ADR 0001 section 6)
 
     async def _until_deadline[T](self, state: RunState, work: Awaitable[T], *, routed: bool = False) -> T:
@@ -1060,7 +1158,7 @@ class CopilotRuntime:
         tool: str | None,
         result: ResultEnvelope | None,
         *,
-        source: Literal["model", "template", "message"] = "message",
+        source: Literal["model", "template", "message", "cache"] = "message",
     ) -> None:
         state.answered = True
         if state.headline_task is not None and not state.headline_task.done():

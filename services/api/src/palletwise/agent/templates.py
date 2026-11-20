@@ -10,6 +10,8 @@ from palletwise.agent.guardrails import instruction_echo
 from palletwise.contracts.results import ResultEnvelope, ResultStatus
 
 MAX_LISTED = 3
+# In the wording cache key: bump when a template or a key fact changes meaning.
+TEMPLATES_VERSION = "templates.v4"
 
 
 def _plural(count: int, one: str, many: str) -> str:

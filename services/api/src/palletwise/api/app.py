@@ -19,6 +19,7 @@ from palletwise.auth.service import AuthService
 from palletwise.db import status_repo
 from palletwise.db.agent_repo import AgentRegistry
 from palletwise.db.audit_repo import AuditLog
+from palletwise.db.cache_repo import WordingCacheStore
 from palletwise.db.connection import close_pools, role_pool
 from palletwise.db.copilot_repo import ConversationStore, RateLimiter, UsageLedger
 from palletwise.db.session_repo import SessionStore
@@ -71,7 +72,12 @@ def build_copilot() -> copilot.CopilotServices:
     llm = LlmSettings()
     return copilot.CopilotServices(
         runtime=CopilotRuntime(
-            tools, executor, build_provider(llm), llm.run_timeout_seconds, config=PRODUCTION_RUNTIME
+            tools,
+            executor,
+            build_provider(llm),
+            llm.run_timeout_seconds,
+            config=PRODUCTION_RUNTIME,
+            cache=copilot.WordingCacheAdapter(WordingCacheStore(role_pool("PW_CACHE"))),
         ),
         agents=agents,
         conversations=ConversationStore(role_pool("PW_MEMORY")),
