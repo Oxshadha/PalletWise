@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from palletwise.agent import semantic_router
 from palletwise.agent.runtime import PRODUCTION_RUNTIME, CopilotRuntime
-from palletwise.api import auth_routes, copilot, events, sites
+from palletwise.api import auth_routes, copilot, events, exceptions, sites
 from palletwise.api.observability import request_span
 from palletwise.api.security import CurrentPrincipal, csrf_middleware, require_session, site_in_scope
 from palletwise.auth.crypto import KeyRing
@@ -176,6 +176,7 @@ def create_app(
     app.include_router(copilot.router)
     app.include_router(sites.router)
     app.include_router(events.router)
+    app.include_router(exceptions.router)
     return app
 
 

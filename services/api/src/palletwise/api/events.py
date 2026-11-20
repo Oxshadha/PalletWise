@@ -24,7 +24,7 @@ from fastapi import APIRouter, Header, Request
 from fastapi.responses import StreamingResponse
 
 from palletwise.api.security import SESSION_COOKIE, CurrentPrincipal, auth_service
-from palletwise.api.sites import Reads, _authorize  # pyright: ignore[reportPrivateUsage]
+from palletwise.api.sites import Reads, authorize_site
 from palletwise.auth.service import SessionEnded
 from palletwise.db.site_changes import changes_since, notifications
 
@@ -121,7 +121,7 @@ async def site_events(
     reads: Reads,
     last_event_id: Annotated[str | None, Header()] = None,
 ) -> StreamingResponse:
-    if (refused := await _authorize(principal, site_id, "site.events", reads)) is not None:
+    if (refused := await authorize_site(principal, site_id, "site.events", reads)) is not None:
         return refused  # type: ignore[return-value]
     hub: SiteChangeHub = request.app.state.site_changes
     auth = auth_service(request)
@@ -135,7 +135,7 @@ async def site_events(
             current = await asyncio.to_thread(auth.authenticate, cookie)
         except SessionEnded:
             return False
-        return await _authorize(current, site_id, "site.events", reads) is None
+        return await authorize_site(current, site_id, "site.events", reads) is None
 
     async def stream() -> AsyncIterator[str]:
         wake = hub.subscribe(site_id)

@@ -1,6 +1,63 @@
 {
   "components": {
     "schemas": {
+      "AcknowledgementOut": {
+        "properties": {
+          "acknowledged_at": {
+            "format": "date-time",
+            "title": "Acknowledged At",
+            "type": "string"
+          },
+          "acknowledged_by": {
+            "title": "Acknowledged By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "ACKNOWLEDGED",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "acknowledged_by",
+          "acknowledged_at"
+        ],
+        "title": "AcknowledgementOut",
+        "type": "object"
+      },
+      "AffectedOrderOut": {
+        "properties": {
+          "order_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "order_no": {
+            "title": "Order No",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "order_no"
+        ],
+        "title": "AffectedOrderOut",
+        "type": "object"
+      },
       "BinOut": {
         "properties": {
           "bay": {
@@ -342,6 +399,191 @@
           "how_computed"
         ],
         "title": "Evidence",
+        "type": "object"
+      },
+      "ExceptionOut": {
+        "properties": {
+          "acknowledged_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged At"
+          },
+          "acknowledged_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged By"
+          },
+          "components": {
+            "$ref": "#/components/schemas/ScoreComponentsOut"
+          },
+          "exception_type": {
+            "enum": [
+              "STOCKOUT_RISK",
+              "DELAYED_ORDER",
+              "LOW_STOCK",
+              "DEAD_STOCK",
+              "SLOW_IN_PRIME",
+              "CAPACITY_HOTSPOT",
+              "FESTIVAL_SHORTAGE"
+            ],
+            "title": "Exception Type",
+            "type": "string"
+          },
+          "first_detected_at": {
+            "format": "date-time",
+            "title": "First Detected At",
+            "type": "string"
+          },
+          "highlights": {
+            "items": {
+              "$ref": "#/components/schemas/Highlight"
+            },
+            "title": "Highlights",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_evaluated_at": {
+            "format": "date-time",
+            "title": "Last Evaluated At",
+            "type": "string"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/AffectedOrderOut"
+            },
+            "title": "Orders",
+            "type": "array"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "settings_version_id": {
+            "format": "uuid",
+            "title": "Settings Version Id",
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "status": {
+            "enum": [
+              "OPEN",
+              "ACKNOWLEDGED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subject_key": {
+            "title": "Subject Key",
+            "type": "string"
+          },
+          "subject_label": {
+            "title": "Subject Label",
+            "type": "string"
+          },
+          "zone_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zone Id"
+          }
+        },
+        "required": [
+          "id",
+          "exception_type",
+          "status",
+          "subject_key",
+          "subject_label",
+          "product_id",
+          "zone_id",
+          "order_id",
+          "severity",
+          "score",
+          "components",
+          "settings_version_id",
+          "first_detected_at",
+          "last_evaluated_at",
+          "acknowledged_by",
+          "acknowledged_at",
+          "highlights",
+          "orders"
+        ],
+        "title": "ExceptionOut",
+        "type": "object"
+      },
+      "ExceptionsOut": {
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "exceptions": {
+            "items": {
+              "$ref": "#/components/schemas/ExceptionOut"
+            },
+            "title": "Exceptions",
+            "type": "array"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "as_of",
+          "time_zone",
+          "exceptions"
+        ],
+        "title": "ExceptionsOut",
         "type": "object"
       },
       "FeatureOut": {
@@ -948,6 +1190,82 @@
           "finished_at"
         ],
         "title": "RunOut",
+        "type": "object"
+      },
+      "ScoreComponentsOut": {
+        "description": "The raw inputs, their 0 to 1 normalization, caps and weights (semantic 6.1).",
+        "properties": {
+          "hours_cap": {
+            "title": "Hours Cap",
+            "type": "number"
+          },
+          "hours_until_due": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours Until Due"
+          },
+          "lines": {
+            "title": "Lines",
+            "type": "integer"
+          },
+          "lines_cap": {
+            "title": "Lines Cap",
+            "type": "number"
+          },
+          "lines_normalized": {
+            "title": "Lines Normalized",
+            "type": "number"
+          },
+          "urgency_normalized": {
+            "title": "Urgency Normalized",
+            "type": "number"
+          },
+          "value_at_risk": {
+            "title": "Value At Risk",
+            "type": "number"
+          },
+          "value_cap": {
+            "title": "Value Cap",
+            "type": "number"
+          },
+          "value_normalized": {
+            "title": "Value Normalized",
+            "type": "number"
+          },
+          "weight_lines": {
+            "title": "Weight Lines",
+            "type": "number"
+          },
+          "weight_urgency": {
+            "title": "Weight Urgency",
+            "type": "number"
+          },
+          "weight_value": {
+            "title": "Weight Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lines",
+          "hours_until_due",
+          "value_at_risk",
+          "lines_normalized",
+          "urgency_normalized",
+          "value_normalized",
+          "lines_cap",
+          "hours_cap",
+          "value_cap",
+          "weight_lines",
+          "weight_urgency",
+          "weight_value"
+        ],
+        "title": "ScoreComponentsOut",
         "type": "object"
       },
       "Severity": {
@@ -1784,6 +2102,120 @@
         "summary": "Site Events",
         "tags": [
           "map"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/exceptions": {
+      "get": {
+        "operationId": "list_exceptions_api_sites__site_id__exceptions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExceptionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "DATA_NOT_READY"
+          }
+        },
+        "summary": "List Exceptions",
+        "tags": [
+          "exceptions"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/exceptions/{exception_id}/acknowledge": {
+      "post": {
+        "operationId": "acknowledge_exception_api_sites__site_id__exceptions__exception_id__acknowledge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "exception_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Exception Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{8,128}$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcknowledgementOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          },
+          "409": {
+            "description": "EXCEPTION_RESOLVED"
+          },
+          "422": {
+            "description": "VALIDATION_FAILED"
+          }
+        },
+        "summary": "Acknowledge Exception",
+        "tags": [
+          "exceptions"
         ]
       }
     },

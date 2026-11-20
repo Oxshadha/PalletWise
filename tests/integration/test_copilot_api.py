@@ -32,10 +32,11 @@ from palletwise.api.app import create_app
 from palletwise.auth.crypto import KeyRing
 from palletwise.auth.oidc import OidcClient
 from palletwise.auth.service import AuthService
+from palletwise.contracts.results import exception_severity
 from palletwise.db import dataset_hash, site_repo
 from palletwise.db.agent_repo import AgentRegistry
 from palletwise.db.audit_repo import AuditLog
-from palletwise.db.connection import role_pool
+from palletwise.db.connection import role_pool, tenant_session
 from palletwise.db.copilot_repo import ConversationStore, RateLimiter, UsageLedger
 from palletwise.db.session_repo import SessionStore
 from palletwise.llm import ResolvedModel
@@ -809,3 +810,205 @@ def test_the_site_stream_is_site_scoped_and_needs_a_session(env: Env) -> None:
     assert env.client.get(f"/api/sites/{env.site.site}/events").status_code == 401
     env.sign_in()
     assert env.client.get(f"/api/sites/{uuid4()}/events").status_code == 404
+
+
+# ---------------------------------------------------------------- Slice 3 step 3: exceptions API
+
+
+def evaluate(env: Env) -> None:
+    with tenant_session(role_pool("PW_EVALUATOR"), env.site.tenant) as conn:
+        conn.execute("SELECT * FROM pw.evaluate_site_exceptions(%s)", (env.site.site,)).fetchone()
+
+
+def current_records(env: Env) -> dict[str, dict[str, Any]]:
+    cursor = env.db.execute(
+        "SELECT * FROM pw.exception_record WHERE site_id = %s AND status <> 'RESOLVED'", (env.site.site,)
+    )
+    names = [c.name for c in cursor.description or ()]
+    return {str(r[0]): dict(zip(names, r, strict=True)) for r in cursor.fetchall()}
+
+
+def acknowledge(env: Env, exception_id: str, key: str | None = None, site: UUID | None = None) -> Any:
+    headers = {"Origin": ORIGIN, "Idempotency-Key": key or uuid4().hex}
+    url = f"/api/sites/{site or env.site.site}/exceptions/{exception_id}/acknowledge"
+    return env.client.post(url, headers=headers)
+
+
+def site_time(env: Env) -> tuple[datetime] | None:
+    sql = "SELECT sim_time FROM pw.site_clock WHERE site_id = %s"
+    return env.db.execute(sql, (env.site.site,)).fetchone()
+
+
+def audited(env: Env, exception_id: str) -> list[tuple[str, str]]:
+    return [
+        (r[0], r[1])
+        for r in env.db.execute(
+            "SELECT outcome, user_role FROM pw.audit_event WHERE tenant_id = %s"
+            " AND action = 'exception.acknowledge' AND parameters->>'exception_id' = %s ORDER BY seq",
+            (env.site.tenant, exception_id),
+        ).fetchall()
+    ]
+
+
+def test_the_inbox_ranks_current_exceptions_and_explains_each_rank(env: Env) -> None:
+    evaluate(env)
+    records = current_records(env)
+    assert records, "the reference data raises exceptions"
+    env.sign_in()
+    body = env.client.get(f"/api/sites/{env.site.site}/exceptions").json()
+    listed = body["exceptions"]
+    assert {x["id"] for x in listed} == set(records)
+    assert [x["score"] for x in listed] == sorted((x["score"] for x in listed), reverse=True)
+    for x in listed:
+        stored = records[x["id"]]
+        assert x["score"] == float(stored["score"]) and x["components"] == stored["score_components"]
+        assert x["severity"] == exception_severity(stored["exception_type"], stored["critical"])
+        assert datetime.fromisoformat(x["first_detected_at"]) == stored["first_detected_at"]
+        bins = {
+            str(r[0])
+            for r in env.db.execute("SELECT bin_id FROM pw.exception_bin WHERE exception_id = %s", (x["id"],))
+        }
+        assert {h["target_id"] for h in x["highlights"] if h["target_type"] == "bin"} == bins
+        assert {h["severity"] for h in x["highlights"]} <= {x["severity"]}
+        orders = env.db.execute(
+            "SELECT order_no FROM pw.exception_order WHERE exception_id = %s ORDER BY order_no", (x["id"],)
+        ).fetchall()
+        assert [o["order_no"] for o in x["orders"]] == [r[0] for r in orders]
+    clock = site_time(env)
+    assert clock is not None and datetime.fromisoformat(body["as_of"]) == clock[0]
+
+
+def test_a_manager_acknowledges_once_and_a_repeat_changes_nothing(env: Env) -> None:
+    evaluate(env)
+    target = next(k for k, r in current_records(env).items() if r["status"] == "OPEN")
+    env.sign_in(subject="manager-ack")
+    assert acknowledge(env, target, key="short").status_code == 422  # the key is required and well formed
+    first = acknowledge(env, target)
+    assert first.status_code == 200
+    clock = site_time(env)
+    assert first.json()["acknowledged_by"] == "manager-ack"
+    assert clock is not None and datetime.fromisoformat(first.json()["acknowledged_at"]) == clock[0]
+    again = acknowledge(env, target)
+    assert again.status_code == 200 and again.json() == first.json()
+    events = env.db.execute(
+        "SELECT event FROM pw.exception_evaluation WHERE exception_id = %s AND event = 'ACKNOWLEDGED'",
+        (target,),
+    ).fetchall()
+    assert len(events) == 1
+    assert audited(env, target) == [("ACKNOWLEDGED", "warehouse_manager"), ("UNCHANGED", "warehouse_manager")]
+    # Acknowledged is not resolved: still listed, same score, still evaluated (2.4 rule 1).
+    evaluate(env)
+    inbox = env.client.get(f"/api/sites/{env.site.site}/exceptions").json()
+    listed = {x["id"]: x for x in inbox["exceptions"]}
+    assert listed[target]["status"] == "ACKNOWLEDGED"
+    assert listed[target]["score"] == float(current_records(env)[target]["score"])
+    # A state change needs our origin (CSRF, identity spec 7).
+    url = f"/api/sites/{env.site.site}/exceptions/{target}/acknowledge"
+    assert env.client.post(url, headers={"Idempotency-Key": uuid4().hex}).status_code == 403
+
+
+def test_an_admin_reads_the_inbox_but_cannot_acknowledge(env: Env) -> None:
+    evaluate(env)
+    target = next(k for k, r in current_records(env).items() if r["status"] == "OPEN")
+    env.sign_in(subject="admin-ack", role="admin")
+    assert env.client.get(f"/api/sites/{env.site.site}/exceptions").status_code == 200
+    refused = acknowledge(env, target)
+    assert refused.status_code == 403 and refused.json()["code"] == "FORBIDDEN"
+    assert current_records(env)[target]["status"] == "OPEN"
+    denied = env.db.execute(
+        "SELECT user_role, deny_reasons FROM pw.audit_event WHERE tenant_id = %s"
+        " AND action = 'exception.acknowledge' AND decision = 'DENY' ORDER BY seq DESC LIMIT 1",
+        (env.site.tenant,),
+    ).fetchone()
+    assert denied == ("admin", ["role_lacks_scope"])
+
+
+def test_another_sites_or_tenants_exception_is_not_found(env: Env) -> None:
+    evaluate(env)
+    target = next(k for k, r in current_records(env).items() if r["status"] == "OPEN")
+    other_site = uuid4()
+    env.sign_in(subject="manager-two-sites", sites=[env.site.site, other_site])
+    assert acknowledge(env, target, site=other_site).status_code == 404  # allowed site, not its record
+    assert acknowledge(env, str(uuid4())).status_code == 404
+    assert acknowledge(env, target, site=uuid4()).status_code == 404  # a site outside the session
+    with tenant_session(role_pool("PW_APP"), uuid4()) as conn:
+        row = conn.execute(
+            "SELECT outcome FROM pw.acknowledge_exception(%s, %s, 'intruder')", (env.site.site, target)
+        ).fetchone()
+    assert row == ("not_found",)
+    assert current_records(env)[target]["status"] == "OPEN"
+    # pw_app writes exceptions only through the function (CWM 11.3).
+    with (
+        pytest.raises(psycopg.errors.InsufficientPrivilege),
+        tenant_session(role_pool("PW_APP"), env.site.tenant) as conn,
+    ):
+        conn.execute("UPDATE pw.exception_record SET status = 'ACKNOWLEDGED' WHERE id = %s", (target,))
+
+
+def test_a_resolved_exception_cannot_be_acknowledged(env: Env) -> None:
+    evaluate(env)
+    target = next(k for k, r in current_records(env).items() if r["status"] == "OPEN")
+    env.db.execute(
+        "UPDATE pw.exception_record SET status = 'RESOLVED', resolution_reason = 'CONDITION_CLEARED',"
+        " resolved_at = last_evaluated_at WHERE id = %s",
+        (target,),
+    )
+    env.sign_in()
+    refused = acknowledge(env, target)
+    assert refused.status_code == 409 and refused.json()["code"] == "EXCEPTION_RESOLVED"
+    listed = env.client.get(f"/api/sites/{env.site.site}/exceptions").json()["exceptions"]
+    assert target not in {x["id"] for x in listed}
+
+
+def test_concurrent_acknowledgements_make_one_transition(env: Env, connect_session: Connect) -> None:
+    evaluate(env)
+    target = next(k for k, r in current_records(env).items() if r["status"] == "OPEN")
+    call = "SELECT outcome FROM pw.acknowledge_exception(%s, %s, %s)"
+    first, second = connect_session("pw_app"), connect_session("pw_app")
+    outcomes: list[str] = []
+    with first.transaction():
+        first.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
+        row = first.execute(call, (env.site.site, target, "manager-a")).fetchone()
+        assert row is not None
+        outcomes.append(row[0])
+
+        def other() -> None:  # waits on the row lock until the first commits
+            with second.transaction():
+                second.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
+                found = second.execute(call, (env.site.site, target, "manager-b")).fetchone()
+                assert found is not None
+                outcomes.append(found[0])
+
+        waiting = threading.Thread(target=other)
+        waiting.start()
+        time.sleep(0.5)
+        assert waiting.is_alive(), "the second acknowledgement waits for the first"
+    waiting.join(10)
+    assert outcomes == ["acknowledged", "unchanged"]
+    events = env.db.execute(
+        "SELECT count(*) FROM pw.exception_evaluation WHERE exception_id = %s AND event = 'ACKNOWLEDGED'",
+        (target,),
+    ).fetchone()
+    assert events == (1,) and current_records(env)[target]["acknowledged_by"] == "manager-a"
+
+
+def test_a_failed_audit_rolls_the_acknowledgement_back(env: Env) -> None:
+    from palletwise.db import exceptions_repo
+    from palletwise.db.audit_repo import AuditEntry
+
+    evaluate(env)
+    target = next(k for k, r in current_records(env).items() if r["status"] == "OPEN")
+
+    def broken(outcome: exceptions_repo.Outcome) -> AuditEntry:  # refused by the audit table
+        return AuditEntry(actor_type="NOBODY", action="exception.acknowledge", outcome=outcome, trace_id="t")  # type: ignore[arg-type]
+
+    with pytest.raises(psycopg.errors.CheckViolation):
+        exceptions_repo.acknowledge(
+            role_pool("PW_APP"), env.site.tenant, env.site.site, UUID(target), "manager-x", broken
+        )
+    assert current_records(env)[target]["status"] == "OPEN"
+    events = env.db.execute(
+        "SELECT count(*) FROM pw.exception_evaluation WHERE exception_id = %s AND event = 'ACKNOWLEDGED'",
+        (target,),
+    ).fetchone()
+    assert events == (0,)

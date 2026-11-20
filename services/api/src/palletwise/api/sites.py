@@ -125,8 +125,13 @@ class MapStateOut(BaseModel):
     bins: list[BinStateOut]
 
 
-async def _authorize(
-    principal: Principal, site_id: UUID, action: str, reads: ReadServices
+async def authorize_site(
+    principal: Principal,
+    site_id: UUID,
+    action: str,
+    reads: ReadServices,
+    scope: str = "inventory.read",
+    refusal: str = "You do not have permission to view this site.",
 ) -> Response | None:
     """None when allowed; otherwise the 404 or 403 response (site outside the session is 404)."""
     trace_id = current_trace_id()
@@ -138,13 +143,13 @@ async def _authorize(
             identity.subject, identity.role, str(identity.tenant), tuple(str(s) for s in identity.sites)
         ),
         action=action,
-        scope="inventory.read",
+        scope=scope,
         resource_tenant=str(identity.tenant),
         resource_site=str(site_id),
     )
     with tracer.start_as_current_span("policy.decision") as span:
         decision = await asyncio.to_thread(reads.policy.decide, request)
-        record_policy_decision(span, action, "inventory.read", decision.allow, decision.reasons)
+        record_policy_decision(span, action, scope, decision.allow, decision.reasons)
     if decision.allow:
         return None
     entry = AuditEntry(
@@ -155,12 +160,12 @@ async def _authorize(
         site_id=site_id,
         user_subject=identity.subject,
         user_role=identity.role,
-        scope="inventory.read",
+        scope=scope,
         decision="DENY",
         deny_reasons=decision.reasons,
     )
     await asyncio.to_thread(reads.audit.append, identity.tenant, entry)
-    return problem(403, "FORBIDDEN", "You do not have permission to view this site.", trace_id)
+    return problem(403, "FORBIDDEN", refusal, trace_id)
 
 
 @router.get("/layout", response_model=LayoutOut, responses={304: {"description": "Not modified"}})
@@ -170,7 +175,7 @@ async def layout(
     reads: Reads,
     if_none_match: Annotated[str | None, Header()] = None,
 ) -> Any:
-    if (refused := await _authorize(principal, site_id, "map.layout", reads)) is not None:
+    if (refused := await authorize_site(principal, site_id, "map.layout", reads)) is not None:
         return refused
 
     def load() -> layout_repo.Layout | None:
@@ -199,7 +204,7 @@ async def layout(
 
 @router.get("/map-state", response_model=MapStateOut)
 async def current_map_state(site_id: UUID, principal: CurrentPrincipal, reads: Reads) -> Any:
-    if (refused := await _authorize(principal, site_id, "map.state", reads)) is not None:
+    if (refused := await authorize_site(principal, site_id, "map.state", reads)) is not None:
         return refused
 
     def load() -> map_state.MapState:
@@ -226,7 +231,7 @@ async def bin_details(
     reads: Reads,
 ) -> Any:
     """The same semantic definition the copilot's get_bin_contents uses (FR-MAP-06)."""
-    if (refused := await _authorize(principal, site_id, "map.bin_details", reads)) is not None:
+    if (refused := await authorize_site(principal, site_id, "map.bin_details", reads)) is not None:
         return refused
 
     def load() -> ResultEnvelope:

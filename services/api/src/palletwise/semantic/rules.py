@@ -22,6 +22,7 @@ from palletwise.contracts.results import (
     ResultEnvelope,
     ResultStatus,
     Severity,
+    exception_severity,
 )
 from palletwise.db.connection import Connection, query
 from palletwise.semantic.locations import MAX_ROWS, Moment, read_moment
@@ -453,8 +454,13 @@ def capacity_hotspots(conn: Connection, site: UUID) -> ResultEnvelope:
             args,
         ).fetchall()
         hot = {r["zone_id"] for r in rows}
+        # One severity per exception (agent spec 10), as the inbox shows it: a zone with a bin
+        # over capacity is critical even when its utilization is low.
         targets = [("bin", b[0], Severity.CRITICAL) for b in over if b[2] in hot]
-        targets += [("zone", r["zone_id"], Severity.WARNING) for r in rows]
+        targets += [
+            ("zone", r["zone_id"], exception_severity("CAPACITY_HOTSPOT", r["over_capacity_bins"] > 0))
+            for r in rows
+        ]
         located = [EntityRef(type="bin", id=b[0], label=b[1]) for b in over if b[2] in hot]
         return _result(
             moment,
