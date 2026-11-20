@@ -266,8 +266,22 @@ def _deterministic_case(
         )
         checks.append(Check("routing", ok, f"tier {tier}, routed to {route}" if route else "no route"))
     else:
+        # Routing a model-path question is right only when it lands on exactly the gold call, every
+        # gold argument carried (a lost condition, such as limit 10, is a misroute).
+        exact = (
+            route is not None
+            and gold.tool is not None
+            and route.tool == gold.tool
+            and params_match(gold.params, route.arguments, set(route.arguments) | set(gold.params))
+        )
         checks.append(
-            Check("routing", route is None, f"misrouted in tier {tier} to {route}" if route else "model path")
+            Check(
+                "routing",
+                route is None or exact,
+                "model path"
+                if route is None
+                else f"tier {tier} to {route}" + ("" if exact else ": misrouted"),
+            )
         )
 
     # 2. The gold tool with the gold parameters through the real executor (policy, audit, tracing).
@@ -545,8 +559,10 @@ def score(results: list[CaseResult]) -> dict[str, Any]:
                 [run["tool_ok"] and run["params_ok"] for _, run in runs if run["tier"] == 2]
             ),
             "tier2_abstention": share([run["tier"] != 2 for _, run in runs if run["gold_tier"] == 2]),
-            # A question that needs the model, answered without it (tier 1 or 2): must be 0.
-            "misrouted": sum(run["gold_tier"] == 3 and run["tier"] in (1, 2) for _, run in runs),
+            # Answered without the model (tier 1 or 2) with the wrong tool or a lost condition: must be 0.
+            "misrouted": sum(
+                run["tier"] in (1, 2) and not (run["tool_ok"] and run["params_ok"]) for _, run in runs
+            ),
         },
         "cost": {
             "per_answer_p50_usd": pct(costs, 0.5),

@@ -228,6 +228,11 @@ intents without a model call and keep the model for the rest.
 | Show the top 10 movers | tier 3 (tier 1 only if its exact route supports that limit) |
 | Which of those are in zone B? | tier 3 |
 
+**Misroute, defined.** An answer reached without the model (tier 1 or 2) with a tool other than
+the gold tool, or without a gold argument (a lost condition such as `limit: 10`). A model-path
+question that tier 2 routes to exactly the gold call, every gold argument carried, is a correct
+answer that saved a model call, not a misroute.
+
 **Targets unchanged.** NFR-PERF-02 stays the product-wide target (highlights 3 s, headline 4 s,
 complete 8 s, all p95). Reports give every milestone **per tier**; a slow tier 3 is never hidden by
 averaging it with tiers 1 and 2. If tier 3 cannot meet the targets after tier 2 is built, its

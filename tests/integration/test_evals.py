@@ -109,6 +109,6 @@ def test_the_comparison_measures_quality_latency_and_cost_on_the_same_cases(tmp_
     assert decline["outcome"] == "DECLINE" and decline["grounding_violations"] == []
 
     gates = {g["metric"]: g["verdict"] for g in configs[0]["gates"]}
-    assert gates["latency.model.first_progress_p95"] == "pass"
+    assert gates["latency.tier3.first_progress_p95"] == "pass"
     assert gates["cost.per_answer_p95_usd"] == "pass"
     assert configs[0]["status"].startswith("pass")  # a scripted model is fast and exact
