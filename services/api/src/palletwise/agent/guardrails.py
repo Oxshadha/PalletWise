@@ -73,13 +73,16 @@ def _time_parts(moment: datetime, time_zone: str) -> set[Decimal]:
     return {Decimal(v) for v in (local.year, local.month, local.day, local.hour, local.minute)}
 
 
+def _breakdown_count(result: ResultEnvelope) -> set[Decimal]:
+    """The row count, when it is a fact: a breakdown's ("37 products"). A totals result has one row
+    that counts nothing, and allowing it let "1 product is worth more than 50,000" through."""
+    return {Decimal(result.row_count)} if result.columns and not result.columns[0].numeric else set()
+
+
 def _allowed_numbers(results: Iterable[ResultEnvelope], question: str) -> set[Decimal]:
     allowed: set[Decimal] = set()
     for result in results:
-        # The row count is a fact of a breakdown ("37 products"); a totals result has one row that
-        # counts nothing, and allowing it let "1 product is worth more than 50,000" through.
-        if result.columns and result.columns[0].type not in ("integer", "number"):
-            allowed.add(Decimal(result.row_count))
+        allowed |= _breakdown_count(result)
         for row in result.rows:
             for value in row.values():
                 if (d := _decimal(value)) is not None:
@@ -140,7 +143,8 @@ def _without_quoted_names(text: str, results: list[ResultEnvelope]) -> str:
         for v in row.values()
         if isinstance(v, str) and len(v) >= 3 and _NUMBER.search(v)
     }
-    for name in sorted(names, key=len, reverse=True):
+    lowered = text.lower()
+    for name in sorted((n for n in names if n.lower() in lowered), key=len, reverse=True):
         text = re.sub(re.escape(name), " ", text, flags=re.IGNORECASE)
     return text
 
@@ -267,8 +271,7 @@ def count_problems(text: str, results: list[ResultEnvelope], question: str) -> l
     over capacity"), or a number the user gave. Any other matching number is not evidence."""
     allowed: set[Decimal] = {_parse(t) for t in _numbers_in(question)}
     for result in results:
-        if result.columns and result.columns[0].type not in ("integer", "number"):
-            allowed.add(Decimal(result.row_count))
+        allowed |= _breakdown_count(result)
         counted = [
             c.key
             for c in result.columns

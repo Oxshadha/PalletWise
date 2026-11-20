@@ -88,7 +88,7 @@ def _unavailable(
     )
 
 
-def _highlights(
+def distinct_highlights(
     targets: Iterable[tuple[str, UUID, Severity]], reason: HighlightReason
 ) -> tuple[tuple[Highlight, ...], bool]:
     """Distinct targets in order, at most MAX_HIGHLIGHTS, and whether more existed."""
@@ -118,10 +118,10 @@ def product_bins(
         """,
         (site, list(products), MAX_HIGHLIGHTS + 1),
     ).fetchall()
-    return _highlights((("bin", r[0], severity) for r in rows), reason)
+    return distinct_highlights((("bin", r[0], severity) for r in rows), reason)
 
 
-def _entities(*groups: Iterable[EntityRef]) -> tuple[EntityRef, ...]:
+def distinct_entities(*groups: Iterable[EntityRef]) -> tuple[EntityRef, ...]:
     seen: dict[tuple[str, UUID], EntityRef] = {}
     for group in groups:
         for e in group:
@@ -215,7 +215,7 @@ def low_stock(conn: Connection, site: UUID) -> ResultEnvelope:
             (site, moment.as_of, moment.settings_version_id),
         )
         reason = HighlightReason.LOW_STOCK
-        bins = _highlights((("bin", r["bin_id"], DEFAULT_SEVERITY[reason]) for r in rows), reason)
+        bins = distinct_highlights((("bin", r["bin_id"], DEFAULT_SEVERITY[reason]) for r in rows), reason)
         located = [EntityRef(type="bin", id=r["bin_id"], label=r["bin_code"]) for r in rows]
         return _result(
             moment,
@@ -228,7 +228,7 @@ def low_stock(conn: Connection, site: UUID) -> ResultEnvelope:
             truncated,
             "No product is at or below its minimum in its pick location right now.",
             bins,
-            _entities(_products(rows), located),
+            distinct_entities(_products(rows), located),
         )
 
     return _run(conn, site, "get_low_stock", {}, STOCK, None, shape)
@@ -268,7 +268,7 @@ def top_movers(conn: Connection, site: UUID, days: int, limit: int) -> ResultEnv
             truncated,
             f"No product was picked in the last {days} days.",
             bins,
-            _entities(_products(rows)),
+            distinct_entities(_products(rows)),
         )
 
     return _run(
@@ -318,7 +318,7 @@ def dead_stock(conn: Connection, site: UUID) -> ResultEnvelope:
             truncated,
             f"No stocked product has gone without a pick for more than {period} days.",
             bins,
-            _entities(_products(rows)),
+            distinct_entities(_products(rows)),
         )
 
     return _run(
@@ -354,7 +354,7 @@ def slow_in_prime(conn: Connection, site: UUID) -> ResultEnvelope:
             (site, moment.as_of, moment.settings_version_id),
         )
         reason = HighlightReason.SLOW_IN_PRIME
-        bins = _highlights((("bin", r["bin_id"], DEFAULT_SEVERITY[reason]) for r in rows), reason)
+        bins = distinct_highlights((("bin", r["bin_id"], DEFAULT_SEVERITY[reason]) for r in rows), reason)
         located = [EntityRef(type="bin", id=r["bin_id"], label=r["bin_code"]) for r in rows]
         period = (explain or {}).get("period", "")
         return _result(
@@ -368,7 +368,7 @@ def slow_in_prime(conn: Connection, site: UUID) -> ResultEnvelope:
             truncated,
             f"No product in a fast-pick zone has gone more than {period} days without a pick.",
             bins,
-            _entities(_products(rows), located),
+            distinct_entities(_products(rows), located),
         )
 
     return _run(
@@ -413,7 +413,7 @@ def zone_summary(conn: Connection, site: UUID) -> ResultEnvelope:
         reason = HighlightReason.QUERY
         # The zones holding the most stock, not every zone: a highlight points at the answer.
         top = rows[:ZONE_HIGHLIGHTS]
-        zones = _highlights((("zone", r["zone_id"], DEFAULT_SEVERITY[reason]) for r in top), reason)
+        zones = distinct_highlights((("zone", r["zone_id"], DEFAULT_SEVERITY[reason]) for r in top), reason)
         return _result(
             moment,
             "get_zone_summary",
@@ -425,7 +425,7 @@ def zone_summary(conn: Connection, site: UUID) -> ResultEnvelope:
             truncated,
             "This site has no active zones.",
             zones,
-            _entities(_zones(rows)),
+            distinct_entities(_zones(rows)),
         )
 
     return _run(conn, site, "get_zone_summary", {}, STOCK, None, shape)
@@ -467,8 +467,8 @@ def capacity_hotspots(conn: Connection, site: UUID) -> ResultEnvelope:
             truncated,
             f"No zone is at or above {(explain or {}).get('threshold', '')} percent and no location"
             " is over capacity.",
-            _highlights(targets, HighlightReason.CAPACITY),
-            _entities(_zones(rows), located),
+            distinct_highlights(targets, HighlightReason.CAPACITY),
+            distinct_entities(_zones(rows), located),
         )
 
     return _run(
@@ -527,7 +527,7 @@ def delayed_orders(conn: Connection, site: UUID, since_days: int) -> ResultEnvel
             truncated,
             "No order is past its dispatch deadline, and none shipped late in this period.",
             ((), False),
-            _entities(_orders(rows)),
+            distinct_entities(_orders(rows)),
         )
 
     return _run(
@@ -591,7 +591,7 @@ def _pick_bins(conn: Connection, site: UUID, rows: list[Row]) -> tuple[tuple[Hig
         by_product.setdefault(product, []).append(bin_id)
     targets = [("bin", b, Severity.CRITICAL) for p in critical for b in sorted(by_product.get(p, []))]
     targets += [("bin", b, Severity.WARNING) for p in warning for b in sorted(by_product.get(p, []))]
-    return _highlights(targets, HighlightReason.STOCKOUT_RISK)
+    return distinct_highlights(targets, HighlightReason.STOCKOUT_RISK)
 
 
 def order_stockout_risks(conn: Connection, site: UUID, view: str, hours: int | None) -> ResultEnvelope:
@@ -606,7 +606,11 @@ def order_stockout_risks(conn: Connection, site: UUID, view: str, hours: int | N
             rows, truncated = _fetch(
                 conn, "orders_at_risk", "SELECT * FROM sem.orders_at_risk(%s, %s, %s, %s)", (*args, hours)
             )
-            columns, entities, base = RISK_ORDER_COLUMNS, _entities(_orders(rows), _products(risks)), risks
+            columns, entities, base = (
+                RISK_ORDER_COLUMNS,
+                distinct_entities(_orders(rows), _products(risks)),
+                risks,
+            )
             empty = "No open order due in this window is at risk of a stockout."
         elif view == "replenish_before_first_dispatch":
             rows, truncated = _fetch(
@@ -615,11 +619,11 @@ def order_stockout_risks(conn: Connection, site: UUID, view: str, hours: int | N
                 "SELECT * FROM sem.replenish_before_dispatch(%s, %s, %s)",
                 args,
             )
-            columns, entities, base = REPLENISH_COLUMNS, _entities(_products(rows)), rows
+            columns, entities, base = REPLENISH_COLUMNS, distinct_entities(_products(rows)), rows
             empty = "Nothing needs replenishing before today's next dispatch deadline."
         else:
             rows, truncated = risks, len(risks) >= MAX_ROWS
-            columns, entities, base = RISK_PRODUCT_COLUMNS, _entities(_products(rows)), rows
+            columns, entities, base = RISK_PRODUCT_COLUMNS, distinct_entities(_products(rows)), rows
             empty = "No product is short for the open orders due in this window."
         return _result(
             moment,

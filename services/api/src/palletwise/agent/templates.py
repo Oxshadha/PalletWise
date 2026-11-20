@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from palletwise.agent.guardrails import instruction_echo
-from palletwise.contracts.results import ResultEnvelope, ResultStatus
+from palletwise.contracts.results import Column, ResultEnvelope, ResultStatus
 
 MAX_LISTED = 3
 # In the wording cache key: bump when a template or a key fact changes meaning.
@@ -167,19 +167,22 @@ QUERY_NOUNS = {
 }
 
 
+def _measure(result: ResultEnvelope) -> Column | None:
+    """The first measure after a breakdown's name column: the value a query answer states."""
+    return next((c for c in result.columns[1:] if c.numeric), None)
+
+
 def _query(result: ResultEnvelope) -> str:
     """The count and the leading rows by name with their first measure, so a query answer says
     what it found (the baseline's "The query returned 8 rows." answered nothing)."""
     first, n = result.columns[0], result.row_count
-    if first.type in ("integer", "number"):
+    if first.numeric:
         # No breakdown: the result is totals, one value per measure (the baseline said
         # "1 row found, led by 5728960.27").
         r = result.rows[0]
-        values = "; ".join(
-            f"{c.label.lower()} {r[c.key]}" for c in result.columns if c.type in ("integer", "number")
-        )
+        values = "; ".join(f"{c.label.lower()} {r[c.key]}" for c in result.columns if c.numeric)
         return f"In total: {values}."
-    measure = next((c for c in result.columns[1:] if c.type in ("integer", "number")), None)
+    measure = _measure(result)
     if n == 1 and measure is not None and not result.truncated:
         r = result.rows[0]  # one row reads as a statement: "Beverages: days of cover 12.2."
         return f"{r[first.key]}: {measure.label.lower()} {r[measure.key]}."
@@ -248,11 +251,11 @@ def key_facts(tool: str, result: ResultEnvelope) -> tuple[str, ...]:
         case "query_inventory":
             if not result.columns:
                 facts = []
-            elif result.columns[0].type in ("integer", "number"):
+            elif result.columns[0].numeric:
                 facts = [str(r[result.columns[0].key])]  # totals: the first measure's value
             elif result.row_count == 1 and not result.truncated:
                 # One row: its name and the value asked for; no count to state.
-                measure = next((c for c in result.columns[1:] if c.type in ("integer", "number")), None)
+                measure = _measure(result)
                 facts = [str(r[result.columns[0].key])] + ([str(r[measure.key])] if measure else [])
             else:
                 facts = [_how_many(result), str(r[result.columns[0].key])]

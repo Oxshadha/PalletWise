@@ -69,6 +69,10 @@ class Column(Frozen):
     type: Literal["text", "integer", "number", "boolean", "datetime"]
     unit: str | None = None
 
+    @property
+    def numeric(self) -> bool:
+        return self.type in ("integer", "number")
+
 
 class StreamFreshness(Frozen):
     stream: Literal["MASTER", "MOVEMENTS", "ORDERS", "ALLOCATIONS"]

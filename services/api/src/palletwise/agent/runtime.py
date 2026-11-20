@@ -297,8 +297,8 @@ class CircuitBreaker:
     min_samples: int = 5
     threshold: float = 0.5
     cooldown_s: float = 60.0
-    _outcomes: "deque[bool]" = field(default_factory=lambda: deque[bool]())
-    _open_until: float = 0.0
+    _outcomes: "deque[bool]" = field(init=False)
+    _open_until: float = field(init=False, default=0.0)
 
     def __post_init__(self) -> None:
         self._outcomes = deque(maxlen=self.window)
@@ -746,37 +746,36 @@ class CopilotRuntime:
             await self._finish(state, events, queue, cached, card_outcome(result), route.tool, result,
                                source="cache")  # fmt: skip
             return
-        from_model = False
         if lite is not None:
             await self._status(events, queue, "writing")
             try:
                 text = await self._until_deadline(
                     state, self._word(request, route.tool, result, lite, meter, state), routed=True
                 )
-                from_model = text is not None
             except _PastDeadline:
                 text = None
             except BudgetExhausted:
-                text = f"{templates.template_answer(route.tool, result)} {BUDGET_TEXT}"
+                # The template with the budget notice: template text, never labelled model text.
+                state.path = "B"
+                answer = f"{templates.template_answer(route.tool, result)} {BUDGET_TEXT}"
+                await self._finish(state, events, queue, answer, card_outcome(result), route.tool,
+                                   result, source="template")  # fmt: skip
+                return
             except Exception:
                 log.warning("wording model failed; using the template", exc_info=True)
-            if (
-                from_model
-                and text
-                and (
-                    self._echoes_instructions(text, request.question)
-                    or self._drops_key_facts(route.tool, result, text)
-                )
+            # From here, text is the model's wording or None.
+            if text and (
+                self._echoes_instructions(text, request.question)
+                or self._drops_key_facts(route.tool, result, text)
             ):
                 text = None
-                from_model = False
             if text is None or state.budget_exhausted:
                 state.path = "B"
-            elif material is not None and from_model:
+            elif material is not None:
                 await self._store_wording(request, route.tool, material, text)
         await self._finish(state, events, queue, text or templates.template_answer(route.tool, result),
                            card_outcome(result), route.tool, result,
-                           source="model" if text and from_model else "template")  # fmt: skip
+                           source="model" if text else "template")  # fmt: skip
 
     async def _word(
         self,

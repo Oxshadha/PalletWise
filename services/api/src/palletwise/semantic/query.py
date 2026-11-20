@@ -10,7 +10,7 @@ requested dimensions; families are joined on the dimension keys. Dimension filte
 before grouping, measure filters to the joined result.
 """
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
@@ -44,8 +44,6 @@ from sqlalchemy.sql.elements import ColumnClause, Label
 
 from palletwise.contracts.results import (
     DEFAULT_SEVERITY,
-    MAX_ENTITIES,
-    MAX_HIGHLIGHTS,
     Column,
     EntityRef,
     Highlight,
@@ -657,7 +655,7 @@ def _locations(
     conn: Connection, site: UUID, request: QueryRequest, rows: list[dict[str, Any]]
 ) -> tuple[tuple[Highlight, ...], bool, tuple[EntityRef, ...]]:
     """Highlights by semantic spec 7.6 and the typed identifiers for the working set."""
-    from palletwise.semantic.rules import product_bins
+    from palletwise.semantic.rules import distinct_entities, distinct_highlights, product_bins
 
     reason = HighlightReason.QUERY
     severity = DEFAULT_SEVERITY[reason]
@@ -672,24 +670,15 @@ def _locations(
     located = [d for d in ("bin", "rack", "zone") if d in request.dimensions]
     if located:
         d = located[0]
-        targets = list(dict.fromkeys(r[f"_id_{d}"] for r in rows if r.get(f"_id_{d}") is not None))
-        found = tuple(
-            Highlight(target_type=d, target_id=t, reason=reason, severity=severity)  # type: ignore[arg-type]
-            for t in targets[:MAX_HIGHLIGHTS]
+        found, more = distinct_highlights(
+            ((d, r[f"_id_{d}"], severity) for r in rows if r.get(f"_id_{d}") is not None), reason
         )
-        return found, len(targets) > MAX_HIGHLIGHTS, _distinct(entities)
+        return found, more, distinct_entities(entities)
     if "product" in request.dimensions:
         products = [r["_id_product"] for r in rows if r.get("_id_product") is not None]
         highlights, more = product_bins(conn, site, products, reason, severity)
-        return highlights, more, _distinct(entities)
-    return (), False, _distinct(entities)
-
-
-def _distinct(entities: Iterable[EntityRef]) -> tuple[EntityRef, ...]:
-    seen: dict[tuple[str, UUID], EntityRef] = {}
-    for e in entities:
-        seen.setdefault((e.type, e.id), e)
-    return tuple(seen.values())[:MAX_ENTITIES]
+        return highlights, more, distinct_entities(entities)
+    return (), False, distinct_entities(entities)
 
 
 def _how(moment: Moment, request: QueryRequest, explain: dict[str, str]) -> tuple[str, ...]:

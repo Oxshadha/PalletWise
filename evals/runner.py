@@ -425,7 +425,7 @@ def typed_result(payload: dict[str, Any]) -> ResultEnvelope:
     unsupported (found by the first valid baseline: "51811.20" flagged, though the runtime had
     checked it against the real value)."""
     envelope = ResultEnvelope.model_validate(payload)
-    numeric = {c.key for c in envelope.columns if c.type in ("integer", "number")}
+    numeric = {c.key for c in envelope.columns if c.numeric}
     rows = tuple(
         {k: (Decimal(v) if k in numeric and isinstance(v, str) else v) for k, v in row.items()}
         for row in envelope.rows

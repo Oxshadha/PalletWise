@@ -9,6 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Response, status
 from pydantic import BaseModel
 
+from palletwise.agent import semantic_router
 from palletwise.agent.runtime import PRODUCTION_RUNTIME, CopilotRuntime
 from palletwise.api import auth_routes, copilot, sites
 from palletwise.api.observability import request_span
@@ -70,6 +71,7 @@ def build_copilot() -> copilot.CopilotServices:
     tools = v1_tools()
     executor = ToolExecutor(tools, agents, PolicyClient(PolicySettings()), audit, read_pool, limiter)
     llm = LlmSettings()
+    semantic_router.router()  # parsed at startup: a broken routes file fails here, not on a question
     return copilot.CopilotServices(
         runtime=CopilotRuntime(
             tools,
