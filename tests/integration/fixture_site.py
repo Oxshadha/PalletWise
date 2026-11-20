@@ -227,14 +227,14 @@ class FixtureSite:
 
     def new_settings(self, **changes: Any) -> UUID:
         current = self.db.execute(
-            'SELECT "values" FROM pw.settings_version WHERE id = %s', (self.settings(),)
+            'SELECT "values", schema_version FROM pw.settings_version WHERE id = %s', (self.settings(),)
         ).fetchone()
         assert current is not None
         with self.db.transaction():
             self.db.execute("SELECT set_config('app.tenant_id', %s, true)", (str(self.tenant),))
             row = self.db.execute(
-                "SELECT pw.create_settings_version(%s, %s, 1, %s, 'test', NULL)",
-                (self.tenant, self.site, json.dumps({**current[0], **changes})),
+                "SELECT pw.create_settings_version(%s, %s, %s, %s, 'test', NULL)",
+                (self.tenant, self.site, current[1], json.dumps({**current[0], **changes})),
             ).fetchone()
         assert row is not None
         return row[0]
