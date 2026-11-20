@@ -122,7 +122,9 @@ class RuntimeConfig:
 
     name: str = "baseline"
     wording_model: str | None = None  # path C wording; None: the agent's own answer text
-    agent_thinking: Literal["low"] = "low"
+    # The agent's thinking level (tool choice and answer text). Kept lower only if tool and
+    # parameter accuracy stay at their thresholds (ADR 0001 change 4).
+    agent_thinking: Literal["low", "minimal"] = "low"
     hedge_after_s: float | None = None  # hedged tool-choice calls; None: off
     parallel_tools: bool = False
     # Headline first (ADR 0001 section 6): the template headline is sent when the answer is not
@@ -139,8 +141,6 @@ class RuntimeConfig:
             )
             if value is not None
         ]
-        if self.agent_thinking != "low":
-            unbuilt.append("agent_thinking")
         if self.headline_after_s <= 0:
             raise ValueError("headline_after_s must be more than 0")
         if self.hedge_after_s is not None and self.hedge_after_s <= 0:
@@ -484,6 +484,10 @@ class CopilotRuntime:
         self._run_timeout = run_timeout
         self._tool_names = frozenset(t.name for t in registry)
 
+    def agent_settings(self) -> ModelSettings:
+        """The agent's model settings, with the configured thinking level (ADR 0001 change 4)."""
+        return {**AGENT_SETTINGS, "thinking": self.config.agent_thinking}
+
     def starters(self) -> list[Suggestion]:
         return [s for s in STARTERS if s.tool in self._tool_names]
 
@@ -678,7 +682,7 @@ class CopilotRuntime:
             self._agent_model(request, primary, meter, state),
             instructions=self.system_prompt(request.agent.prompt_version),
             tools=tools,
-            model_settings=AGENT_SETTINGS,
+            model_settings=self.agent_settings(),
         )
         limits = UsageLimits(
             tool_calls_limit=request.agent.max_steps, request_limit=request.agent.max_steps + 3

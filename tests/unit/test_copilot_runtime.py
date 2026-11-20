@@ -825,3 +825,12 @@ def test_when_both_fail_the_run_ends_as_without_a_model() -> None:
         answering("y", fail=httpx.ConnectError("down")),
     )
     assert state.error_code == "MODEL_UNAVAILABLE" and state.outcome == "DECLINE"
+
+
+def test_the_agent_thinking_level_comes_from_the_configuration() -> None:
+    def runtime(config: RuntimeConfig | None = None) -> CopilotRuntime:
+        return CopilotRuntime(v1_tools(), FakeGateway(), FakeProvider(), run_timeout=10, config=config)
+
+    assert runtime().agent_settings().get("thinking") == "low"
+    minimal = runtime(RuntimeConfig(agent_thinking="minimal")).agent_settings()
+    assert minimal.get("thinking") == "minimal" and minimal.get("max_tokens") == DEFAULT_MAX_OUTPUT
