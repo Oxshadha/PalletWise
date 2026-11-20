@@ -117,15 +117,22 @@ def tenant_session(
 ) -> Generator[psycopg.Connection]:
     """A pooled connection with one transaction bound to the tenant.
 
-    `read_snapshot` makes it a read-only REPEATABLE READ transaction with a statement timeout:
-    every statement sees one snapshot, so the site time and the stock read in one tool call
-    describe the same moment even while the simulator advances (semantic spec 2, 7.4).
+    `read_snapshot` makes it a read-only REPEATABLE READ transaction with a statement timeout and
+    no prepared statements: every statement sees one snapshot, so the site time and the stock read
+    in one tool call describe the same moment even while the simulator advances (semantic spec 2,
+    7.4).
     """
     with pool.connection() as conn, conn.transaction():
         if read_snapshot:
             # Must be the first statement of the transaction.
             conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
             conn.execute("SELECT set_config('statement_timeout', %s, true)", (READ_STATEMENT_TIMEOUT,))
+            # No prepared statements for the tools' reads: psycopg prepares a statement after five
+            # runs on a connection, and its generic plan ignores the values (a date range of 7 or 365
+            # days). Planned with the real values, DSL queries over 180 days stay well inside budget
+            # (Slice 2 step 7d, docs/quality/performance). Rule functions with a date range force
+            # custom plans themselves (migration 0020_plan_cache).
+            conn.prepare_threshold = None
         conn.execute("SELECT set_config('app.tenant_id', %s, true)", (str(tenant_id),))
         if subject is not None:  # tables owned by one user (conversations) also check the subject
             conn.execute("SELECT set_config('app.user_subject', %s, true)", (subject,))
