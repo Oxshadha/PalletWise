@@ -86,12 +86,6 @@ def _allowed_numbers(results: Iterable[ResultEnvelope], question: str) -> set[De
                     allowed.add(d)
                 elif isinstance(value, datetime):
                     allowed |= _time_parts(value, result.evidence.time_zone)
-                elif isinstance(value, str):
-                    # A number inside a name or code ("Soda Water 1.5L Value Pack") is quoted from
-                    # the data, not stated as a quantity; without this, quoting the name fails.
-                    for token in _numbers_in(value):
-                        with contextlib.suppress(InvalidOperation):
-                            allowed.add(_parse(token))
         # The parameters the tool ran with ("the last 30 days", "top 5") are facts of the answer.
         for value in result.normalized_request.values():
             if (d := _decimal(value)) is not None:
@@ -135,11 +129,28 @@ def _identifiers_allowed(results: Iterable[ResultEnvelope], question: str) -> se
     return known
 
 
+def _without_quoted_names(text: str, results: list[ResultEnvelope]) -> str:
+    """The text with every name or code from the results that it quotes taken out: a number inside
+    a quoted name ("Soda Water 1.5L 24 Pack") is part of the name, not a quantity. Only where the
+    name itself appears: a bare "24 units" is still checked against the numeric values."""
+    names = {
+        v
+        for result in results
+        for row in result.rows
+        for v in row.values()
+        if isinstance(v, str) and len(v) >= 3 and _NUMBER.search(v)
+    }
+    for name in sorted(names, key=len, reverse=True):
+        text = re.sub(re.escape(name), " ", text, flags=re.IGNORECASE)
+    return text
+
+
 def grounding_problems(text: str, results: list[ResultEnvelope], question: str) -> list[str]:
     """Numbers and identifiers in the text that the results or the question do not support."""
     problems: list[str] = []
     allowed = _allowed_numbers(results, question)
-    for token in _numbers_in(_TIME.sub(lambda m: m.group(0).replace(":", " "), text)):
+    unquoted = _without_quoted_names(text, results)
+    for token in _numbers_in(_TIME.sub(lambda m: m.group(0).replace(":", " "), unquoted)):
         if not _grounded(token, allowed):
             problems.append(f"number {token}")
     known = _identifiers_allowed(results, question)
@@ -147,7 +158,7 @@ def grounding_problems(text: str, results: list[ResultEnvelope], question: str) 
         if identifier.upper() not in known:
             problems.append(f"identifier {identifier}")
     if results:  # a stated count must be a count in the data (safeguard B)
-        problems.extend(count_problems(text, results, question))
+        problems.extend(count_problems(unquoted, results, question))
     return problems
 
 
@@ -172,9 +183,17 @@ def normalize_fact_text(text: str) -> str:
 
 
 def facts_missing(facts: Iterable[str], text: str) -> list[str]:
-    """The required facts the text does not state (shared by the runtime and the evaluation)."""
+    """The required facts the text does not state (shared by the runtime and the evaluation).
+
+    A fact must stand as its own token: "45" is not stated by "1450" or "SKU-1045", and "12.2" is not
+    stated by "12.25"."""
     body = normalize_fact_text(text)
-    return [f for f in facts if normalize_fact_text(f) not in body]
+    missing: list[str] = []
+    for fact in facts:
+        needle = re.escape(normalize_fact_text(fact))
+        if not re.search(rf"(?<![\w.-]){needle}(?![\w-]|\.\d)", body):
+            missing.append(fact)
+    return missing
 
 
 # ---------------------------------------------------------------- echoed instructions (FR-COP-12)

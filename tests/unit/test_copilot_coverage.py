@@ -212,5 +212,6 @@ def test_a_one_row_query_reads_as_a_statement() -> None:
     assert text == "Beverages: days of cover 12.2."
     from palletwise.agent.guardrails import facts_missing
 
-    assert templates.key_facts("query_inventory", result) == ("Beverages",)
+    assert templates.key_facts("query_inventory", result) == ("Beverages", "12.2")
+    assert facts_missing(templates.key_facts("query_inventory", result), "Beverages has healthy cover.")
     assert facts_missing(templates.key_facts("query_inventory", result), text) == []

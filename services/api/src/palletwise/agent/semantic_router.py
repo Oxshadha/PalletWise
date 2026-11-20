@@ -32,9 +32,16 @@ def stem(word: str) -> str:
     "lowest" stays apart from "low", which is a different question)."""
     if word.endswith("'s"):
         word = word[:-2]
-    for suffix in ("ies", "es", "s"):
-        if len(word) > 4 and word.endswith(suffix) and not word.endswith("ss"):
-            return word[: -len(suffix)] + ("y" if suffix == "ies" else "")
+    if len(word) <= 4 or word.endswith("ss"):
+        return word
+    if word.endswith("ies"):
+        return word[:-3] + "y"
+    # "es" is the plural ending only after s, x, z, ch or sh ("boxes", "dispatches"); elsewhere the
+    # "e" belongs to the word ("zones" is "zone", never "zon": code review).
+    if word.endswith(("ses", "xes", "zes", "ches", "shes")):
+        return word[:-2]
+    if word.endswith("s"):
+        return word[:-1]
     return word
 
 

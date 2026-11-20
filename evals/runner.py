@@ -413,7 +413,7 @@ def _first_data_tool(trace: RunTrace) -> tuple[str | None, dict[str, Any]]:
 
 def _grounding_violations(case: Case, trace: RunTrace, text_source: str | None) -> list[str]:
     """Unsupported numbers or identifiers in the text the user saw. Fixed messages carry none."""
-    if text_source not in ("model", "template"):
+    if text_source not in ("model", "template", "cache"):
         return []
     results = [typed_result(e["result"]) for e in trace.of("pw.result")]
     return grounding_problems(trace.text, results, case.question)
@@ -575,7 +575,8 @@ def score(results: list[CaseResult]) -> dict[str, Any]:
             "tier3_per_answer_p95_usd": pct([run["cost_usd"] for _, run in runs if run["tier"] == 3], 0.95),
         },
         "text_source": {
-            s: sum(run["text_source"] == s for _, run in runs) for s in ("model", "template", "message")
+            s: sum(run["text_source"] == s for _, run in runs)
+            for s in ("model", "template", "cache", "message")
         },
         "provider_errors": {
             "rejected_calls": sum(c["outcome"] == "ERROR" and not c["usage_estimated"] for c in calls),

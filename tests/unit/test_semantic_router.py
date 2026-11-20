@@ -98,3 +98,13 @@ def test_the_routing_eval_set_shares_no_question_with_examples_or_calibration() 
     measured = questions("evals/sets/routing.jsonl")
     assert not measured & examples
     assert not measured & questions("evals/calibration/semantic_routes.jsonl")
+
+
+@pytest.mark.parametrize(
+    ("word", "expected"),
+    [("zones", "zone"), ("zone", "zone"), ("boxes", "box"), ("dispatches", "dispatch"),
+     ("categories", "category"), ("items", "item"), ("processes", "process"), ("pass", "pass"),
+     ("today's", "today"), ("pick", "pick")],
+)  # fmt: skip
+def test_the_stem_removes_plural_endings_only(word: str, expected: str) -> None:
+    assert semantic_router.stem(word) == expected

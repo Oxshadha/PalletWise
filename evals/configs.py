@@ -5,6 +5,8 @@ choices: RuntimeConfig refuses choices that are not built, so a comparison never
 candidate that silently ran as the baseline.
 """
 
+from dataclasses import replace
+
 from palletwise.agent.runtime import PRODUCTION_RUNTIME, RuntimeConfig
 
 # The agent model the comparisons before the final one ran on: since migration 0018 the registry's
@@ -12,8 +14,10 @@ from palletwise.agent.runtime import PRODUCTION_RUNTIME, RuntimeConfig
 PINNED = "gemini-flash"
 
 CONFIGS: dict[str, RuntimeConfig] = {
-    # What the copilot ships with (ADR 0001 amendment 3).
-    "production": PRODUCTION_RUNTIME,
+    # What the copilot ships with (ADR 0001 amendment 3), without the wording cache: each case runs
+    # three times, and cached wording on the second and third run would measure the cache instead of
+    # the model (code review). The cache is tested on its own (tests/integration/test_wording_cache.py).
+    "production": replace(PRODUCTION_RUNTIME, wording_cache=False),
     "baseline": RuntimeConfig(name="baseline", agent_model=PINNED),
     # ADR 0001 change 2: the template headline at 3 s when the answer is late, and model wording
     # shown only with every key fact of its result.

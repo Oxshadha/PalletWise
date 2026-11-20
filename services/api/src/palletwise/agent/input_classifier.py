@@ -26,19 +26,31 @@ _INJECTION = re.compile(
 _CHANGE = re.compile(
     r"^\s*(please\s+|can you\s+|could you\s+|as the copilot,?\s+)?"
     r"(approve|reject|create|delete|remove|move|transfer|update|cancel|change|set|assign|release|"
-    r"adjust|ship|replenish|allocate|deallocate)\b(?!\s+on\b)"
+    r"adjust|ship|replenish|allocate|deallocate)\b"
+    # Not a command when a preposition or "me" follows: "update me on delayed orders", "change in
+    # stock since Monday", "move on to the next question".
+    r"(?!\s+(on|me|in|of|over|from|to|by|for)\b)"
     # The object follows the command within a few words, in the same request.
     r"(?:\s+[\w-]+){0,5}?\s+(proposals?|orders?|stock|units?|products?|items?|skus?|sku-\d+|bins?|"
     r"locations?|pallets?|inventory|allocations?|zones?|replenishments?)\b",
     re.IGNORECASE,
 )
+# Information the copilot never gives. Ambiguous words ("session", "token") are left out: a morning
+# session or a token budget is ordinary warehouse talk.
 _RESTRICTED = re.compile(
-    r"\b(audit log|passwords?|api keys?|secrets?|credentials|tokens?|other tenants?|other users|"
-    r"user list|session)\b",
+    r"\b(audit logs?|passwords?|api keys?|credentials|other tenants?|other users|user list)\b",
     re.IGNORECASE,
 )
 _OFF_TOPIC = re.compile(
     r"\b(weather|poem|joke|song|story|recipe|horoscope|news|translate|lyrics)\b", re.IGNORECASE
+)
+# A message naming anything the warehouse holds is never declined as off-topic: "any news on
+# delayed orders?" is a warehouse question.
+_WAREHOUSE = re.compile(
+    r"\b(orders?|stock|products?|skus?|sku-\d+|zones?|bins?|locations?|items?|inventory|pallets?|"
+    r"picks?|picked|picking|dispatch\w*|shipments?|warehouse|outlets?|categor\w+|brands?|"
+    r"capacity|replenish\w*|movers?|units?)\b",
+    re.IGNORECASE,
 )
 
 MESSAGES: dict[Kind, str] = {
@@ -74,6 +86,6 @@ def classify(question: str) -> Verdict:
         return Verdict("change_request", found.group(2))
     if found := _RESTRICTED.search(question):
         return Verdict("restricted", found.group(0))
-    if found := _OFF_TOPIC.search(question):
+    if (found := _OFF_TOPIC.search(question)) and not _WAREHOUSE.search(question):
         return Verdict("out_of_scope", found.group(0))
     return Verdict(None)

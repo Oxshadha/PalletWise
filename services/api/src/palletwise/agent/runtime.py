@@ -266,6 +266,7 @@ class RunState:
     # Headline first: when the run started, the headline sent before the answer (at most one), the
     # task that will send it, and whether the final answer has been written.
     started: float = 0.0
+    tools_in_flight: int = 0
     headline: str | None = None
     headline_task: "asyncio.Task[None] | None" = None
     answered: bool = False
@@ -511,7 +512,10 @@ class MeteredModel(WrapperModel):
         it, so it is charged the upper bound. An error response from the provider (a rejected
         request) is not billed and records no tokens.
         """
-        if isinstance(exc, asyncio.CancelledError | TimeoutError | httpx.TimeoutException):
+        # Charged only when the request may have reached the provider: a connect or pool timeout
+        # never sent it (code review).
+        sent = not isinstance(exc, httpx.ConnectTimeout | httpx.PoolTimeout)
+        if sent and isinstance(exc, asyncio.CancelledError | TimeoutError | httpx.TimeoutException):
             outcome: Literal["ERROR", "CANCELLED"] = (
                 "CANCELLED" if isinstance(exc, asyncio.CancelledError) else "ERROR"
             )
@@ -742,30 +746,37 @@ class CopilotRuntime:
             await self._finish(state, events, queue, cached, card_outcome(result), route.tool, result,
                                source="cache")  # fmt: skip
             return
+        from_model = False
         if lite is not None:
             await self._status(events, queue, "writing")
             try:
                 text = await self._until_deadline(
                     state, self._word(request, route.tool, result, lite, meter, state), routed=True
                 )
+                from_model = text is not None
             except _PastDeadline:
                 text = None
             except BudgetExhausted:
                 text = f"{templates.template_answer(route.tool, result)} {BUDGET_TEXT}"
             except Exception:
                 log.warning("wording model failed; using the template", exc_info=True)
-            if text and (
-                self._echoes_instructions(text, request.question)
-                or self._drops_key_facts(route.tool, result, text)
+            if (
+                from_model
+                and text
+                and (
+                    self._echoes_instructions(text, request.question)
+                    or self._drops_key_facts(route.tool, result, text)
+                )
             ):
                 text = None
+                from_model = False
             if text is None or state.budget_exhausted:
                 state.path = "B"
-            elif material is not None:
+            elif material is not None and from_model:
                 await self._store_wording(request, route.tool, material, text)
         await self._finish(state, events, queue, text or templates.template_answer(route.tool, result),
                            card_outcome(result), route.tool, result,
-                           source="model" if text else "template")  # fmt: skip
+                           source="model" if text and from_model else "template")  # fmt: skip
 
     async def _word(
         self,
@@ -970,10 +981,20 @@ class CopilotRuntime:
         call_id = f"{state.tool_calls}-{name}"
         await self._status(events, queue, "checking", name)
         await queue.put(events.make("TOOL_CALL_START", tool_call_id=call_id, tool=name))
+        state.tools_in_flight += 1
         try:
             result = await asyncio.to_thread(self._gateway.execute, request.run, name, arguments)
+        except asyncio.CancelledError:
+            # Every started tool call is closed in the stream (code review): the call itself has
+            # run or runs to its end in its thread, audited by the executor.
+            queue.put_nowait(
+                events.make("TOOL_CALL_END", tool_call_id=call_id, tool=name, outcome="CANCELLED")
+            )
+            raise
         except Exception as exc:
             raise _Stopped.from_exception(exc) from exc
+        finally:
+            state.tools_in_flight -= 1
         end: dict[str, Any] = {"tool_call_id": call_id, "tool": name, "outcome": result.outcome.value}
         if result.outcome is Outcome.OK:
             end["arguments"] = result.output.normalized_request
@@ -1069,7 +1090,9 @@ class CopilotRuntime:
         try:
             while limit is not None and not task.done():
                 remaining = state.started + limit - clock.monotonic()
-                if remaining <= 0 and state.results:
+                # A tool still running finishes first (they take a fraction of a second), so the
+                # answer comes from the newest result, never with a call cut off mid-way.
+                if remaining <= 0 and state.results and not state.tools_in_flight:
                     raise _PastDeadline
                 await asyncio.wait({task}, timeout=remaining if remaining > 0 else 0.1)
             return await task

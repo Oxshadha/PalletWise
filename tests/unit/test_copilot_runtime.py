@@ -1,6 +1,7 @@
 """The copilot runtime with deterministic models (agent spec 2, 3, 6, 9.1; NFR-REL-03, NFR-CST-02)."""
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -239,6 +240,8 @@ def test_budget_exhausted_falls_back_to_the_template_and_says_so() -> None:
     )
     assert state.budget_exhausted and state.path == "B" and text_of(events).endswith(BUDGET_TEXT)
     assert meter.settled == []
+    # The budget notice follows the template: it is never labelled model text (code review).
+    assert state.text_source == "template"
 
 
 def test_a_selected_suggestion_is_routed_but_still_executed_through_the_gateway() -> None:
@@ -620,6 +623,20 @@ def test_a_timed_out_call_is_charged_the_upper_bound() -> None:
         assert c.usage_estimated == (c.model == "gemini-flash")
 
 
+def test_a_connect_timeout_never_sent_the_request_and_is_not_charged() -> None:
+    def unreachable(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        raise httpx.ConnectTimeout("no connection")
+
+    provider = FakeProvider(
+        gemini_flash=FunctionModel(unreachable),
+        gemini_flash_fallback=tool_then_say("SKU-102 is in A8-01-02 with 7 units."),
+    )
+    _, _, _, meter = run("Which bins hold the mouse?", provider, fallback="gemini-flash-fallback")
+    first = meter.settled[0]
+    assert first.outcome == "ERROR" and not first.usage_estimated
+    assert (first.input_tokens, first.output_tokens) == (0, 0)
+
+
 def test_a_rejected_request_records_no_tokens() -> None:
     def rejected(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         raise RuntimeError("the provider refused the request")
@@ -844,10 +861,20 @@ def test_a_product_name_with_a_number_is_grounded_when_quoted() -> None:
     from palletwise.agent.guardrails import grounding_problems
 
     result = contents_result().model_copy(
-        update={"rows": ({"sku": "SKU-229", "name": "Soda Water 1.5L Value Pack", "on_hand": 352},)}
+        update={"rows": ({"sku": "SKU-229", "name": "Soda Water 1.5L 24 Pack", "on_hand": 7},)}
     )
-    assert grounding_problems("SKU-229 (Soda Water 1.5L Value Pack) has 352 on hand.", [result], "") == []
-    assert grounding_problems("SKU-229 has 353 on hand.", [result], "") == ["number 353"]
+    assert grounding_problems("SKU-229 (Soda Water 1.5L 24 Pack) has 7 on hand.", [result], "") == []
+    assert grounding_problems("SKU-229 has 8 on hand.", [result], "") == ["number 8"]
+    # Code review: a number inside a name does not ground the same number standing alone.
+    assert "number 24" in grounding_problems("24 units are available.", [result], "")
+
+
+def test_a_fact_must_stand_as_its_own_token() -> None:
+    from palletwise.agent.guardrails import facts_missing
+
+    assert facts_missing(["45"], "SKU-1045 led with 1450 units picked.") == ["45"]
+    assert facts_missing(["12.2"], "Cover is 12.25 days.") == ["12.2"]
+    assert facts_missing(["45", "SKU-102", "12.2"], "SKU-102: 45 units, 12.20 days.") == []
 
 
 def deadline_run(
@@ -890,6 +917,63 @@ def test_the_answer_deadline_waits_for_a_result_before_it_applies() -> None:
     config = RuntimeConfig(answer_deadline_s=0.1)
     events, state, _ = deadline_run(FunctionModel(slow_choice), config)
     assert state.outcome == "ANSWER" and text_of(events) == TEMPLATE  # answered once the result came
+
+
+@dataclass
+class SlowGateway(FakeGateway):
+    """The tool calls after the first take `seconds` (in the executor's thread)."""
+
+    seconds: float = 0.4
+
+    def execute(self, run: RunContext, name: str, arguments: dict[str, Any]) -> ToolCallResult:
+        if self.calls:
+            time.sleep(self.seconds)
+        return super().execute(run, name, arguments)
+
+
+def two_tools_then_say(text: str) -> FunctionModel:
+    def fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        returned = sum(isinstance(p, ToolReturnPart) for m in messages for p in getattr(m, "parts", []))
+        if returned == 0:
+            return ModelResponse(parts=[ToolCallPart("find_product_locations", {"sku": "SKU-102"})])
+        if returned == 1:
+            return ModelResponse(parts=[ToolCallPart("get_bin_contents", {"bin_code": "A8-01-02"})])
+        return ModelResponse(parts=[TextPart(text)])
+
+    return FunctionModel(fn)
+
+
+def tool_ends(events: list[RunEvent]) -> list[str]:
+    return [e.data["outcome"] for e in events if e.type == "TOOL_CALL_END"]
+
+
+def test_the_answer_deadline_lets_a_running_tool_finish() -> None:
+    """Code review: the deadline passed while a second tool ran, and the run answered with that
+    call left without an end."""
+    gateway = SlowGateway()
+    events, state, _, _ = run(
+        "Which bins hold the wireless mouse?",
+        FakeProvider(gemini_flash=two_tools_then_say("never in time")),
+        gateway=gateway,
+        config=RuntimeConfig(answer_deadline_s=0.1),
+    )
+    assert state.outcome == "ANSWER" and len(gateway.calls) == 2
+    assert types(events).count("TOOL_CALL_START") == 2 and tool_ends(events) == ["OK", "OK"]
+
+
+def test_a_tool_cancelled_mid_call_still_ends_its_call() -> None:
+    gateway = SlowGateway(seconds=1.0)
+    runtime = CopilotRuntime(
+        v1_tools(), gateway, FakeProvider(gemini_flash=two_tools_then_say("x")), run_timeout=0.3
+    )
+
+    async def collect() -> list[RunEvent]:
+        req = request("Which bins hold the wireless mouse?")
+        return [e async for e in runtime.run(req, FakeMeter(), RunState())]
+
+    events = asyncio.run(collect())
+    assert types(events).count("TOOL_CALL_START") == len(tool_ends(events))
+    assert tool_ends(events)[-1] == "CANCELLED"
 
 
 # ---------------------------------------------------------------- instruction echo (FR-COP-12)

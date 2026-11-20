@@ -37,7 +37,8 @@ def test_a_fact_matches_whatever_the_number_format(fact: str, text: str) -> None
 
 
 def test_a_different_number_or_identifier_is_still_missing() -> None:
-    assert facts_missing(["6,657", "SKU-102"], "6,658 units of SKU-1020") == ["6,657"]
+    # SKU-1020 is another product, not SKU-102 (code review: facts stand as their own tokens).
+    assert facts_missing(["6,657", "SKU-102"], "6,658 units of SKU-1020") == ["6,657", "SKU-102"]
     assert facts_missing(["12 days"], "12.5 days") == ["12 days"]
 
 
@@ -263,3 +264,30 @@ def test_the_headline_milestone_is_the_template_headline_when_it_comes_first() -
     )
     m = milestones(run, total_s=5.4)
     assert m["first_progress_s"] == 0.1 and m["first_headline_s"] == 3.0 and m["complete_s"] == 5.3
+
+
+def test_the_production_setup_measures_the_model_not_the_wording_cache() -> None:
+    """Code review: with the cache on, the second and third run of a case read cached wording."""
+    from dataclasses import replace
+
+    from evals.configs import CONFIGS
+    from palletwise.agent.runtime import PRODUCTION_RUNTIME
+
+    assert not CONFIGS["production"].wording_cache
+    assert replace(CONFIGS["production"], wording_cache=True) == PRODUCTION_RUNTIME
+
+
+def test_cached_wording_is_checked_for_grounding() -> None:
+    from types import SimpleNamespace
+
+    from evals.environment import RunTrace
+    from evals.runner import _grounding_violations  # pyright: ignore[reportPrivateUsage]
+
+    trace = RunTrace(
+        status=200,
+        events=[{"type": "TEXT_MESSAGE_CONTENT", "delta": "SKU-999 has 99 units."}],
+        run_id=None, conversation_id=None, first_result_s=None, first_text_s=None, total_s=0.0,
+    )  # fmt: skip
+    case = SimpleNamespace(question="Which bins hold the mouse?")
+    assert _grounding_violations(case, trace, "cache")  # type: ignore[arg-type]
+    assert _grounding_violations(case, trace, "message") == []  # type: ignore[arg-type]

@@ -251,7 +251,9 @@ def key_facts(tool: str, result: ResultEnvelope) -> tuple[str, ...]:
             elif result.columns[0].type in ("integer", "number"):
                 facts = [str(r[result.columns[0].key])]  # totals: the first measure's value
             elif result.row_count == 1 and not result.truncated:
-                facts = [str(r[result.columns[0].key])]  # one row: its name; no count to state
+                # One row: its name and the value asked for; no count to state.
+                measure = next((c for c in result.columns[1:] if c.type in ("integer", "number")), None)
+                facts = [str(r[result.columns[0].key])] + ([str(r[measure.key])] if measure else [])
             else:
                 facts = [_how_many(result), str(r[result.columns[0].key])]
         case _:
