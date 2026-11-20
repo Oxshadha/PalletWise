@@ -1107,3 +1107,25 @@ def test_slow_wording_of_a_routed_question_gives_way_to_the_template() -> None:
         "Where is SKU-102 stored?", FakeProvider(gemini_flash_lite=FunctionModel(slow)), config=config
     )
     assert state.tier == 1 and text_of(events) == TEMPLATE and state.text_source == "template"
+
+
+def test_the_row_count_of_a_totals_result_is_not_a_grounded_count() -> None:
+    """Flash-Lite run: "1 product ... worth more than 50,000" for a total over several products."""
+    from palletwise.agent.guardrails import grounding_problems
+    from palletwise.contracts.results import Column
+
+    base = contents_result()
+    totals = base.model_copy(
+        update={
+            "columns": (Column(key="stock_value", label="Stock value", type="number"),),
+            "rows": ({"stock_value": 5728960.27},),
+            "row_count": 1,
+            "normalized_request": {"tool": "query_inventory"},
+            # A date without a 1 in it: grounding matches values, so a day of 1 would allow "1".
+            "evidence": base.evidence.model_copy(
+                update={"as_of": datetime(2026, 4, 15, 4, 30, tzinfo=UTC), "data_as_of": None}
+            ),
+        }
+    )
+    text = "1 product is worth more than 50,000, with a stock value of 5,728,960.27."
+    assert "number 1" in grounding_problems(text, [totals], "Show only the ones worth more than 50,000")

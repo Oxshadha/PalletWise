@@ -76,7 +76,10 @@ def _time_parts(moment: datetime, time_zone: str) -> set[Decimal]:
 def _allowed_numbers(results: Iterable[ResultEnvelope], question: str) -> set[Decimal]:
     allowed: set[Decimal] = set()
     for result in results:
-        allowed.add(Decimal(result.row_count))
+        # The row count is a fact of a breakdown ("37 products"); a totals result has one row that
+        # counts nothing, and allowing it let "1 product is worth more than 50,000" through.
+        if result.columns and result.columns[0].type not in ("integer", "number"):
+            allowed.add(Decimal(result.row_count))
         for row in result.rows:
             for value in row.values():
                 if (d := _decimal(value)) is not None:
