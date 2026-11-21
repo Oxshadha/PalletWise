@@ -163,10 +163,14 @@ export function SimulationControls({ onAsked }: { onAsked: () => void }) {
                 question: RESET_TEXT,
                 confirm: "Reset the simulation",
                 danger: true,
-                act: () => {
-                  storeStep(0);
-                  setDemoRun((n) => n + 1);
-                  return reset();
+                act: async () => {
+                  const done = await reset();
+                  if (done) {
+                    // Only a reset that happened starts the story again.
+                    storeStep(0);
+                    setDemoRun((n) => n + 1);
+                  }
+                  return done;
                 },
               });
             }}

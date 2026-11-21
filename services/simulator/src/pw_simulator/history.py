@@ -662,11 +662,15 @@ class Simulation:
             self.stage_order(inp.at, a, n)
         elif inp.type == "delay_inbound":
             skus, days = set(a["skus"]), int(a["days"])
-            for arrival in sorted(d for d in self._arrivals if d >= inp.at.date()):
+            today = inp.at.astimezone(self.tz).date()
+            # Take every matching arrival out first, then put it back later: each moves once.
+            moves: list[tuple[date, list[tuple[str, int]]]] = []
+            for arrival in sorted(d for d in self._arrivals if d >= today):
                 moved = [x for x in self._arrivals[arrival] if x[0] in skus]
-                if not moved:
-                    continue
-                self._arrivals[arrival] = [x for x in self._arrivals[arrival] if x[0] not in skus]
+                if moved:
+                    self._arrivals[arrival] = [x for x in self._arrivals[arrival] if x[0] not in skus]
+                    moves.append((arrival, moved))
+            for arrival, moved in moves:
                 later = arrival + timedelta(days=days)
                 while later in self.calendar and not self.calendar[later].is_operating:
                     later += timedelta(days=1)

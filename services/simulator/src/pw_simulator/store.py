@@ -131,8 +131,17 @@ class RunEnded(ValueError):
     """The run was ended by a reset; a new run replaces it."""
 
 
-def _lock(conn: psycopg.Connection, run_id: str) -> tuple[int, str, datetime, int, datetime]:
-    """The run row, locked without waiting: a second operation meanwhile is refused as busy (D9)."""
+class KeyReused(ValueError):
+    """The idempotency key already applied a different kind of operation to this run."""
+
+
+Row = tuple[int, str, datetime, int, datetime]
+
+
+def _begin(conn: psycopg.Connection, run_id: str, key: str, kind: str) -> tuple[Row, dict[str, Any] | None]:
+    """The run row, locked without waiting: a second operation meanwhile is refused as busy (D9).
+    A key that already ran this kind of operation returns its first result, even on a run a reset
+    has ended since; otherwise an ended run takes no more operations."""
     try:
         row = conn.execute(
             "SELECT seed, dataset_version, clock_start, history_days,"
@@ -144,16 +153,16 @@ def _lock(conn: psycopg.Connection, run_id: str) -> tuple[int, str, datetime, in
         raise Busy(run_id) from exc
     if row is None:
         raise UnknownRun(run_id)
+    done = conn.execute(
+        "SELECT kind, result FROM sim.command WHERE run_id = %s AND idempotency_key = %s", (run_id, key)
+    ).fetchone()
+    if done is not None:
+        if done[0] != kind:
+            raise KeyReused("This request key was already used for another operation.")
+        return (int(row[0]), str(row[1]), row[2], int(row[3]), row[4]), dict(done[1])
     if row[5] is not None:
         raise RunEnded("This simulation run was reset; a new run replaces it.")
-    return (int(row[0]), str(row[1]), row[2], int(row[3]), row[4])
-
-
-def _done(conn: psycopg.Connection, run_id: str, key: str) -> dict[str, Any] | None:
-    row = conn.execute(
-        "SELECT result FROM sim.command WHERE run_id = %s AND idempotency_key = %s", (run_id, key)
-    ).fetchone()
-    return dict(row[0]) if row is not None else None
+    return (int(row[0]), str(row[1]), row[2], int(row[3]), row[4]), None
 
 
 def _inputs(conn: psycopg.Connection, run_id: str) -> tuple[Input, ...]:
@@ -161,9 +170,7 @@ def _inputs(conn: psycopg.Connection, run_id: str) -> tuple[Input, ...]:
     return tuple(Input(at, kind, dict(args)) for at, kind, args in rows.fetchall())
 
 
-def _emit(
-    conn: psycopg.Connection, run_id: str, row: tuple[int, str, datetime, int, datetime], until: datetime
-) -> int:
+def _emit(conn: psycopg.Connection, run_id: str, row: Row, until: datetime) -> int:
     """Appends the period up to `until` (regenerated from the seed and the input log) and moves
     the run's end; inside the caller's transaction."""
     seed, dataset_version, clock_start, history_days, after = row
@@ -187,8 +194,8 @@ def shift(conn: psycopg.Connection, run_id: str, until: datetime, key: str) -> d
     go to the outbox after the run's last record, in one transaction with the new end of the
     run. One operation per run at a time; the same key returns the first result (D9)."""
     with conn.transaction():
-        row = _lock(conn, run_id)
-        if (done := _done(conn, run_id, key)) is not None:
+        row, done = _begin(conn, run_id, key, "SHIFT")
+        if done is not None:
             return done
         after = row[4]
         count = _emit(conn, run_id, row, until)
@@ -204,8 +211,8 @@ def run_scenario(conn: psycopg.Connection, run_id: str, scenario_id: str, key: s
     One transaction; one operation per run at a time; the same key returns the first result."""
     scenario = scenarios.load(scenario_id)
     with conn.transaction():
-        row = _lock(conn, run_id)
-        if (done := _done(conn, run_id, key)) is not None:
+        row, done = _begin(conn, run_id, key, "SCENARIO")
+        if done is not None:
             return done
         after = row[4]
         scenario.check(after)
@@ -257,6 +264,18 @@ def end_run(conn: psycopg.Connection, run_id: str) -> dict[str, Any]:
             ended = stamped[0]
     assert ended is not None
     return {"run_id": run_id, "ended_at": ended.isoformat()}
+
+
+def resume_run(conn: psycopg.Connection, run_id: str) -> dict[str, Any]:
+    """Undoes end_run when PalletWise then refused or failed its side of the reset, so the run it
+    still shows as active keeps taking shifts. Waits for the run's lock like any operation."""
+    with conn.transaction():
+        row = conn.execute(
+            "UPDATE sim.run SET ended_at = NULL WHERE run_id = %s RETURNING run_id", (run_id,)
+        ).fetchone()
+    if row is None:
+        raise UnknownRun(run_id)
+    return {"run_id": run_id, "ended_at": None}
 
 
 def write_run(conn: psycopg.Connection, params: RunParams, records: Sequence[OutRecord]) -> None:

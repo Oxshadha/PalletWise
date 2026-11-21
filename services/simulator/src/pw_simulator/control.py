@@ -122,7 +122,7 @@ def shift(run_id: str, req: ShiftRequest) -> dict[str, object]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown run.") from exc
     except store.Busy as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, "Another time shift or reset is running.") from exc
-    except (ShiftRefused, store.RunEnded) as exc:
+    except (ShiftRefused, store.RunEnded, store.KeyReused) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
 
@@ -148,7 +148,7 @@ def run_scenario(run_id: str, req: ScenarioRequest) -> dict[str, object]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown run.") from exc
     except store.Busy as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, "Another time shift or reset is running.") from exc
-    except (scenarios.ScenarioRefused, ShiftRefused, store.RunEnded) as exc:
+    except (scenarios.ScenarioRefused, ShiftRefused, store.RunEnded, store.KeyReused) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
 
@@ -162,3 +162,13 @@ def end_run(run_id: str) -> dict[str, object]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown run.") from exc
     except store.Busy as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, "Another time shift or reset is running.") from exc
+
+
+@app.post("/runs/{run_id}/resume")
+def resume_run(run_id: str) -> dict[str, object]:
+    """Undoes an end when PalletWise refused or failed its side of the reset."""
+    try:
+        with _connect() as conn:
+            return store.resume_run(conn, run_id)
+    except store.UnknownRun as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown run.") from exc

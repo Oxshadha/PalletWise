@@ -201,3 +201,25 @@ def test_no_orders_are_created_on_non_operating_days_after_the_clock_start() -> 
     created = {r.sim_time.astimezone(COLOMBO).date() for r in records if r.record_type == "ORDER"}
     assert created and all(calendar[d].is_operating for d in created)
     assert any(not calendar[CLOCK_START.date() + timedelta(days=i)].is_operating for i in range(14))
+
+
+def test_delay_inbound_moves_each_arrival_once() -> None:
+    """Review finding: an arrival moved onto a later scheduled date must not be moved again."""
+    from datetime import date
+
+    from pw_simulator.history import Input
+
+    start = datetime(2026, 4, 1, 6, 0, tzinfo=ZoneInfo("Asia/Colombo"))
+    sim = Simulation(RunParams("delay", 42, "v", start, 14))
+    first, second = date(2026, 4, 2), date(2026, 4, 8)  # both operating days
+    sim._arrivals.clear()  # pyright: ignore[reportPrivateUsage]
+    sim._arrivals[first].append(("SKU-A", 10))  # pyright: ignore[reportPrivateUsage]
+    sim._arrivals[second].append(("SKU-B", 5))  # pyright: ignore[reportPrivateUsage]
+    sim.apply_input(Input(start, "delay_inbound", {"skus": ["SKU-A", "SKU-B"], "days": 6}), 0)
+    where = {
+        sku: day
+        for day, items in sim._arrivals.items()  # pyright: ignore[reportPrivateUsage]
+        for sku, _ in items
+    }
+    assert where["SKU-A"] - first >= timedelta(days=6) and where["SKU-A"] - first < timedelta(days=9)
+    assert where["SKU-B"] - second >= timedelta(days=6) and where["SKU-B"] - second < timedelta(days=9)

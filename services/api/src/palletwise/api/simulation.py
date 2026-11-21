@@ -14,7 +14,8 @@ simulator emits the period through the outbox and the clock follows the ingested
 """
 
 import asyncio
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal, Protocol
 from uuid import UUID
@@ -28,9 +29,11 @@ from palletwise.api.security import CurrentPrincipal
 from palletwise.api.sites import Reads, authorize_site, policy_decision
 from palletwise.db.audit_repo import AuditEntry
 from palletwise.db.ids import uuid7
-from palletwise.db.simulation_repo import Reset, reset_site, site_simulation
+from palletwise.db.simulation_repo import Reset, reset_by_key, reset_site, site_simulation
 from palletwise.settings import SimulationSettings
 from palletwise.telemetry.tracing import current_trace_id
+
+log = logging.getLogger("palletwise.api.simulation")
 
 router = APIRouter(prefix="/api/sites/{site_id}/simulation", tags=["simulation"])
 
@@ -69,17 +72,26 @@ class Simulator(Protocol):
 
     def end_run(self, run_id: UUID) -> dict[str, Any]: ...
 
+    def resume_run(self, run_id: UUID) -> dict[str, Any]: ...
+
 
 @dataclass
 class HttpSimulator:
-    """The simulator's internal control API (simulator spec 7), on the stack's private network."""
+    """The simulator's internal control API (simulator spec 7), on the stack's private network.
+    One connection pool for the process; the state read the screens poll fails fast."""
 
     base_url: str
     timeout: float = 120.0  # a week's period is generated and written in one request
+    state_timeout: float = 5.0
+    _client: httpx.Client = field(default_factory=httpx.Client, repr=False)
 
-    def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
+    def _call(
+        self, method: str, path: str, body: dict[str, Any] | None = None, timeout: float | None = None
+    ) -> Any:
         try:
-            response = httpx.request(method, self.base_url + path, json=body, timeout=self.timeout)
+            response = self._client.request(
+                method, self.base_url + path, json=body, timeout=timeout or self.timeout
+            )
         except httpx.HTTPError as exc:
             raise SimulatorUnavailable(str(type(exc).__name__)) from exc
         if response.status_code >= 400:
@@ -92,7 +104,7 @@ class HttpSimulator:
         return response.json()
 
     def state(self, run_id: UUID) -> dict[str, Any]:
-        return dict(self._call("GET", f"/runs/{run_id}"))
+        return dict(self._call("GET", f"/runs/{run_id}", timeout=self.state_timeout))
 
     def shift(self, run_id: UUID, to: datetime, key: str) -> dict[str, Any]:
         return dict(
@@ -109,6 +121,9 @@ class HttpSimulator:
 
     def end_run(self, run_id: UUID) -> dict[str, Any]:
         return dict(self._call("POST", f"/runs/{run_id}/end"))
+
+    def resume_run(self, run_id: UUID) -> dict[str, Any]:
+        return dict(self._call("POST", f"/runs/{run_id}/resume"))
 
 
 def simulator(request: Request) -> Simulator:
@@ -412,10 +427,15 @@ async def reset_simulation(
     reads: Reads,
     idempotency_key: Annotated[str, Header(pattern=IDEMPOTENCY_KEY)],
 ) -> Any:
-    """Discards the site's simulation run and rebuilds it from the seed (simulator spec 7.1). The
-    simulator ends the old run first, under the run's lock, so a reset during a shift or scenario is
-    refused as busy before anything changes (D9). Then one transaction resets PalletWise's side and
-    audits it; the simulation admin service loads the new run as at the first load."""
+    """Discards the site's simulation run and rebuilds it from the seed (simulator spec 7.1).
+
+    A key that already reset the site is answered from that reset, without touching the simulator.
+    A site still loading is refused first. The simulator then ends the old run under the run's lock,
+    so a reset during a shift or scenario is refused as busy before anything changes (D9); a run it
+    does not know is nothing to end (reset is how a lost simulator database is recovered). One
+    transaction resets PalletWise's side and audits it; if that is refused or fails, the simulator
+    run is resumed, so the two sides never disagree. The simulation admin service then loads the new
+    run as at the first load."""
     refused = await authorize_site(
         principal, site_id, "simulation.reset", reads, scope=CONTROL_SCOPE,
         refusal="You do not have permission to reset this site's simulation.",
@@ -443,26 +463,57 @@ async def reset_simulation(
             },
         )  # fmt: skip
 
-    if found.run_id is not None:  # an ACTIVE run: the simulator ends it first
-        try:
-            await asyncio.to_thread(simulator(request).end_run, found.run_id)
-        except SimulatorUnavailable:
-            return problem(
-                503, "SIMULATOR_UNAVAILABLE", "The simulator is not reachable right now.", trace_id
-            )
-        except SimulatorRefused as exc:
-            if exc.status != 409:
-                raise
-            await asyncio.to_thread(reads.audit.append, identity.tenant, entry("BUSY", None))
-            status, code, message = RESET_REFUSALS["busy"]
-            return problem(status, code, message, trace_id)
-    result = await asyncio.to_thread(
-        reset_site, reads.app_pool, principal.tenant, site_id, uuid7(), identity.subject, idempotency_key,
-        lambda r: entry(r.outcome.upper(), r),
-    )  # fmt: skip
-    if result.outcome in RESET_REFUSALS:
-        status, code, message = RESET_REFUSALS[result.outcome]
+    async def refuse(outcome: str) -> Any:
+        await asyncio.to_thread(reads.audit.append, identity.tenant, entry(outcome.upper(), None))
+        status, code, message = RESET_REFUSALS[outcome]
         return problem(status, code, message, trace_id)
+
+    repeated = await asyncio.to_thread(
+        reset_by_key, reads.app_pool, principal.tenant, site_id, idempotency_key
+    )
+    if repeated is not None:
+        result = repeated
+        await asyncio.to_thread(reads.audit.append, identity.tenant, entry("REPEATED", repeated))
+    else:
+        if found.data_status not in ("READY", "FAILED"):
+            return await refuse("loading")
+        sim = simulator(request)
+        ended = found.run_id
+        if ended is not None:  # an ACTIVE run: the simulator ends it first
+            try:
+                await asyncio.to_thread(sim.end_run, ended)
+            except SimulatorUnavailable:
+                return problem(
+                    503, "SIMULATOR_UNAVAILABLE", "The simulator is not reachable right now.", trace_id
+                )
+            except SimulatorRefused as exc:
+                if exc.status == 409:
+                    return await refuse("busy")
+                if exc.status != 404:
+                    return problem(503, "SIMULATOR_UNAVAILABLE", "The simulator refused the reset.", trace_id)
+                ended = None  # the simulator does not know the run: nothing to end
+
+        async def resume() -> None:
+            if ended is None:
+                return
+            try:
+                await asyncio.to_thread(sim.resume_run, ended)
+            except (SimulatorUnavailable, SimulatorRefused):
+                log.exception("the simulator run %s could not be resumed after a refused reset", ended)
+
+        try:
+            result = await asyncio.to_thread(
+                reset_site, reads.app_pool, principal.tenant, site_id, uuid7(), identity.subject,
+                idempotency_key, lambda r: entry(r.outcome.upper(), r),
+            )  # fmt: skip
+        except Exception:
+            await resume()
+            raise
+        if result.outcome not in ("reset", "repeated"):
+            await resume()
+        if result.outcome in RESET_REFUSALS:
+            status, code, message = RESET_REFUSALS[result.outcome]
+            return problem(status, code, message, trace_id)
     assert result.new_run is not None and result.clock_start is not None
     return ResetOut(
         outcome=result.outcome,  # pyright: ignore[reportArgumentType]

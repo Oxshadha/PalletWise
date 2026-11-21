@@ -41,7 +41,7 @@ class StoreSimulator:
             return store.shift(self._connect("sim_owner"), str(run_id), to, key)
         except store.Busy as exc:
             raise SimulatorRefused(409, "busy") from exc
-        except (ShiftRefused, store.RunEnded) as exc:
+        except (ShiftRefused, store.RunEnded, store.KeyReused) as exc:
             raise SimulatorRefused(422, str(exc)) from exc
 
     def scenarios(self) -> list[dict[str, Any]]:
@@ -55,7 +55,7 @@ class StoreSimulator:
             return store.run_scenario(self._connect("sim_owner"), str(run_id), scenario, key)
         except store.Busy as exc:
             raise SimulatorRefused(409, "busy") from exc
-        except (scenarios.ScenarioRefused, ShiftRefused, store.RunEnded) as exc:
+        except (scenarios.ScenarioRefused, ShiftRefused, store.RunEnded, store.KeyReused) as exc:
             raise SimulatorRefused(422, str(exc)) from exc
 
     def end_run(self, run_id: UUID) -> dict[str, Any]:
@@ -63,6 +63,11 @@ class StoreSimulator:
             return store.end_run(self._connect("sim_owner"), str(run_id))
         except store.Busy as exc:
             raise SimulatorRefused(409, "busy") from exc
+        except store.UnknownRun as exc:
+            raise SimulatorRefused(404, "Unknown run.") from exc
+
+    def resume_run(self, run_id: UUID) -> dict[str, Any]:
+        return store.resume_run(self._connect("sim_owner"), str(run_id))
 
 
 @pytest.fixture

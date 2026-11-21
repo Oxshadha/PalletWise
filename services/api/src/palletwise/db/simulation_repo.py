@@ -67,3 +67,14 @@ def reset_site(
         found = Reset(*row)
         conn.execute("SELECT pw.append_audit(%s, %s)", (tenant, Jsonb(audit(found).as_json())))
     return found
+
+
+def reset_by_key(pool: Pool, tenant: UUID, site: UUID, key: str) -> Reset | None:
+    """The reset this key already made at this site, if any: a retry is answered from it without
+    touching the simulator (D9)."""
+    with tenant_session(pool, tenant) as conn:
+        row = conn.execute(
+            "SELECT id, clock_start FROM pw.simulation_run WHERE site_id = %s AND reset_key = %s",
+            (site, key),
+        ).fetchone()
+    return Reset("repeated", None, row[0], row[1]) if row else None

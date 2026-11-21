@@ -192,8 +192,11 @@ class SimAdmin:
         self.report()
 
     def run(self) -> None:
-        self.load(self.ensure_run())
-        self.report()
+        run = self.ensure_run()
+        if run.status == "BUILDING":
+            self.load(run)  # reports, or records the failure
+        else:
+            self.report()
 
     def watch(self) -> None:
         """Loads each new BUILDING run a reset leaves; a failed run waits for the next reset."""

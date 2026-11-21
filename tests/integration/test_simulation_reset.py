@@ -181,3 +181,88 @@ def test_a_failed_rebuild_stays_failed_skips_old_records_and_can_reset_again(
     again = reset(sim)
     assert again.status_code == 200 and again.json()["outcome"] == "reset"
     assert state(sim)["data_status"] == "REBUILDING"
+
+
+def ready(e: Env, connect_as: Connect) -> None:
+    """The module's site, READY again: an earlier test may have left a reset rebuilding."""
+    building = e.db.execute(
+        "SELECT id FROM pw.simulation_run WHERE site_id = %s AND status = 'BUILDING'", (e.site.site,)
+    ).fetchone()
+    if building is not None:
+        rebuild(e, connect_as, building[0])
+
+
+def ended_at(connect_as: Connect, run: UUID) -> object:
+    row = (
+        connect_as("sim_owner")
+        .execute("SELECT ended_at FROM sim.run WHERE run_id = %s", (str(run),))
+        .fetchone()
+    )
+    assert row is not None
+    return row[0]
+
+
+def test_a_retried_reset_after_the_rebuild_leaves_the_new_run_alone(sim: Env, connect_as: Connect) -> None:
+    """Review finding: a retry with the same key once the new run is ACTIVE must not end it."""
+    sim.sign_in(subject="manager-reset-retry")
+    ready(sim, connect_as)
+    first = reset(sim, key="reset-retry-key")
+    assert first.status_code == 200, first.text
+    new = UUID(first.json()["new_run"])
+    rebuild(sim, connect_as, new)
+    again = reset(sim, key="reset-retry-key")
+    assert again.status_code == 200 and again.json()["outcome"] == "repeated"
+    assert ended_at(connect_as, new) is None  # the simulator still takes shifts on it
+    assert shift(sim, {"by": "1h"}).status_code == 200
+    ingest(sim, connect_as)
+    assert audited(sim, "simulation.reset")[-1][0] == "REPEATED"
+
+
+def test_a_reset_refused_by_palletwise_resumes_the_simulator_run(sim: Env, connect_as: Connect) -> None:
+    """Review finding: if PalletWise's side is busy after the simulator ended the run, the run is
+    resumed, so the site keeps working instead of refusing every shift."""
+    sim.sign_in(subject="manager-reset-resume")
+    ready(sim, connect_as)
+    run = run_of(sim)
+    holder = connect_as("postgres")  # holds the clock row, as a long ingestion batch would
+    holder.execute("BEGIN")
+    holder.execute("SELECT 1 FROM pw.site_clock WHERE site_id = %s FOR UPDATE", (sim.site.site,))
+    try:
+        busy = reset(sim)
+    finally:
+        holder.execute("ROLLBACK")
+    assert busy.status_code == 409 and busy.json()["code"] == "SIMULATION_BUSY"
+    assert ended_at(connect_as, run) is None and state(sim)["data_status"] == "READY"
+    assert shift(sim, {"by": "1h"}).status_code == 200
+    ingest(sim, connect_as)
+
+
+def test_a_run_the_simulator_does_not_know_does_not_block_a_reset(sim: Env, connect_as: Connect) -> None:
+    """Review finding: reset is how a lost simulator database is recovered."""
+    sim.sign_in(subject="manager-reset-unknown")
+    ready(sim, connect_as)
+
+    class LostRun(StoreSimulator):
+        def end_run(self, run_id: UUID) -> dict[str, Any]:
+            from palletwise.api.simulation import SimulatorRefused
+
+            raise SimulatorRefused(404, "Unknown run.")
+
+    sim.client.app.state.simulator = LostRun(connect_as)  # type: ignore[attr-defined]
+    done = reset(sim)
+    assert done.status_code == 200 and done.json()["outcome"] == "reset"
+
+
+def test_replays_after_a_reset_return_their_result_and_keys_keep_their_kind(connect_as: Connect) -> None:
+    sim = connect_as("sim_owner")
+    store.ensure_schema(sim)
+    run = str(uuid4())
+    params = RunParams(run, 42, "test", CLOCK_START, history_days=HISTORY_DAYS)
+    store.write_run(sim, params, generate(params))
+    first = store.shift(sim, run, CLOCK_START + timedelta(hours=1), "replay-key-1")
+    with pytest.raises(store.KeyReused):
+        store.run_scenario(sim, run, "festival_rush", "replay-key-1")
+    store.end_run(sim, run)
+    assert store.shift(sim, run, CLOCK_START + timedelta(hours=1), "replay-key-1") == first
+    with pytest.raises(store.RunEnded):
+        store.shift(sim, run, CLOCK_START + timedelta(hours=2), "replay-key-2")

@@ -240,6 +240,25 @@ describe("guided demo (D6)", () => {
   });
 });
 
+describe("guided demo after a refused reset", () => {
+  it("stays on its step when the reset is refused", async () => {
+    const { ApiProblem } = await import("../src/shared/api/client");
+    resetSimulation.mockRejectedValueOnce(
+      new ApiProblem(409, "SIMULATION_BUSY", "Another time shift or reset is running.", null),
+    );
+    controls();
+    fireEvent.click(await screen.findByRole("button", { name: "Demo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Reset the simulation" }));
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("alert").textContent).toBe("Another time shift or reset is running.");
+    expect(screen.getByRole("heading", { name: "Find anything" })).toBeTruthy();
+  });
+});
+
 describe("notification bell (D8)", () => {
   const exception = (id: string) =>
     ({ id, status: "OPEN", highlights: [] }) as unknown as Inbox["exceptions"][number];

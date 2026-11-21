@@ -78,12 +78,12 @@ contracts:
 	pnpm --filter @palletwise/contracts generate
 	pnpm exec prettier --write packages/contracts/src/api.ts >/dev/null 2>&1 || true
 
-# Records the running stack's completed load as the golden hash for its seed, then copies the
-# file into the repository (review and commit it).
 # The guided demo clicked through twice on the live stack, each run after a reset (Slice 4 step 6).
 storyline: check-env
 	uv run --with playwright python -m evals.storyline
 
+# Records the running stack's completed load as the golden hash for its seed, then copies the
+# file into the repository (review and commit it).
 golden: check-env
 	$(COMPOSE) exec -T simadmin palletwise-simadmin record-golden
 	docker cp $$($(COMPOSE) ps -q simadmin):/app/services/simulator/golden/. services/simulator/golden/
