@@ -16,6 +16,7 @@ interface Recognition {
   onresult: ((event: RecognitionEvent) => void) | null;
   onerror: ((event: { error: string }) => void) | null;
   onend: (() => void) | null;
+  onstart: (() => void) | null;
   start: () => void;
   stop: () => void;
   abort: () => void;
@@ -36,12 +37,15 @@ export function voiceInputAvailable(): boolean {
 
 export const BARS = 40;
 
+/** idle; starting (asking for the microphone); listening; finishing (the last words arriving). */
+export type VoicePhase = "idle" | "starting" | "listening" | "finishing";
+
 /**
  * Listening: the words as they are recognised (final and in progress) and the microphone's level
  * for the last BARS frames. Audio goes only to the browser's own recogniser.
  */
 export function useVoiceInput() {
-  const [listening, setListening] = useState(false);
+  const [phase, setPhase] = useState<VoicePhase>("idle");
   const [finalText, setFinalText] = useState("");
   const [interim, setInterim] = useState("");
   const [levels, setLevels] = useState<number[]>(() => Array<number>(BARS).fill(0));
@@ -88,6 +92,7 @@ export function useVoiceInput() {
   }, []);
 
   const stop = useCallback(() => {
+    setPhase((p) => (p === "idle" ? p : "finishing"));
     recognition.current?.stop();
     stopAudio();
   }, [stopAudio]);
@@ -127,8 +132,11 @@ export function useVoiceInput() {
             : "Voice input stopped. Try again or type the question.",
       );
     };
+    r.onstart = () => {
+      setPhase("listening");
+    };
     r.onend = () => {
-      setListening(false);
+      setPhase("idle");
       setInterim("");
       stopAudio();
     };
@@ -137,7 +145,7 @@ export function useVoiceInput() {
     setInterim("");
     setError(null);
     setLevels(Array<number>(BARS).fill(0));
-    setListening(true);
+    setPhase("starting");
     r.start();
     void meter();
   }, [meter, stopAudio]);
@@ -151,5 +159,5 @@ export function useVoiceInput() {
   );
 
   const transcript = [finalText, interim].filter(Boolean).join(" ");
-  return { listening, transcript, interim, levels, error, start, stop, cancel };
+  return { phase, transcript, interim, levels, error, start, stop, cancel };
 }
