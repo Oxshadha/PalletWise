@@ -76,7 +76,7 @@ Authorization code flow against Keycloak. The browser never sees an access, refr
 | `simulation.control` (time shift and scenario steps, simulated sites only) | yes | yes |
 | `proposal.create` | yes | no |
 | `proposal.approve`, `proposal.reject` | yes | no |
-| `admin.users.read`, `admin.agents.manage`, `admin.settings.manage`, `admin.audit.read`, `admin.usage.read`, `admin.simulation.control` | no | yes |
+| `admin.users.read`, `admin.agents.manage`, `admin.settings.manage`, `admin.audit.read`, `admin.usage.read` | no | yes |
 
 **Policy input**, built by the server from the session, the registry and the resolved resource:
 
@@ -157,3 +157,4 @@ Default deny. **Fail closed:** if OPA or the agent registry cannot be reached, t
 | 2026-11-19 | Slice 1 step 5 finding: the token exchange requests `openid copilot-audience`, not only `copilot-audience`. Keycloak 26 keeps the exchange's scope on the client session, so without `openid` the next refresh returned no ID token and revalidation (correctly) ended the session. A Keycloak test now delegates three times and checks the session survives. |
 | 2026-11-21 | Slice 3 step 3: new scope `exception.acknowledge`, Warehouse Manager only (FR-EXC-04, slice-3-acceptance step 3: "Manager only"). The Admin keeps reading exceptions through `inventory.read` but cannot acknowledge. No agent tool uses the scope. |
 | 2026-11-21 | Slice 4 step 2 (product owner decision D3): new scope `simulation.control` for the Manager and the Admin, so a demo runs from one Manager screen; the API refuses it unless the site's clock mode is `SIMULATED`. Reset keeps `admin.simulation.control` (Admin only). The copilot's registry entry has neither. |
+| 2026-11-21 | Slice 4 step 4 (product owner decision, revises D3): reset of a simulated site moves to `simulation.control`, so the Manager can recover a demo without switching accounts. `admin.simulation.control` is removed. Reset is refused unless the site's clock mode is `SIMULATED` (a real site has no simulator), is confirmed in the UI, audited, idempotent and one operation at a time (D9). |

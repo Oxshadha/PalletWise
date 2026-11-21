@@ -236,7 +236,7 @@ Statuses are those of CWM 7.4 (`site.data_status`: `REBUILDING`, `READY`, `FAILE
 3. The simulator rebuilds its state from the seed and writes the new run's history to the outbox, tagged with the new `simulation_run_id`, starting at sequence 1 for that run.
 4. The connector worker ingests from the new run's first record; old-run records are skipped (2.1).
 5. When ingestion reaches the history end, the dataset hash is computed (5.3) and compared with the expected hash for the seed and dataset version.
-6. On a match, one transaction sets the run `ACTIVE` and the site `READY`. On any failure the run and site become `FAILED` with the error; partial data never becomes visible as ready, and the Admin can reset again.
+6. On a match, one transaction sets the run `ACTIVE` and the site `READY`. On any failure the run and site become `FAILED` with the error; partial data never becomes visible as ready, and a holder of `simulation.control` can reset again.
 
 ## 8. Data volumes
 

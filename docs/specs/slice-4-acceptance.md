@@ -43,7 +43,7 @@ This document is a plan against the approved specifications. It does not redefin
 |---|---|---|
 | D1 | The simulator owns time. A time shift is a command from the browser through the API (OPA, audit, CSRF) to the simulator's internal control endpoint; the simulator generates and emits the period; PalletWise's clock moves only when it ingests the tick markers | Simulator decision 10 and FR-SIM-01: the simulator is a data source like any WMS; one clock, driven by ingested data |
 | D2 | Time is paused unless shifted. Play, pause and the 1x, 10x and 60x speeds are not built now | The product owner demos by clicking through flows; a running clock adds nothing to that and would change the screen under the presenter |
-| D3 | Product owner revision of FR-SIM-04 and the identity scope table: a new scope `simulation.control` (time shift, run a scenario step) for the Manager and the Admin, refused by the API unless `site_clock.mode = SIMULATED`; reset keeps `admin.simulation.control` (Admin only) because it discards the run | The demo runs from one Manager screen with no switching of accounts; shifting simulated time changes only simulated data, and a real site has no simulator to control |
+| D3 | Product owner revision of FR-SIM-04 and the identity scope table: a new scope `simulation.control` (time shift, run a scenario step, reset) for the Manager and the Admin, refused by the API unless `site_clock.mode = SIMULATED`. Reset discards the run, so it is confirmed in the UI with what it discards | The demo runs and recovers from one Manager screen with no switching of accounts; every control changes only simulated data, and a real site has no simulator to control |
 | D4 | After a simulator restart, its state is rebuilt from the seed, the input log and the last emitted time | A restart never moves time or emits an event twice |
 | D5 | A time shift is applied in batches; the site stays readable meanwhile and the screen shows "moving time to (date)" until the clock reaches the target | A week is thousands of records; the presenter sees progress, never half a state presented as current |
 | D6 | The guided demo is a storyline file (section 2.1), shown in a step panel opened by a **Demo** button for holders of `simulation.control`. A step's setup runs only when the presenter clicks it, and it is confirmed and audited like any action. Later slices add their steps to the same file | One place shows every feature; it grows with the product |
@@ -55,7 +55,7 @@ This document is a plan against the approved specifications. It does not redefin
 
 | Step | Setup the step runs (when clicked) | What the presenter shows |
 |---|---|---|
-| 1. Start of shift | (reset is a separate Admin action) | The daily brief; the inbox ranked with "why it is ranked here"; the map highlights |
+| 1. Start of shift | (reset, if needed, from the same screen) | The daily brief; the inbox ranked with "why it is ranked here"; the map highlights |
 | 2. Find anything | none | Search a SKU, a bin and an order; the copilot answers with the map |
 | 3. A big outlet order arrives | Scenario event: a large order due this afternoon (`outlet_window_at_risk`) | The stockout risk appears in the inbox and on the map without a reload |
 | 4. Investigate | none | Ask the copilot about the exception; the order's status; acknowledge it |
@@ -74,9 +74,9 @@ This document is a plan against the approved specifications. It does not redefin
 
 ### Step 2: Controls through the API
 
-- `POST /api/sites/{id}/simulation/shift` (by a duration or to a time) and `POST .../simulation/scenario` with `simulation.control`; `POST .../simulation/reset` with `admin.simulation.control`; `GET .../simulation` (state, target, progress) for every reader of the site. OPA, audit with before and after, CSRF, `Idempotency-Key`.
+- `POST /api/sites/{id}/simulation/shift` (by a duration or to a time) and `POST .../simulation/scenario` with `simulation.control`; `POST .../simulation/reset`, all three with `simulation.control`; `GET .../simulation` (state, target, progress) for every reader of the site. OPA, audit with before and after, CSRF, `Idempotency-Key`.
 - Refused on a site whose clock mode is not `SIMULATED`.
-- Tests: the Manager may shift and run a scenario but not reset; any control on a real site is refused; a repeated request with the same key shifts once; backward and beyond-calendar shifts are refused; a scenario or reset while a shift runs is refused as busy (D9).
+- Tests: the Manager and the Admin may shift, run a scenario and reset; any control on a real site is refused; a repeated request with the same key shifts once; backward and beyond-calendar shifts are refused; a scenario or reset while a shift runs is refused as busy (D9).
 
 ### Step 3: Scenarios
 
@@ -91,10 +91,10 @@ This document is a plan against the approved specifications. It does not redefin
 
 ### Step 5: Screens
 
-- Time shift bar for holders of `simulation.control` on a simulated site: the site time, the shift buttons, a date picker, progress while shifting; reset for the Admin only. Every action confirmed.
+- Time shift bar for holders of `simulation.control` on a simulated site: the site time, the shift buttons, a date picker, progress while shifting; reset. Every action confirmed; reset says what it discards.
 - Guided demo panel: steps of section 2.1 in order, Next and Back, each step's setup on click, its prompts as suggestion chips that run through the copilot.
 - Notification bell; the 3D scene renders on demand; the zone label no longer overlaps.
-- Tests: the Manager sees the bar and the demo without reset; the Admin sees reset; confirmations; the bell's dot appears for a new exception and clears when seen; no em or en dashes.
+- Tests: the Manager and the Admin see the bar, the demo and reset; a reader without `simulation.control` sees none of them; confirmations; the bell's dot appears for a new exception and clears when seen; no em or en dashes.
 
 ### Step 6: Quality
 
@@ -116,3 +116,4 @@ This document is a plan against the approved specifications. It does not redefin
 | 2026-11-21 | Draft for product owner approval |
 | 2026-11-21 | Revised after the product owner's direction: a clickable guided demo with time shift instead of a running clock (D2, D5, D6, 2.1); the Manager controls the simulation on simulated sites, reset stays Admin (D3); the demo is the real product, with no demo-only write paths |
 | 2026-11-21 | Approved after the product owner's review: D9 (one operation at a time per site, idempotent, nothing partial shown) and fixed shift limits (1 day within 30 s, 1 week within 3 min, 2 s to screen); D8 kept per browser, with reason |
+| 2026-11-21 | Product owner decision: reset moves to `simulation.control` (D3 revised), so a demo that goes wrong is recovered from the Manager screen. Safeguards unchanged: SIMULATED sites only, confirmation, audit, `Idempotency-Key`, one operation at a time (D9) |

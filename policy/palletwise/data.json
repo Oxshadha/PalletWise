@@ -17,7 +17,6 @@
       "admin.settings.manage",
       "admin.audit.read",
       "admin.usage.read",
-      "admin.simulation.control",
       "simulation.control"
     ]
   },

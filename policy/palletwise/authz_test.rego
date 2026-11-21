@@ -29,8 +29,7 @@ manager_scopes := {"inventory.read", "orders.read", "exception.acknowledge", "si
 
 admin_scopes := {
 	"inventory.read", "orders.read", "admin.users.read", "admin.agents.manage",
-	"admin.settings.manage", "admin.audit.read", "admin.usage.read", "admin.simulation.control",
-	"simulation.control",
+	"admin.settings.manage", "admin.audit.read", "admin.usage.read", "simulation.control",
 }
 
 all_scopes := manager_scopes | admin_scopes
