@@ -58,3 +58,21 @@ def test_the_copilot_page_context_carries_a_validated_exception() -> None:
     ):
         with pytest.raises(ValidationError):
             PageContext.model_validate(bad)
+
+
+def test_an_order_number_routes_to_the_order_tool_on_the_fast_path() -> None:
+    from palletwise.agent import fast_path
+
+    for question, number in (
+        ("Status of order SO-1042?", "SO-1042"),
+        ("Is SO-20260401-OUT12 late?", "SO-20260401-OUT12"),
+        ("when is order so-77 due", "SO-77"),
+    ):
+        route = fast_path.route(question)
+        assert route is not None and (route.tool, route.arguments) == (
+            "get_order_status",
+            {"order_no": number},
+        )
+    # Two kinds of identifier, or no order word, go to the model.
+    assert fast_path.route("Does SO-1042 include SKU-102?") is None
+    assert fast_path.route("SO-1042 thanks") is None

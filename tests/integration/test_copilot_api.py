@@ -135,7 +135,7 @@ class Env:
 
 
 @pytest.fixture
-def env(ready_site: Site, connect_session: Connect, opa_url: str) -> Generator[Env]:
+def env(ready_site: Site, connect_as: Connect, opa_url: str) -> Generator[Env]:
     idp, models = FakeIdp(), Models()
     oidc = OidcClient(
         OidcSettings(
@@ -177,7 +177,7 @@ def env(ready_site: Site, connect_session: Connect, opa_url: str) -> Generator[E
         PolicyClient(PolicySettings(url=opa_url)), audit, app_pool, role_pool("PW_AGENT_READ")
     )
     client = TestClient(create_app(auth, WebSettings(public_origin=ORIGIN), services, reads), base_url=ORIGIN)
-    db = connect_session("postgres")
+    db = connect_as("postgres")  # closed after the test (a session connection per test exhausted slots)
     db.autocommit = True
     env = Env(idp, client, ready_site, db, models)
     yield env
@@ -960,11 +960,11 @@ def test_a_resolved_exception_cannot_be_acknowledged(env: Env) -> None:
     assert target not in {x["id"] for x in listed}
 
 
-def test_concurrent_acknowledgements_make_one_transition(env: Env, connect_session: Connect) -> None:
+def test_concurrent_acknowledgements_make_one_transition(env: Env, connect_as: Connect) -> None:
     evaluate(env)
     target = next(k for k, r in current_records(env).items() if r["status"] == "OPEN")
     call = "SELECT outcome FROM pw.acknowledge_exception(%s, %s, %s)"
-    first, second = connect_session("pw_app"), connect_session("pw_app")
+    first, second = connect_as("pw_app"), connect_as("pw_app")
     outcomes: list[str] = []
     with first.transaction():
         first.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
@@ -1191,8 +1191,8 @@ def test_a_failed_generation_leaves_nothing_and_the_next_request_generates(
     assert brief_rows(env) == 1
 
 
-def test_the_brief_needs_ready_data_and_a_site_in_the_session(env: Env, connect_session: Connect) -> None:
-    _, loading_site = provision_site(connect_session, tenant=env.site.tenant, site_code="LDB")
+def test_the_brief_needs_ready_data_and_a_site_in_the_session(env: Env, connect_as: Connect) -> None:
+    _, loading_site = provision_site(connect_as, tenant=env.site.tenant, site_code="LDB")
     env.sign_in(sites=[env.site.site, loading_site])
     refused = env.client.get(f"/api/sites/{loading_site}/brief")
     assert refused.status_code == 503 and refused.json()["code"] == "DATA_NOT_READY"
@@ -1288,3 +1288,92 @@ def test_a_simulation_reset_gives_the_day_a_new_brief(env: Env) -> None:
             )
     assert after["business_date"] == before["business_date"] and after != before
     assert stored == [(old[0],), (new,)]  # the earlier run's brief is never served for the new run
+
+
+# ---------------------------------------------------------------- Slice 3 step 6: search
+
+
+def test_search_finds_an_order_and_its_choice_answers_on_the_fast_path(env: Env) -> None:
+    order = env.db.execute(
+        "SELECT order_no FROM pw.outbound_order WHERE site_id = %s ORDER BY order_no LIMIT 1",
+        (env.site.site,),
+    ).fetchone()
+    assert order is not None
+    env.sign_in(subject="manager-search")
+    body = env.client.get(f"/api/sites/{env.site.site}/search", params={"q": order[0].lower()}).json()
+    first = body["results"][0]
+    assert (first["kind"], first["code"], first["match"]) == ("order", order[0], "exact")
+    suggestion = first["suggestion"]
+    assert suggestion == {
+        "label": f"What is the status of order {order[0]}?",
+        "tool": "get_order_status",
+        "arguments": {"order_no": order[0]},
+    }
+    # Choosing it is a copilot run on the fast path: routed, executed through tools.executor.
+    status, _, events = env.ask(suggestion["label"], suggestion=suggestion)
+    assert status == 200
+    result = of_type(events, "pw.result")[0]["result"]
+    assert result["status"] == "OK" and result["rows"][0]["order_no"] == order[0]
+    assert of_type(events, "RUN_FINISHED")[0]["path"] in ("A", "B")
+
+
+def test_search_is_site_scoped_bounded_and_says_when_nothing_matches(env: Env) -> None:
+    env.sign_in(subject="admin-search", role="admin")  # a read: the Admin may search too
+    url = f"/api/sites/{env.site.site}/search"
+    assert env.client.get(url, params={"q": "zzzz-no-such-thing"}).json()["results"] == []
+    assert len(env.client.get(url, params={"q": "SKU"}).json()["results"]) <= 8
+    assert env.client.get(url, params={"q": ""}).status_code == 422
+    assert env.client.get(url, params={"q": "x" * 65}).status_code == 422
+    assert env.client.get(f"/api/sites/{uuid4()}/search", params={"q": "SKU"}).status_code == 404
+
+
+def test_wording_that_calls_an_on_time_order_delayed_is_replaced_by_the_template(env: Env) -> None:
+    order = env.db.execute(
+        "SELECT o.order_no FROM pw.outbound_order o JOIN pw.site_clock c ON c.site_id = o.site_id"
+        " WHERE o.site_id = %s AND o.status NOT IN ('SHIPPED', 'CANCELLED')"
+        " AND o.dispatch_deadline > c.sim_time"
+        " ORDER BY o.dispatch_deadline LIMIT 1",
+        (env.site.site,),
+    ).fetchone()
+    assert order is not None, "the reference data has an open order still on time"
+    env.models.models["gemini_flash_lite"] = FunctionModel(
+        lambda messages, info: ModelResponse(parts=[TextPart(f"Order {order[0]} is delayed.")])
+    )
+    env.sign_in(subject="manager-contradiction")
+    status, _, events = env.ask(f"Status of order {order[0]}?")
+    assert status == 200
+    text = answer(events)
+    assert "delayed" not in text and text.startswith(f"Order {order[0]}")
+    assert of_type(events, "RUN_FINISHED")[0]["path"] == "B"  # the template, not the model's claim
+
+
+def test_concurrent_and_failing_searches_return_every_connection(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from palletwise.api import search
+
+    env.sign_in(subject="manager-pool")
+    pool = role_pool("PW_AGENT_READ")
+    url = f"/api/sites/{env.site.site}/search"
+    statuses: list[int] = []
+
+    def look(text: str) -> None:
+        statuses.append(env.client.get(url, params={"q": text}).status_code)
+
+    workers = [threading.Thread(target=look, args=(f"SKU-{n}",)) for n in range(30)]
+    for w in workers:
+        w.start()
+    for w in workers:
+        w.join(30)
+    assert statuses.count(200) == 30
+
+    def broken(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("the database call failed")
+
+    monkeypatch.setattr(search, "query", broken)
+    for _ in range(3):
+        with pytest.raises(RuntimeError):
+            env.client.get(url, params={"q": "SKU"})
+    stats = pool.get_stats()
+    # Every connection is back: none still checked out after successes and failures.
+    assert stats["pool_available"] == stats["pool_size"] and stats.get("requests_waiting", 0) == 0

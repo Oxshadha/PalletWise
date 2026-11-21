@@ -133,6 +133,13 @@ results:
     measures: []
     how_computed: >-
       A query of {measures}{by}. Stock as of {as_of}.{period}{narrowed}
+  get_order_status:
+    measures: []
+    how_computed: >-
+      One order at {as_of}: its status and dispatch deadline, whether it is delayed (open past
+      its deadline, or shipped after it), and for each line the units ordered, allocated,
+      picked and shipped. A line is at stockout risk when it is open, not fully allocated, due
+      within {hours} hours and its product is short in its pick locations.
   brief_top_exceptions:
     measures: []
     how_computed: >-

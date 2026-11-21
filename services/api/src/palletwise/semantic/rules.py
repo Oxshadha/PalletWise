@@ -667,3 +667,80 @@ def order_stockout_risks(
         return {"window": f"within {horizon} hours"}
 
     return _run(conn, site, "get_order_stockout_risks", request, STOCK_AND_DEMAND, explain, shape)
+
+
+# ---------------------------------------------------------------- one order (Slice 3 step 6)
+
+
+ORDER_STATUS_COLUMNS = (
+    _col("order_no", "Order"),
+    _col("status", "Status"),
+    _col("dispatch_deadline", "Dispatch deadline", "datetime"),
+    _col("hours_until_due", "Hours until due", "number", "hours"),
+    _col("line_no", "Line", "integer"),
+    SKU,
+    _col("qty_ordered", "Ordered", "integer", UNITS),
+    _col("qty_allocated", "Allocated", "integer", UNITS),
+    _col("qty_picked", "Picked", "integer", UNITS),
+    _col("qty_shipped", "Shipped", "integer", UNITS),
+    _col("at_risk", "Stockout risk", "boolean"),
+)
+# Facts of the whole order, the same on every line; shown once by the template.
+ORDER_FACTS = ("customer_code", "hours_late", "delayed", "in_window", "true_shortage", "name")
+
+
+def order_status(conn: Connection, site: UUID, order_no: str) -> ResultEnvelope:
+    """One order at as_of: its status and timing (semantic 4.5) and each line's ordered, allocated,
+    picked and shipped quantities, with stockout risk from the same rule as
+    get_order_stockout_risks. Highlights: the bins its open lines are allocated in, and the pick
+    locations of quantity not yet allocated; bins of lines at risk carry the stockout reason."""
+    request = {"order_no": order_no}
+
+    def shape(moment: Moment, explain: dict[str, str] | None) -> ResultEnvelope:
+        rows, _ = _fetch(
+            conn,
+            "order_status",
+            "SELECT * FROM sem.order_status(%s, %s, %s, %s)",
+            (site, moment.as_of, moment.settings_version_id, order_no),
+        )
+        if not rows:
+            return _envelope(
+                moment, "get_order_status", request, STOCK_AND_DEMAND, explain,
+                status=ResultStatus.NOT_FOUND, message=f"No order {order_no} at this site.",
+            )  # fmt: skip
+        located = query(
+            conn,
+            "order_locations",
+            "SELECT bin_id, product_id FROM sem.order_locations(%s, %s) ORDER BY bin_id",
+            (site, order_no),
+        ).fetchall()
+        risky = {r["product_id"]: r["true_shortage"] for r in rows if r["at_risk"]}
+        risk_targets = [
+            ("bin", b, Severity.CRITICAL if risky[p] else Severity.WARNING) for b, p in located if p in risky
+        ]
+        plain = [("bin", b, Severity.INFO) for b, p in located if p not in risky]
+        at_risk, _ = distinct_highlights(risk_targets, HighlightReason.STOCKOUT_RISK)
+        others, _ = distinct_highlights(plain, HighlightReason.LOCATION)
+        shown = {h.target_id for h in at_risk}
+        highlights = at_risk + tuple(h for h in others if h.target_id not in shown)
+        lines = [r for r in rows if r["line_no"] is not None]
+        products = [EntityRef(type="product", id=r["product_id"], label=r["sku"]) for r in lines]
+        order = EntityRef(type="order", id=rows[0]["order_id"], label=rows[0]["order_no"])
+        return _envelope(
+            moment,
+            "get_order_status",
+            request,
+            STOCK_AND_DEMAND,
+            explain,
+            status=ResultStatus.OK,
+            columns=ORDER_STATUS_COLUMNS,
+            rows=_rows(rows, [c.key for c in ORDER_STATUS_COLUMNS] + list(ORDER_FACTS)),
+            highlights=highlights[:MAX_HIGHLIGHTS],
+            highlights_truncated=len(highlights) > MAX_HIGHLIGHTS,
+            entities=distinct_entities([order], products),
+        )
+
+    def explain(moment: Moment) -> dict[str, str]:
+        return {"hours": _setting(conn, moment, "stockout_horizon_hours")}
+
+    return _run(conn, site, "get_order_status", request, STOCK_AND_DEMAND, explain, shape)

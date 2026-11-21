@@ -204,3 +204,11 @@
     font-size: var(--pw-font-size-xl);
   }
 }
+
+/* Search and profile share the top bar's right edge. */
+.pw-topbar-actions {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: var(--pw-space-2);
+}

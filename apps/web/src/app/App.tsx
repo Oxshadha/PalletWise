@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { CopilotPanel } from "../features/copilot/CopilotPanel";
 import { InboxPanel } from "../features/inbox/InboxPanel";
+import { Search } from "../features/search/SearchBox";
 import { MapPanel } from "../features/map/MapPanel";
 import {
   fetchMe,
@@ -196,7 +197,7 @@ export function App() {
   const notReady =
     site && site.data_status !== "READY" ? (NOT_READY_TEXT[site.data_status] ?? null) : null;
 
-  return (
+  const shell = (
     <div className="pw-app">
       <header className="pw-topbar">
         <div className="pw-brand">
@@ -237,9 +238,21 @@ export function App() {
             </button>
           </nav>
         )}
-        {me && (
-          <ProfileMenu me={me} siteName={siteInfo ? `${siteInfo.name} (${siteInfo.code})` : null} />
-        )}
+        <div className="pw-topbar-actions">
+          {me && siteInfo && (
+            <Search
+              onAsked={() => {
+                choosePanel("copilot");
+              }}
+            />
+          )}
+          {me && (
+            <ProfileMenu
+              me={me}
+              siteName={siteInfo ? `${siteInfo.name} (${siteInfo.code})` : null}
+            />
+          )}
+        </div>
       </header>
 
       {me && siteInfo && (
@@ -284,27 +297,34 @@ export function App() {
       )}
 
       {me && siteInfo && (
-        <WorkspaceProvider me={me} siteId={siteInfo.id} dataReady={!notReady}>
-          <main className="pw-workspace" data-panel={panel}>
-            <MapPanel />
-            <CopilotPanel
-              notReadyText={notReady}
-              onOpenInbox={() => {
-                choosePanel("inbox");
-              }}
-            />
-            <InboxPanel
-              onAskCopilot={() => {
-                choosePanel("copilot");
-              }}
-              onShowOnMap={() => {
-                // Beside the map on wide screens; on narrow ones, show the map.
-                if (window.matchMedia(ONE_PANEL).matches) choosePanel("warehouse");
-              }}
-            />
-          </main>
-        </WorkspaceProvider>
+        <main className="pw-workspace" data-panel={panel}>
+          <MapPanel />
+          <CopilotPanel
+            notReadyText={notReady}
+            onOpenInbox={() => {
+              choosePanel("inbox");
+            }}
+          />
+          <InboxPanel
+            onAskCopilot={() => {
+              choosePanel("copilot");
+            }}
+            onShowOnMap={() => {
+              // Beside the map on wide screens; on narrow ones, show the map.
+              if (window.matchMedia(ONE_PANEL).matches) choosePanel("warehouse");
+            }}
+          />
+        </main>
       )}
     </div>
+  );
+
+  // The workspace spans the header too: search asks the copilot like any other question.
+  return me && siteInfo ? (
+    <WorkspaceProvider me={me} siteId={siteInfo.id} dataReady={!notReady}>
+      {shell}
+    </WorkspaceProvider>
+  ) : (
+    shell
   );
 }

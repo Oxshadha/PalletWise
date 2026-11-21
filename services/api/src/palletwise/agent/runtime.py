@@ -1116,8 +1116,14 @@ class CopilotRuntime:
         return bool(echoed)
 
     def _drops_key_facts(self, tool: str, result: ResultEnvelope, text: str) -> bool:
-        """Model wording that leaves out a key fact of its result is not shown; the template,
-        which states every key fact, is shown instead (no retry: a retry costs a round trip)."""
+        """Model wording that leaves out a key fact of its result, or contradicts it (always on),
+        is not shown; the template, which states every key fact, is shown instead (no retry: a
+        retry costs a round trip)."""
+        contradicted = templates.contradictions(tool, result, text)
+        if contradicted:
+            metrics.guardrail_triggers.labels(kind="contradiction").inc()
+            log.info("answer contradicts its result: %s; showing the template", contradicted)
+            return True
         if not self.config.headline_first:
             return False
         missing = facts_missing(templates.key_facts(tool, result), text)

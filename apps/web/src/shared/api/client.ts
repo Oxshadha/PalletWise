@@ -18,6 +18,7 @@ export type Inbox = Schemas["ExceptionsOut"];
 export type InboxException = Schemas["ExceptionOut"];
 export type Acknowledgement = Schemas["AcknowledgementOut"];
 export type Brief = Schemas["BriefOut"];
+export type SearchResult = Schemas["SearchResultOut"];
 export type BriefItem = Schemas["BriefItemOut"];
 
 /** Thrown when the session is missing or has ended; the shell sends the user to sign in. */
@@ -133,6 +134,10 @@ export const sendFeedback = (
     rating,
     comment: comment ?? null,
   });
+
+/** Site search (D8): SKUs, bin codes and order numbers, at most 8, best match first. */
+export const searchSite = (siteId: string, q: string, signal?: AbortSignal) =>
+  getJson<Schemas["SearchOut"]>(`${site(siteId)}/search?q=${encodeURIComponent(q)}`, signal);
 
 /** Today's brief for the site: generated on the first request of the site day, then stored. */
 export const fetchBrief = (siteId: string, signal?: AbortSignal) =>

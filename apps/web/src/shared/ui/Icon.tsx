@@ -17,6 +17,7 @@ import {
   Plus,
   RotateCcw,
   RotateCw,
+  Search,
   SendHorizontal,
   Square,
   ThumbsDown,
@@ -51,6 +52,7 @@ const ICONS = {
   info: Info,
   warning: TriangleAlert,
   critical: OctagonAlert,
+  search: Search,
 } as const satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

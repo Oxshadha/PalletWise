@@ -15,6 +15,7 @@ from palletwise.tools.executor import ToolContext, ToolRegistry, ToolSpec
 
 SKU_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$"
 BIN_CODE_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9-]{0,31}$"
+ORDER_NO_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,47}$"  # a WMS order number, nothing else
 
 
 class StrictInput(BaseModel):
@@ -229,6 +230,20 @@ def _query_description() -> str:
     )
 
 
+class GetOrderStatusInput(StrictInput):
+    order_no: str = Field(pattern=ORDER_NO_PATTERN, description="Exact order number, for example SO-1042")
+
+
+GET_ORDER_STATUS = _rule_tool(
+    "get_order_status",
+    "One order by its exact number: status, dispatch deadline, whether it is delayed, and each "
+    "line's units ordered, allocated, picked and shipped, with lines at stockout risk.",
+    GetOrderStatusInput,
+    "orders.read",
+    lambda ctx, p: rules.order_status(ctx.conn, ctx.site, p.order_no),
+)
+
+
 QUERY_INVENTORY = _rule_tool(
     "query_inventory",
     _query_description(),
@@ -243,5 +258,8 @@ SLICE_2_TOOLS = (
 )  # fmt: skip
 
 
+SLICE_3_TOOLS = (GET_ORDER_STATUS,)
+
+
 def v1_tools() -> ToolRegistry:
-    return ToolRegistry([FIND_PRODUCT_LOCATIONS, GET_BIN_CONTENTS, *SLICE_2_TOOLS])
+    return ToolRegistry([FIND_PRODUCT_LOCATIONS, GET_BIN_CONTENTS, *SLICE_2_TOOLS, *SLICE_3_TOOLS])
