@@ -1,0 +1,16 @@
+# Simulator spec 6. A large outlet order arrives while auto-replenishment is very slow: the pick face
+# cannot cover it, reserve stock can (a fixable stockout risk). Due a few hours after it arrives, so
+# the demo can run it at the start of a shift (slice-4-acceptance 2.1, step 3). SKU-258 holds 23 in its
+# pick face and 69 or more in reserve at the clock start (14 and 180 days of history), so 60 units are
+# short at the pick face and covered by one replenishment from reserve.
+id: outlet_window_at_risk
+title: A large outlet order at risk
+description: OUT003 orders 60 units of SKU-258, due in 6 hours, while replenishment runs slow.
+events:
+  - { after: "0m", type: set_param, param: replenishment_lag_minutes, value: 600 }
+  - { after: "0m", type: create_order, customer: OUT003, due_in_hours: 6, lines: [ { sku: SKU-258, qty: 60 } ] }
+expect:
+  - { within: "90m", exception: { type: STOCKOUT_RISK, sku: SKU-258, fixable: true } }
+tour:
+  - "What needs my attention?"
+  - "Which of today's orders are at risk?"

@@ -1,0 +1,10 @@
+# Simulator spec 6. No events: the six dead-stock anchors are planted in the base dataset (3.3).
+id: dead_stock_in_prime
+title: Dead stock in prime locations
+description: Six products with no picks for 45 days sit in prime pick locations.
+events: []
+expect:
+  - { within: "0m", exception: { type: DEAD_STOCK, count: 6 } }
+tour:
+  - "Are slow movers sitting in the fast-pick zone?"
+  - "Which products have had no picks for a month?"

@@ -7,14 +7,15 @@ the true festival uplift stay in `sim.run.params` and are never emitted to the o
 import json
 import os
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import psycopg
 from psycopg.conninfo import make_conninfo
 
+from pw_simulator import scenarios
 from pw_simulator.catalogue import CATEGORIES, true_uplift
-from pw_simulator.history import OutRecord, RunParams, extend
+from pw_simulator.history import TICK, Input, OutRecord, RunParams, extend
 
 DDL = """
 CREATE TABLE IF NOT EXISTS sim.run (
@@ -46,7 +47,18 @@ CREATE TABLE IF NOT EXISTS sim.command (
   created_at       timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (run_id, idempotency_key)
 );
-REVOKE ALL ON sim.run, sim.outbox, sim.command FROM PUBLIC;
+-- The run's input log (simulator spec 5.3, 6): replayed at its times whenever the run is
+-- regenerated, so a run is reproduced by its seed plus this log.
+CREATE TABLE IF NOT EXISTS sim.input_log (
+  run_id       uuid NOT NULL REFERENCES sim.run (run_id),
+  n            int NOT NULL,
+  at           timestamptz NOT NULL,
+  type         text NOT NULL,
+  args         jsonb NOT NULL,
+  scenario_id  text,
+  PRIMARY KEY (run_id, n)
+);
+REVOKE ALL ON sim.run, sim.outbox, sim.command, sim.input_log FROM PUBLIC;
 GRANT SELECT ON sim.outbox TO sim_outbox_reader;
 """
 
@@ -113,43 +125,104 @@ def run_state(conn: psycopg.Connection, run_id: str) -> dict[str, Any]:
     return {"run_id": run_id, "clock_start": row[0].isoformat(), "emitted_until": row[1].isoformat()}
 
 
+def _lock(conn: psycopg.Connection, run_id: str) -> tuple[int, str, datetime, int, datetime]:
+    """The run row, locked without waiting: a second operation meanwhile is refused as busy (D9)."""
+    try:
+        row = conn.execute(
+            "SELECT seed, dataset_version, clock_start, history_days,"
+            " coalesce(emitted_until, clock_start) FROM sim.run WHERE run_id = %s FOR UPDATE NOWAIT",
+            (run_id,),
+        ).fetchone()
+    except psycopg.errors.LockNotAvailable as exc:
+        raise Busy(run_id) from exc
+    if row is None:
+        raise UnknownRun(run_id)
+    return (int(row[0]), str(row[1]), row[2], int(row[3]), row[4])
+
+
+def _done(conn: psycopg.Connection, run_id: str, key: str) -> dict[str, Any] | None:
+    row = conn.execute(
+        "SELECT result FROM sim.command WHERE run_id = %s AND idempotency_key = %s", (run_id, key)
+    ).fetchone()
+    return dict(row[0]) if row is not None else None
+
+
+def _inputs(conn: psycopg.Connection, run_id: str) -> tuple[Input, ...]:
+    rows = conn.execute("SELECT at, type, args FROM sim.input_log WHERE run_id = %s ORDER BY n", (run_id,))
+    return tuple(Input(at, kind, dict(args)) for at, kind, args in rows.fetchall())
+
+
+def _emit(
+    conn: psycopg.Connection, run_id: str, row: tuple[int, str, datetime, int, datetime], until: datetime
+) -> int:
+    """Appends the period up to `until` (regenerated from the seed and the input log) and moves
+    the run's end; inside the caller's transaction."""
+    seed, dataset_version, clock_start, history_days, after = row
+    params = RunParams(run_id, seed, dataset_version, clock_start, history_days, inputs=_inputs(conn, run_id))
+    last = conn.execute("SELECT max(seq) FROM sim.outbox WHERE run_id = %s", (run_id,)).fetchone()
+    records = extend(params, after, until, (last[0] if last and last[0] else 0) + 1)
+    _copy_records(conn, run_id, dataset_version, records)
+    conn.execute("UPDATE sim.run SET emitted_until = %s WHERE run_id = %s", (until, run_id))
+    return len(records)
+
+
+def _record(conn: psycopg.Connection, run_id: str, key: str, kind: str, result: dict[str, Any]) -> None:
+    conn.execute(
+        "INSERT INTO sim.command (run_id, idempotency_key, kind, result) VALUES (%s, %s, %s, %s)",
+        (run_id, key, kind, json.dumps(result)),
+    )
+
+
 def shift(conn: psycopg.Connection, run_id: str, until: datetime, key: str) -> dict[str, Any]:
     """Moves the run's time to `until` (Slice 4 step 1, simulator spec 5.2): the period's records
     go to the outbox after the run's last record, in one transaction with the new end of the
-    run. The run row is locked without waiting, so a second operation meanwhile is refused as
-    busy; the same key returns the first result and writes nothing again (D9)."""
+    run. One operation per run at a time; the same key returns the first result (D9)."""
     with conn.transaction():
-        try:
-            row = conn.execute(
-                "SELECT seed, dataset_version, clock_start, history_days,"
-                " coalesce(emitted_until, clock_start) FROM sim.run WHERE run_id = %s FOR UPDATE NOWAIT",
-                (run_id,),
-            ).fetchone()
-        except psycopg.errors.LockNotAvailable as exc:
-            raise Busy(run_id) from exc
-        if row is None:
-            raise UnknownRun(run_id)
-        done = conn.execute(
-            "SELECT result FROM sim.command WHERE run_id = %s AND idempotency_key = %s", (run_id, key)
+        row = _lock(conn, run_id)
+        if (done := _done(conn, run_id, key)) is not None:
+            return done
+        after = row[4]
+        count = _emit(conn, run_id, row, until)
+        result = {"run_id": run_id, "from": after.isoformat(), "to": until.isoformat(), "records": count}
+        _record(conn, run_id, key, "SHIFT", result)
+        return result
+
+
+def run_scenario(conn: psycopg.Connection, run_id: str, scenario_id: str, key: str) -> dict[str, Any]:
+    """Stages a scenario (Slice 4 step 3, simulator spec 6): its preconditions are checked against
+    the run's time, its events go to the input log from one minute after the emitted period (so the
+    past never changes), and time moves one tick so the first events reach PalletWise at once.
+    One transaction; one operation per run at a time; the same key returns the first result."""
+    scenario = scenarios.load(scenario_id)
+    with conn.transaction():
+        row = _lock(conn, run_id)
+        if (done := _done(conn, run_id, key)) is not None:
+            return done
+        after = row[4]
+        scenario.check(after)
+        start = after + timedelta(minutes=1)
+        last = conn.execute(
+            "SELECT coalesce(max(n), -1) FROM sim.input_log WHERE run_id = %s", (run_id,)
         ).fetchone()
-        if done is not None:
-            return dict(done[0])
-        seed, dataset_version, clock_start, history_days, after = row
-        params = RunParams(run_id, seed, dataset_version, clock_start, history_days)
-        last = conn.execute("SELECT max(seq) FROM sim.outbox WHERE run_id = %s", (run_id,)).fetchone()
-        records = extend(params, after, until, (last[0] if last and last[0] else 0) + 1)
-        _copy_records(conn, run_id, dataset_version, records)
-        conn.execute("UPDATE sim.run SET emitted_until = %s WHERE run_id = %s", (until, run_id))
+        first = (last[0] if last else -1) + 1
+        for i, inp in enumerate(scenario.inputs(start)):
+            conn.execute(
+                "INSERT INTO sim.input_log (run_id, n, at, type, args, scenario_id)"
+                " VALUES (%s, %s, %s, %s, %s, %s)",
+                (run_id, first + i, inp.at, inp.type, json.dumps(inp.args), scenario.id),
+            )
+        count = _emit(conn, run_id, row, after + TICK)
         result = {
             "run_id": run_id,
+            "scenario": scenario.id,
+            "title": scenario.title,
+            "events": len(scenario.events),
             "from": after.isoformat(),
-            "to": until.isoformat(),
-            "records": len(records),
+            "to": (after + TICK).isoformat(),
+            "records": count,
+            "tour": list(scenario.tour),
         }
-        conn.execute(
-            "INSERT INTO sim.command (run_id, idempotency_key, kind, result) VALUES (%s, %s, 'SHIFT', %s)",
-            (run_id, key, json.dumps(result)),
-        )
+        _record(conn, run_id, key, "SCENARIO", result)
         return result
 
 

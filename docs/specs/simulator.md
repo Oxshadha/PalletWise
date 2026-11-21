@@ -191,25 +191,19 @@ Scenarios are YAML files in `simulator/scenarios/`. Each declares preconditions,
 
 ```yaml
 id: outlet_window_at_risk
-title: Early outlet order at risk
-requires:
-  sim_time_between: ["2026-04-01T06:00:00+05:30", "2026-04-10T12:00:00+05:30"]
-  local_time_between: ["16:30", "17:45"]
+title: A large outlet order at risk
 events:
-  - { after: "0m",  type: set_param, param: replenishment_lag_minutes, value: 600 }
-  - { after: "0m",  type: create_order, customer: OUT003, delivery: next_operating_day,
-      lines: [ { sku: SKU-214, qty: 120 } ] }
+  - { after: "0m", type: set_param, param: replenishment_lag_minutes, value: 600 }
+  - { after: "0m", type: create_order, customer: OUT003, due_in_hours: 6,
+      lines: [ { sku: SKU-258, qty: 60 } ] }
 expect:
-  - { within: "90m", exception: { type: STOCKOUT_RISK, sku: SKU-214, fixable: true } }
-  - { within: "90m", highlights_golden: outlet_window_at_risk.highlights.json }
-  - { after_task_executed: true, within: "30m",
-      exception: { type: STOCKOUT_RISK, sku: SKU-214, status: RESOLVED } }
+  - { within: "90m", exception: { type: STOCKOUT_RISK, sku: SKU-258, fixable: true } }
 tour:
+  - "What needs my attention?"
   - "Which of today's orders are at risk?"
-  - "Propose replenishment"
 ```
 
-- **Relative start.** Event offsets are relative to the simulated time at which the Admin runs the scenario. `requires` lists preconditions; if they are not met, the scenario is refused with the reason, never run at a different time.
+- **Relative start.** Event offsets are relative to the simulated time at which a holder of `simulation.control` runs the scenario: its events are recorded in the run's input log from one minute after the emitted period, and time moves one tick so they reach PalletWise at once. `requires` lists preconditions (`sim_time_between`); if they are not met, the scenario is refused with the reason, never run at a different time.
 - **Allowed event types** (a closed list): `set_param` (replenishment lag, lead-time multiplier, receiving capacity, putaway delay), `create_order`, `delay_inbound` (SKUs, days), `demand_shock` (SKUs or category, multiplier, days).
 - **Exception expectations** describe the exception engine's recalculation, never a direct effect of approval. In `outlet_window_at_risk` the order quantity is chosen so that one replenishment fully covers it, so after the task's result is ingested the recalculated exception resolves. A scenario where the replenishment covers only part of the shortage expects the exception to stay open with updated values.
 - **Golden highlights** are produced by a reference query, ordered as in the semantic spec (7.6), stored per dataset version, and regenerated and reviewed when the dataset version changes.
@@ -218,7 +212,7 @@ tour:
 |---|---|---|
 | `festival_rush` | New Year ramp plus `delay_inbound` of 5 festival-sensitive Beverages and Snacks SKUs by 6 days | `FESTIVAL_SHORTAGE` for those SKUs; replenishment suggestions only where reserve stock exists |
 | `outlet_window_at_risk` | very slow auto-replenishment plus a large early-window order | fixable `STOCKOUT_RISK`; after the approved task executes and is ingested, recalculation resolves it |
-| `monsoon_slowdown` | lead-time multiplier 1.5 and receiving capacity down 40 percent for 5 days | rising `LOW_STOCK`, falling days of cover |
+| `monsoon_slowdown` | lead-time multiplier 1.5 and receiving capacity down 40 percent for 5 days | less storable stock than the same run without it after 3 days; `LOW_STOCK` not lower |
 | `dead_stock_in_prime` | no events: the condition is planted in the base dataset (3.3) | `DEAD_STOCK` and `SLOW_IN_PRIME` for the six anchor products |
 
 ## 7. Admin controls
@@ -310,3 +304,4 @@ Generation of the full history completes in under 2 minutes on the reference mac
 | 2026-11-18 | Slice 0 calibration (data facts, no design change): movement range corrected to 80,000 to 130,000 and line and allocation ranges to 35,000 to 55,000. The earlier movement estimate was wrong: picks and ships are about one each per order line, so 150,000 movements were never reachable at the specified order volume. First seeded run: 8,022 orders, 39,658 lines, 39,571 allocations, 91,571 movements. Allocation and picking run on the evening of the last operating day before delivery (a weekend gap moves it to Saturday). |
 | 2026-11-18 | Revision 2 after review: global outbox sequence, causal order, tick markers and old-run skipping; two narrow connector credentials; task submission, reservation, execution-time revalidation and state mapping; idempotency payload conflicts; cycle-count result handling; daily order, cutoff, allocation, picking and shipping schedule; relative scenario start with preconditions; exception expectations as recalculation; reset sequence on both sides; deterministic hash over natural keys; hidden generator parameters; volume acceptance ranges; extended tests. |
 | 2026-11-21 | Slice 4 step 1 (time shift, slice-4-acceptance): a shift regenerates the run from its seed up to the target (the 180-day history takes about one second) and appends only the new period to the outbox, numbered after the run's last record, with tick markers every 15 simulated minutes; `sim.run.emitted_until` records how far the outbox reaches. Jump equals play by construction, and a simulator restart loses nothing (no in-memory state). One shift per run at a time (`FOR UPDATE NOWAIT`, refused as busy); `sim.command` records each command once per idempotency key, so a retry returns the first result and writes nothing. Shifts are forward only, on the 15-minute grid and within the calendar. The history output is unchanged (same records and hash). |
+| 2026-11-21 | Slice 4 step 3 (scenarios): `sim.input_log` holds each run's staged events and every regeneration replays it, so a scenario survives later shifts and a run shifted in steps writes the same outbox as one shift. Calibrated against the data, not the design: `outlet_window_at_risk` orders 60 units of SKU-258 due in 6 hours (`due_in_hours`, no local time window), because SKU-214's reserve could not cover 120 units (a true shortage, not a fixable one) and a fixed time window would block the guided demo at other times of day. The `monsoon_slowdown` expectation compares storable stock with the same run without the scenario, because every product has a stock policy and `LOW_STOCK` is already at its ceiling in the seeded data, so "rising `LOW_STOCK`" could not be observed. `festival_rush` and `dead_stock_in_prime` have no time precondition. Scenarios are run by `simulation.control` holders (slice-4-acceptance D3). |

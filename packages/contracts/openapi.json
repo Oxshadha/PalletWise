@@ -1366,6 +1366,99 @@
         "title": "RunOut",
         "type": "object"
       },
+      "ScenarioIn": {
+        "properties": {
+          "scenario": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Scenario",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenario"
+        ],
+        "title": "ScenarioIn",
+        "type": "object"
+      },
+      "ScenarioInfo": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tour": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tour",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "tour"
+        ],
+        "title": "ScenarioInfo",
+        "type": "object"
+      },
+      "ScenarioOut": {
+        "properties": {
+          "events": {
+            "title": "Events",
+            "type": "integer"
+          },
+          "from_time": {
+            "format": "date-time",
+            "title": "From Time",
+            "type": "string"
+          },
+          "records": {
+            "title": "Records",
+            "type": "integer"
+          },
+          "scenario": {
+            "title": "Scenario",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "to": {
+            "format": "date-time",
+            "title": "To",
+            "type": "string"
+          },
+          "tour": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tour",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenario",
+          "title",
+          "events",
+          "from_time",
+          "to",
+          "records",
+          "tour"
+        ],
+        "title": "ScenarioOut",
+        "type": "object"
+      },
       "ScoreComponentsOut": {
         "description": "The raw inputs, their 0 to 1 normalization, caps and weights (semantic 6.1).",
         "properties": {
@@ -2846,6 +2939,124 @@
           }
         },
         "summary": "Simulation State",
+        "tags": [
+          "simulation"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/simulation/scenario": {
+      "post": {
+        "operationId": "run_scenario_api_sites__site_id__simulation_scenario_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{8,128}$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScenarioIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "409": {
+            "description": "NOT_SIMULATED or SIMULATION_BUSY"
+          },
+          "422": {
+            "description": "SCENARIO_REFUSED or VALIDATION_FAILED"
+          },
+          "503": {
+            "description": "DATA_NOT_READY or SIMULATOR_UNAVAILABLE"
+          }
+        },
+        "summary": "Run Scenario",
+        "tags": [
+          "simulation"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/simulation/scenarios": {
+      "get": {
+        "operationId": "list_scenarios_api_sites__site_id__simulation_scenarios_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ScenarioInfo"
+                  },
+                  "title": "Response List Scenarios Api Sites  Site Id  Simulation Scenarios Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "SIMULATOR_UNAVAILABLE"
+          }
+        },
+        "summary": "List Scenarios",
         "tags": [
           "simulation"
         ]

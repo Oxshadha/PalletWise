@@ -4,7 +4,9 @@
 whether a shift is still being ingested; for every reader of the site.
 
 `POST /api/sites/{id}/simulation/shift`: by +1 hour, +4 hours, +1 day, +1 week, to the next
-operating morning, or to a time. Scope `simulation.control` (Manager and Admin, D3), refused unless
+operating morning, or to a time. `GET .../simulation/scenarios` lists the scenarios and
+`POST .../simulation/scenario` stages one (step 3): its events go to the simulator's input log and
+time moves one tick. Both writes: scope `simulation.control` (Manager and Admin, D3), refused unless
 the site's clock mode is `SIMULATED`; `Idempotency-Key` required; audited with before and after;
 the CSRF check applies as to every state change. PalletWise never moves its own clock: the
 simulator emits the period through the outbox and the clock follows the ingested tick markers (D1).
@@ -18,7 +20,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Header, Request
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from palletwise.api.problems import problem
 from palletwise.api.security import CurrentPrincipal
@@ -59,6 +61,10 @@ class Simulator(Protocol):
 
     def shift(self, run_id: UUID, to: datetime, key: str) -> dict[str, Any]: ...
 
+    def scenarios(self) -> list[dict[str, Any]]: ...
+
+    def run_scenario(self, run_id: UUID, scenario: str, key: str) -> dict[str, Any]: ...
+
 
 @dataclass
 class HttpSimulator:
@@ -67,7 +73,7 @@ class HttpSimulator:
     base_url: str
     timeout: float = 120.0  # a week's period is generated and written in one request
 
-    def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
         try:
             response = httpx.request(method, self.base_url + path, json=body, timeout=self.timeout)
         except httpx.HTTPError as exc:
@@ -79,13 +85,23 @@ class HttpSimulator:
                 else None
             )
             raise SimulatorRefused(response.status_code, str(detail or "The simulator refused."))
-        return dict(response.json())
+        return response.json()
 
     def state(self, run_id: UUID) -> dict[str, Any]:
-        return self._call("GET", f"/runs/{run_id}")
+        return dict(self._call("GET", f"/runs/{run_id}"))
 
     def shift(self, run_id: UUID, to: datetime, key: str) -> dict[str, Any]:
-        return self._call("POST", f"/runs/{run_id}/shift", {"to": to.isoformat(), "idempotency_key": key})
+        return dict(
+            self._call("POST", f"/runs/{run_id}/shift", {"to": to.isoformat(), "idempotency_key": key})
+        )
+
+    def scenarios(self) -> list[dict[str, Any]]:
+        return list(self._call("GET", "/scenarios"))
+
+    def run_scenario(self, run_id: UUID, scenario: str, key: str) -> dict[str, Any]:
+        return dict(
+            self._call("POST", f"/runs/{run_id}/scenario", {"scenario": scenario, "idempotency_key": key})
+        )
 
 
 def simulator(request: Request) -> Simulator:
@@ -125,6 +141,27 @@ class ShiftOut(BaseModel):
     from_time: datetime
     to: datetime
     records: int
+
+
+class ScenarioInfo(BaseModel):
+    id: str
+    title: str
+    description: str
+    tour: list[str]  # questions to ask the copilot afterwards
+
+
+class ScenarioIn(BaseModel):
+    scenario: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+
+
+class ScenarioOut(BaseModel):
+    scenario: str
+    title: str
+    events: int
+    from_time: datetime
+    to: datetime
+    records: int
+    tour: list[str]
 
 
 # ---------------------------------------------------------------- endpoints
@@ -237,3 +274,94 @@ async def shift_time(
     )
     await audit("SHIFTED", out.from_time, out.to)
     return out
+
+
+@router.get(
+    "/scenarios",
+    response_model=list[ScenarioInfo],
+    responses={403: {"description": "FORBIDDEN"}, 503: {"description": "SIMULATOR_UNAVAILABLE"}},
+)
+async def list_scenarios(site_id: UUID, request: Request, principal: CurrentPrincipal, reads: Reads) -> Any:
+    refused = await authorize_site(
+        principal, site_id, "simulation.scenarios", reads, scope=CONTROL_SCOPE,
+        refusal="You do not have permission to run scenarios on this site.",
+    )  # fmt: skip
+    if refused is not None:
+        return refused
+    try:
+        found = await asyncio.to_thread(simulator(request).scenarios)
+    except (SimulatorUnavailable, SimulatorRefused):
+        return problem(
+            503, "SIMULATOR_UNAVAILABLE", "The simulator is not reachable right now.", current_trace_id()
+        )
+    return [ScenarioInfo.model_validate(s, from_attributes=False) for s in found]
+
+
+@router.post(
+    "/scenario",
+    response_model=ScenarioOut,
+    responses={
+        403: {"description": "FORBIDDEN"},
+        409: {"description": "NOT_SIMULATED or SIMULATION_BUSY"},
+        422: {"description": "SCENARIO_REFUSED or VALIDATION_FAILED"},
+        503: {"description": "DATA_NOT_READY or SIMULATOR_UNAVAILABLE"},
+    },
+)
+async def run_scenario(
+    site_id: UUID,
+    body: ScenarioIn,
+    request: Request,
+    principal: CurrentPrincipal,
+    reads: Reads,
+    idempotency_key: Annotated[str, Header(pattern=IDEMPOTENCY_KEY)],
+) -> Any:
+    refused = await authorize_site(
+        principal, site_id, "simulation.scenario", reads, scope=CONTROL_SCOPE,
+        refusal="You do not have permission to run scenarios on this site.",
+    )  # fmt: skip
+    if refused is not None:
+        return refused
+    trace_id = current_trace_id()
+    found = await asyncio.to_thread(site_simulation, reads.app_pool, principal.tenant, site_id)
+    if found is None:
+        return problem(404, "NOT_FOUND", "Not found.", trace_id)
+    if found.mode != "SIMULATED":
+        return problem(
+            409, "NOT_SIMULATED", "This site's data comes from a real WMS; it runs no scenarios.", trace_id
+        )
+    if found.data_status != "READY" or found.run_id is None:
+        return problem(503, "DATA_NOT_READY", "The warehouse data is still loading.", trace_id)
+    identity = principal.identity
+
+    async def audit(outcome: str, result: dict[str, Any] | None) -> None:
+        entry = AuditEntry(
+            actor_type="USER", action="simulation.scenario", outcome=outcome, trace_id=trace_id,
+            site_id=site_id, user_subject=identity.subject, user_role=identity.role, scope=CONTROL_SCOPE,
+            decision="ALLOW",
+            parameters={
+                "scenario": body.scenario, "idempotency_key": idempotency_key,
+                "from_time": result["from"] if result else None, "to_time": result["to"] if result else None,
+            },
+        )  # fmt: skip
+        await asyncio.to_thread(reads.audit.append, identity.tenant, entry)
+
+    try:
+        result = await asyncio.to_thread(
+            simulator(request).run_scenario, found.run_id, body.scenario, idempotency_key
+        )
+    except SimulatorUnavailable:
+        return problem(503, "SIMULATOR_UNAVAILABLE", "The simulator is not reachable right now.", trace_id)
+    except SimulatorRefused as exc:
+        if exc.status == 409:
+            await audit("BUSY", None)
+            return problem(
+                409, "SIMULATION_BUSY", "Another time shift or reset is running. Try again shortly.", trace_id
+            )
+        await audit("REFUSED", None)
+        return problem(422, "SCENARIO_REFUSED", exc.message, trace_id)
+    await audit("STAGED", result)
+    return ScenarioOut(
+        scenario=str(result["scenario"]), title=str(result["title"]), events=int(result["events"]),
+        from_time=datetime.fromisoformat(result["from"]), to=datetime.fromisoformat(result["to"]),
+        records=int(result["records"]), tour=[str(t) for t in result["tour"]],
+    )  # fmt: skip

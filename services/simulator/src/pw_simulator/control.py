@@ -2,7 +2,7 @@
 forward on demand (Slice 4 time shift). Internal only: PalletWise's API authorizes and audits
 every command before it reaches this service (Slice 4 D1).
 
-Scenarios, reset and task submission arrive in later steps.
+Reset and task submission arrive in later steps.
 """
 
 import logging
@@ -15,7 +15,7 @@ import psycopg
 from fastapi import FastAPI, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
-from pw_simulator import store
+from pw_simulator import scenarios, store
 from pw_simulator.history import RunParams, ShiftRefused, generate
 
 log = logging.getLogger("pw_simulator")
@@ -122,4 +122,30 @@ def shift(run_id: str, req: ShiftRequest) -> dict[str, object]:
     except store.Busy as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, "Another time shift or reset is running.") from exc
     except ShiftRefused as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+
+class ScenarioRequest(BaseModel):
+    scenario: str
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9_-]{8,128}$")
+
+
+@app.get("/scenarios")
+def list_scenarios() -> list[dict[str, object]]:
+    return [
+        {"id": s.id, "title": s.title, "description": s.description, "tour": list(s.tour)}
+        for s in scenarios.available()
+    ]
+
+
+@app.post("/runs/{run_id}/scenario")
+def run_scenario(run_id: str, req: ScenarioRequest) -> dict[str, object]:
+    try:
+        with _connect() as conn:
+            return store.run_scenario(conn, run_id, req.scenario, req.idempotency_key)
+    except store.UnknownRun as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown run.") from exc
+    except store.Busy as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Another time shift or reset is running.") from exc
+    except (scenarios.ScenarioRefused, ShiftRefused) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc

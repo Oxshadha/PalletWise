@@ -1,0 +1,11 @@
+# Simulator spec 6. The New Year ramp (calendar) plus inbound for five festival-sensitive beverages
+# and snacks delayed by 6 days. FESTIVAL_SHORTAGE is checked in Slice 6 (slice-4-acceptance D7).
+id: festival_rush
+title: Festival rush with late deliveries
+description: Inbound for 5 festival-sensitive Beverages and Snacks SKUs is delayed by 6 days.
+events:
+  - { after: "0m", type: delay_inbound, skus: [SKU-229, SKU-319, SKU-349, SKU-365, SKU-329], days: 6 }
+expect: []
+tour:
+  - "Which items are running low on stock?"
+  - "How many days of cover do we have for the beverages category?"
