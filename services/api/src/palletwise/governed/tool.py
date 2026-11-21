@@ -292,8 +292,10 @@ def _catalog_text() -> str:
 RUN_GOVERNED_QUERY = ToolSpec(
     name="run_governed_query",
     description=(
-        "LAST RESORT. Use only when no other tool and no query_inventory request can express the "  # noqa: S608 (prose)
-        "question. One read-only SELECT over these governed views (nothing else is reachable):\n"
+        "LAST RESORT, but use it instead of declining: when no other tool and no query_inventory "  # noqa: S608 (prose)
+        "request can express the question and the data is in these governed views, write one "
+        "read-only SELECT over them (nothing else is reachable). Decline only when the views do not "
+        "hold the data or the rules below forbid the calculation.\n"
         f"{_catalog_text()}\n"
         "Rules: JOIN a view only on its key, from a column that refers to it (many to one); sum or "
         "avg only measures of the first view in FROM, only with the aggregates listed; never add "
