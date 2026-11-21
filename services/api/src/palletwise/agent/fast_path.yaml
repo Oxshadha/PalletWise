@@ -56,3 +56,19 @@ questions:
   - text: are slow movers sitting in the fast-pick zone
     tool: get_slow_in_prime
     arguments: {}
+  # Slice 3 step 7 (D5): what the inbox shows, from its own records.
+  - text: what needs my attention
+    tool: get_open_exceptions
+    arguments: {}
+  - text: what needs my attention today
+    tool: get_open_exceptions
+    arguments: {}
+  - text: what should i look at first
+    tool: get_open_exceptions
+    arguments: {}
+  - text: show me the open exceptions
+    tool: get_open_exceptions
+    arguments: {}
+  - text: what are the top exceptions
+    tool: get_open_exceptions
+    arguments: {}

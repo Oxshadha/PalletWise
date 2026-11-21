@@ -26,6 +26,7 @@ REPORTS = ROOT / "docs" / "quality" / "performance"
 
 # Semantic spec 9, p95 budgets in milliseconds.
 SINGLE, SITE_WIDE, DSL = 50.0, 300.0, 1000.0
+EVALUATION = 2000.0  # full exception evaluation, all types (semantic spec 9)
 DSL_TIMEOUT_S = 3.0
 
 
@@ -276,6 +277,104 @@ def main(argv: list[str] | None = None) -> int:
         results.append(row)
         sys.stdout.write(
             f"{row['verdict']:5} p95 {row.get('p95_ms', '-'):>7} ms (budget {budget:.0f})  {name}\n"
+        )
+
+    # Slice 3 (step 7): the exception engine, the inbox, the brief and search at this volume.
+    from palletwise.semantic import brief as brief_facts
+    from palletwise.semantic import exceptions
+
+    evaluator, brief_pool = role_pool("PW_EVALUATOR", max_size=1), role_pool("PW_BRIEF", max_size=1)
+
+    def timed(name: str, budget: float, once: Callable[[], int]) -> None:
+        timings: list[float] = []
+        error, count = None, None
+        for i in range(args.runs + 3):
+            try:
+                started = time.perf_counter()
+                count = once()
+                elapsed = (time.perf_counter() - started) * 1000
+            except Exception as exc:  # recorded, never hidden
+                error = f"{type(exc).__name__}: {str(exc)[:200]}"
+                break
+            if i >= 3:
+                timings.append(elapsed)
+        row: dict[str, Any] = {"call": name, "budget_ms": budget, "error": error, "reference": None}
+        if timings:
+            row |= {
+                "p50_ms": round(statistics.median(timings), 1),
+                "p95_ms": round(_pct(timings, 0.95), 1),
+                "max_ms": round(max(timings), 1),
+                "rows": count,
+                "status": "OK",
+            }
+            row["verdict"] = "pass" if row["p95_ms"] <= budget else "fail"
+        else:
+            row["verdict"] = "error"
+        results.append(row)
+        sys.stdout.write(
+            f"{row['verdict']:5} p95 {row.get('p95_ms', '-'):>7} ms (budget {budget:.0f})  {name}\n"
+        )
+
+    def read_with(fn: Callable[[Any], int]) -> Callable[[], int]:
+        def once() -> int:
+            with tenant_session(read, TENANT, read_snapshot=True) as conn:
+                return fn(conn)
+
+        return once
+
+    def evaluate() -> int:
+        """A full evaluation as the worker runs it, forced by a changed key and rolled back, so the
+        measurement never changes the site's exceptions."""
+        with evaluator.connection() as conn:
+            try:
+                conn.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT),))
+                conn.execute(
+                    "UPDATE pw.exception_engine_state SET evaluation_key = 'perf' WHERE site_id = %s", (SITE,)
+                )
+                row = conn.execute("SELECT * FROM pw.evaluate_site_exceptions(%s)", (SITE,)).fetchone()
+                assert row is not None and row[0] == "evaluated", row
+                return int(row[1] + row[2] + row[3])
+            finally:
+                conn.rollback()
+
+    def stored_brief() -> int:
+        with tenant_session(brief_pool, TENANT) as conn:
+            return len(
+                conn.execute("SELECT items FROM pw.daily_brief WHERE site_id = %s", (SITE,)).fetchall()
+            )
+
+    with tenant_session(read, TENANT, read_snapshot=True) as conn:
+        order = conn.execute(
+            "SELECT order_no FROM sem.order_line WHERE site_id = %s AND is_open"
+            " ORDER BY dispatch_deadline LIMIT 1",
+            (SITE,),
+        ).fetchone()
+    timed("exception evaluation, all types (forced, rolled back)", EVALUATION, evaluate)
+    timed("inbox (GET exceptions)", SITE_WIDE, read_with(lambda c: len(exceptions.inbox(c, SITE).exceptions)))
+    timed(
+        "get_open_exceptions 5",
+        SITE_WIDE,
+        read_with(lambda c: exceptions.open_exceptions(c, SITE, 5).row_count),
+    )
+    timed(
+        "brief facts, first visit of the day (4 site-wide reads)",
+        4 * SITE_WIDE,
+        read_with(lambda c: len(brief_facts.brief_facts(c, SITE).items)),
+    )
+    timed("brief, a later visit (stored read)", SINGLE, stored_brief)
+    if order is not None:
+        timed(
+            f"get_order_status {order[0]}",
+            SITE_WIDE,
+            read_with(lambda c: rules.order_status(c, SITE, order[0]).row_count),
+        )
+    for text in ("SKU-1", "A1-0", "SO-2026", "mix"):
+        timed(
+            f"search {text!r}",
+            SITE_WIDE,
+            read_with(
+                lambda c, t=text: len(c.execute("SELECT * FROM sem.search(%s, %s)", (SITE, t)).fetchall())
+            ),
         )
 
     # Correctness at this volume: the tools' highlights against the independent reference queries.

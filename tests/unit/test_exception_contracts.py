@@ -76,3 +76,18 @@ def test_an_order_number_routes_to_the_order_tool_on_the_fast_path() -> None:
     # Two kinds of identifier, or no order word, go to the model.
     assert fast_path.route("Does SO-1042 include SKU-102?") is None
     assert fast_path.route("SO-1042 thanks") is None
+
+
+def test_what_needs_my_attention_reads_the_inbox_on_the_fast_path() -> None:
+    from palletwise.agent import fast_path
+
+    for question in (
+        "What needs my attention?",
+        "what needs my attention today",
+        "What should I look at first?",
+        "Show me the open exceptions.",
+        "What are the top exceptions?",
+    ):
+        route = fast_path.route(question)
+        assert route is not None and (route.tool, route.arguments) == ("get_open_exceptions", {}), question
+    assert fast_path.route("What needs my attention in zone B?") is None  # qualified: the model

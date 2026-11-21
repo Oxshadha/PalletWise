@@ -1,0 +1,8 @@
+{
+ "ref": "get_order_status:SO-20260401-OUT022",
+ "dataset_version": "sim-v1-seed42-14d",
+ "locations": [
+  "A1-05-02",
+  "A3-06-02"
+ ]
+}

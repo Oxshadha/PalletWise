@@ -28,7 +28,14 @@ from evals.measure import (
 from evals.reference import run_reference
 from palletwise import clock
 from palletwise.agent.guardrails import grounding_problems
-from palletwise.agent.runtime import CARD_OUTCOMES, RuntimeConfig, choose_route, data_block, model_view
+from palletwise.agent.runtime import (
+    CARD_OUTCOMES,
+    PRODUCTION_RUNTIME,
+    RuntimeConfig,
+    choose_route,
+    data_block,
+    model_view,
+)
 from palletwise.contracts.results import ResultEnvelope, WorkingSet
 from palletwise.llm import DisabledProvider, LLMProvider
 from palletwise.tools.catalog import v1_tools
@@ -230,7 +237,58 @@ def deterministic(env: EvalEnv, cases: list[Case], config: RuntimeConfig | None 
                 for case in (c for c in cases if c.role == role):
                     results.append(_deterministic_case(env, executor, api, case, by_id, config))
     order = {c.id: i for i, c in enumerate(cases)}
-    return sorted(results, key=lambda r: order[r.case])
+    ordered = sorted(results, key=lambda r: order[r.case])
+    return [*ordered, consistency(env)]
+
+
+def consistency(env: EvalEnv) -> CaseResult:
+    """One product, three readings, one moment (slice-3-acceptance step 7): every stored LOW_STOCK
+    exception's product and bin are in the copilot's get_low_stock answer and show LOW_STOCK on
+    the map, read at the same as_of and settings version as the exception was evaluated."""
+    executor = env.executor()
+    checks: list[Check] = []
+    records = env.superuser.execute(
+        "SELECT p.sku, b.code, x.settings_version_id, x.last_evaluated_at"
+        "  FROM pw.exception_record x JOIN pw.product p ON p.id = x.product_id"
+        "  JOIN pw.exception_bin eb ON eb.exception_id = x.id JOIN pw.bin b ON b.id = eb.bin_id"
+        " WHERE x.site_id = %s AND x.exception_type = 'LOW_STOCK' AND x.status <> 'RESOLVED'",
+        (env.site,),
+    ).fetchall()
+    checks.append(Check("exceptions", bool(records), f"{len(records)} low stock exceptions"))
+    call = executor.execute(_run_context(env, "warehouse_manager"), "get_low_stock", {})
+    if call.outcome is not Outcome.OK:
+        checks.append(Check("tool", False, f"{call.outcome.value}: {call.message}"))
+    else:
+        answer: ResultEnvelope = call.output
+        answered = {(r["sku"], r["bin_code"]) for r in answer.rows}
+        missing = sorted({(sku, code) for sku, code, _, _ in records} - answered)
+        checks.append(
+            Check("tool-agrees", not missing, f"not in the answer: {missing}" if missing else "all")
+        )
+        states = _map_states(env, answer)
+        wrong = sorted(code for _, code, _, _ in records if states.get(code) != "LOW_STOCK")
+        checks.append(
+            Check("map-agrees", not wrong, f"not LOW_STOCK on the map: {wrong}" if wrong else "all")
+        )
+        moments = {(str(v), t) for _, _, v, t in records}
+        same = moments == {(str(answer.evidence.settings_version_id), answer.evidence.as_of)}
+        checks.append(
+            Check("one-moment", same, f"exceptions {sorted(moments)}, answer {answer.evidence.as_of}")
+        )
+    return CaseResult("CONS-001", "consistency", "CONSISTENCY", all(c.ok for c in checks), checks)
+
+
+def _map_states(env: EvalEnv, answer: ResultEnvelope) -> dict[str, str]:
+    """The map's bin states (UX spec 5) at the answer's moment, as the map endpoint reads them."""
+    from palletwise.db.connection import role_pool, tenant_session
+
+    with tenant_session(role_pool("PW_AGENT_READ"), env.tenant, read_snapshot=True) as conn:
+        rows = conn.execute(
+            "SELECT l.bin_code, s.state FROM sem.bin_states(%s, %s, %s) s"
+            " JOIN sem.location l ON l.bin_id = s.bin_id",
+            (env.site, answer.evidence.as_of, answer.evidence.settings_version_id),
+        ).fetchall()
+    return {code: state for code, state in rows}
 
 
 def _follow_up_working_set(
@@ -343,6 +401,37 @@ def model(
 ) -> list[CaseResult]:
     """One configuration, every case `runs` times (evals spec 6)."""
     return compare(env, cases, providers, [config or RuntimeConfig()], runs)[0][1]
+
+
+def brief_wording(env: EvalEnv, providers: Callable[[], LLMProvider]) -> dict[str, Any]:
+    """The daily brief worded by the real model (slice-3-acceptance step 7): how many items, how
+    many of those with results the model worded, and whether any model sentence is ungrounded
+    against its own stored item (the runtime rejects those; this checks that it did)."""
+    from palletwise.agent.guardrails import grounding_problems
+
+    with env.api(providers(), config=PRODUCTION_RUNTIME) as api:
+        api.sign_in("warehouse_manager")
+        response = api.client.get(f"/api/sites/{env.site}/brief")
+    if response.status_code != 200:
+        return {
+            "brief": {"items": 0, "ungrounded": None, "model_share": None, "status": response.status_code}
+        }
+    items = response.json()["items"]
+    asked = [i for i in items if i["result"]["status"] == "OK"]
+    worded = [i for i in asked if i["text_source"] == "model"]
+    ungrounded = sum(
+        1 for i in worded if grounding_problems(i["text"], [ResultEnvelope.model_validate(i["result"])], "")
+    )
+    return {
+        "brief": {
+            "items": len(items),
+            "asked": len(asked),
+            "model_worded": len(worded),
+            "model_share": round(len(worded) / len(asked), 3) if asked else None,
+            "ungrounded": ungrounded,
+            "sentences": {i["kind"]: {"source": i["text_source"], "text": i["text"]} for i in items},
+        }
+    }
 
 
 def config_names(configs: Sequence[RuntimeConfig]) -> list[str]:

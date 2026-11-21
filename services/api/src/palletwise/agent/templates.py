@@ -180,6 +180,22 @@ def _order(result: ResultEnvelope) -> str:
     )
 
 
+def _open_exceptions(result: ResultEnvelope) -> str:
+    r = _first(result)
+    total = int(result.normalized_request["open_exceptions"])
+    subject = _subject(str(r["subject"]))
+    which = (
+        f"{str(r['exception_type']).lower()} for {subject}" if subject else str(r["exception_type"]).lower()
+    )
+    if result.normalized_request.get("exception_id"):
+        return f"This is the {which}, rank {r['rank']} in the inbox with score {r['score']}."
+    kind = f"{str(r['exception_type']).lower()} " if result.normalized_request.get("exception_type") else ""
+    return (
+        f"{total} {kind}{_plural(total, 'exception is', 'exceptions are')} open. The highest impact is "
+        f"the {which}, score {r['score']}, rank {r['rank']} in the inbox."
+    )
+
+
 def _subject(text: str) -> str:
     """A subject in words; never one that carries instruction text found in data (FR-COP-12)."""
     return "" if instruction_echo(text, "") else text
@@ -280,6 +296,7 @@ TEMPLATES: dict[str, Callable[[ResultEnvelope], str]] = {
     "get_order_stockout_risks": _stockout,
     "query_inventory": _query,
     "get_order_status": _order,
+    "get_open_exceptions": _open_exceptions,
     "brief_top_exceptions": _brief_exceptions,
     "brief_throughput": _brief_throughput,
     "brief_data_freshness": _brief_freshness,
@@ -335,6 +352,12 @@ def key_facts(tool: str, result: ResultEnvelope) -> tuple[str, ...]:
                 facts = [str(r[result.columns[0].key])] + ([str(r[measure.key])] if measure else [])
             else:
                 facts = [_how_many(result), str(r[result.columns[0].key])]
+        case "get_open_exceptions":
+            facts = [str(r["score"])] + (
+                []
+                if result.normalized_request.get("exception_id")
+                else [str(result.normalized_request["open_exceptions"])]
+            )
         case "get_order_status":
             facts = [str(r["order_no"])] + (["delayed"] if r["delayed"] and r["status"] != "SHIPPED" else [])
         case "brief_top_exceptions":

@@ -20,22 +20,13 @@ from palletwise.contracts.results import (
 )
 from palletwise.db.connection import Connection, query
 from palletwise.semantic import exceptions, rules
+from palletwise.semantic.exceptions import TYPE_TEXT
 from palletwise.semantic.locations import Moment, SiteNotReady, read_moment
 from palletwise.semantic.model import semantic_model
 
 ItemKind = Literal["top_exceptions", "orders_at_risk_today", "throughput", "data_freshness"]
 TOP_EXCEPTIONS = 3
 
-# The type in words, as the inbox writes it.
-TYPE_TEXT = {
-    "STOCKOUT_RISK": "Stockout risk",
-    "DELAYED_ORDER": "Delayed order",
-    "LOW_STOCK": "Low stock",
-    "DEAD_STOCK": "Dead stock",
-    "SLOW_IN_PRIME": "Slow stock in a prime location",
-    "CAPACITY_HOTSPOT": "Capacity hotspot",
-    "FESTIVAL_SHORTAGE": "Festival shortage",
-}
 STREAM_TEXT = {
     "MASTER": "Master data",
     "MOVEMENTS": "Stock movements",

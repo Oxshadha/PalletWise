@@ -29,6 +29,10 @@ GOLDEN_TABLES = (
     "movement",
     "outbound_order",
     "order_line",
+    # Slice 3 (the stored exceptions the inbox shows; allocations for one order's locations)
+    "exception_record",
+    "exception_bin",
+    "allocation",
 )
 MAX_HIGHLIGHTS = 200  # semantic spec 7.6
 
@@ -321,6 +325,56 @@ def _stockout(conn: psycopg.Connection, site: UUID, view: str) -> list[str]:
     )
 
 
+def _open_exceptions(conn: psycopg.Connection, site: UUID, argument: str) -> list[str]:
+    """The locations of the top N current exceptions in the inbox order (stored records; zones for
+    capacity hotspots), read straight from the exception tables."""
+    limit = int(argument or 5)
+    return _codes(
+        conn,
+        """
+        WITH top AS (
+          SELECT id, zone_id FROM pw.exception_record
+           WHERE site_id = %(site)s AND status IN ('OPEN', 'ACKNOWLEDGED')
+           ORDER BY score DESC, critical DESC, first_detected_at, id LIMIT %(limit)s
+        )
+        SELECT b.code FROM top JOIN pw.exception_bin eb ON eb.exception_id = top.id
+          JOIN pw.bin b ON b.id = eb.bin_id
+        UNION
+        SELECT 'zone:' || z.code FROM top JOIN pw.zone z ON z.id = top.zone_id
+        """,
+        {"site": site, "limit": limit},
+    )
+
+
+def _order_status(conn: psycopg.Connection, site: UUID, order_no: str) -> list[str]:
+    """One open order's locations: the bins its lines hold open allocations in, and the active pick
+    bins (stocked, or a policy's pick bin) of products on lines not fully allocated."""
+    return _codes(
+        conn,
+        """
+        WITH lines AS (
+          SELECT l.id, l.product_id, l.qty_ordered - l.qty_allocated AS unallocated
+            FROM pw.order_line l JOIN pw.outbound_order o ON o.id = l.order_id
+           WHERE o.site_id = %(site)s AND o.order_no = %(order)s
+             AND o.status NOT IN ('SHIPPED', 'CANCELLED')
+        )
+        SELECT b.code FROM lines JOIN pw.allocation a ON a.order_line_id = lines.id
+          JOIN pw.bin b ON b.id = a.bin_id
+         WHERE a.qty - a.qty_consumed - a.qty_released > 0
+        UNION
+        SELECT b.code FROM lines JOIN pw.inventory_balance ib ON ib.product_id = lines.product_id
+          JOIN pw.bin b ON b.id = ib.bin_id
+         WHERE lines.unallocated > 0 AND b.site_id = %(site)s AND b.bin_role = 'PICK' AND b.is_active
+           AND (ib.on_hand > 0 OR ib.allocated > 0)
+        UNION
+        SELECT b.code FROM lines JOIN pw.replenishment_policy rp ON rp.product_id = lines.product_id
+          JOIN pw.bin b ON b.id = rp.pick_bin_id
+         WHERE lines.unallocated > 0 AND rp.site_id = %(site)s
+        """,
+        {"site": site, "order": order_no},
+    )
+
+
 REFERENCES: dict[str, Callable[[psycopg.Connection, UUID, str], list[str]]] = {
     "find_product_locations": _product_locations,
     "get_bin_contents": _bin,
@@ -331,6 +385,8 @@ REFERENCES: dict[str, Callable[[psycopg.Connection, UUID, str], list[str]]] = {
     "get_zone_summary": _zone_summary,
     "get_capacity_hotspots": _capacity_hotspots,
     "get_order_stockout_risks": _stockout,
+    "get_open_exceptions": _open_exceptions,
+    "get_order_status": _order_status,
 }
 # References whose argument is optional (the rule takes its parameters from the site's settings).
 NO_ARGUMENT = {
@@ -339,6 +395,7 @@ NO_ARGUMENT = {
     "get_slow_in_prime",
     "get_zone_summary",
     "get_capacity_hotspots",
+    "get_open_exceptions",
 }
 
 

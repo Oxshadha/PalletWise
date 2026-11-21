@@ -4,11 +4,12 @@ semantic layer: no business rule lives here (semantic spec 8). Descriptions are 
 
 from collections.abc import Callable
 from typing import Literal, Self
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from palletwise.contracts.results import ResultEnvelope
-from palletwise.semantic import locations, query, rules
+from palletwise.semantic import exceptions, locations, query, rules
 from palletwise.semantic.model import semantic_model
 from palletwise.semantic.query_request import QueryRequest, check
 from palletwise.tools.executor import ToolContext, ToolRegistry, ToolSpec
@@ -230,6 +231,35 @@ def _query_description() -> str:
     )
 
 
+ExceptionTypeName = Literal[
+    "STOCKOUT_RISK", "DELAYED_ORDER", "LOW_STOCK", "DEAD_STOCK", "SLOW_IN_PRIME", "CAPACITY_HOTSPOT",
+]  # fmt: skip
+
+
+class GetOpenExceptionsInput(StrictInput):
+    limit: int = Field(default=5, ge=1, le=20, description="How many, highest impact first")
+    exception_type: ExceptionTypeName | None = Field(default=None, description="Only this type")
+    exception_id: UUID | None = Field(
+        default=None, description="One exception the user has open (page context); not with exception_type"
+    )
+
+    @model_validator(mode="after")
+    def one_filter(self) -> Self:
+        if self.exception_id is not None and self.exception_type is not None:
+            raise ValueError("give exception_id or exception_type, not both")
+        return self
+
+
+GET_OPEN_EXCEPTIONS = _rule_tool(
+    "get_open_exceptions",
+    "The open and acknowledged exceptions the inbox shows, ranked by impact score, with the order "
+    "lines affected, hours until due and value at risk behind each score. Read only.",
+    GetOpenExceptionsInput,
+    "inventory.read",
+    lambda ctx, p: exceptions.open_exceptions(ctx.conn, ctx.site, p.limit, p.exception_type, p.exception_id),
+)
+
+
 class GetOrderStatusInput(StrictInput):
     order_no: str = Field(pattern=ORDER_NO_PATTERN, description="Exact order number, for example SO-1042")
 
@@ -258,7 +288,7 @@ SLICE_2_TOOLS = (
 )  # fmt: skip
 
 
-SLICE_3_TOOLS = (GET_ORDER_STATUS,)
+SLICE_3_TOOLS = (GET_ORDER_STATUS, GET_OPEN_EXCEPTIONS)
 
 
 def v1_tools() -> ToolRegistry:

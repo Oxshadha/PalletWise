@@ -174,11 +174,21 @@ def _lookup(metrics: dict[str, Any], path: str) -> Any:
     return value
 
 
-def check_gates(metrics: dict[str, Any]) -> list[dict[str, Any]]:
+# The daily brief's wording (slice-3-acceptance step 7, facts gate): every item present, no
+# model sentence ungrounded, and the model's wording used for at least half of the items it was
+# asked to word (below that the checks reject it so often that the brief is mostly templates).
+BRIEF_GATES: tuple[Gate, ...] = (
+    Gate("quality", "brief.items", "==", 4),
+    Gate("quality", "brief.ungrounded", "==", 0),
+    Gate("quality", "brief.model_share", ">=", 0.5),
+)
+
+
+def check_gates(metrics: dict[str, Any], gates: tuple[Gate, ...] = GATES) -> list[dict[str, Any]]:
     """Every gate with its value and verdict. A gate with no runs to measure is "no data", which
     is reported as such and never passes silently."""
     out: list[dict[str, Any]] = []
-    for gate in GATES:
+    for gate in gates:
         value = _lookup(metrics, gate.metric)
         if value is None:
             verdict = "no data"

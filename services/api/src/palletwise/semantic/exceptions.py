@@ -12,13 +12,18 @@ from uuid import UUID
 
 from palletwise.contracts.results import (
     EXCEPTION_REASON,
+    Column,
+    EntityRef,
     Highlight,
+    ResultEnvelope,
+    ResultStatus,
     Severity,
     exception_severity,
 )
 from palletwise.db.connection import Connection, query
 from palletwise.semantic.locations import read_moment
-from palletwise.semantic.rules import distinct_highlights
+from palletwise.semantic.model import semantic_model
+from palletwise.semantic.rules import STOCK_AND_DEMAND, distinct_entities, distinct_highlights
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +80,8 @@ def _highlights(row: dict[str, Any], bins: list[UUID], severity: Severity) -> tu
 
 
 def inbox(conn: Connection, site: UUID) -> Inbox:
-    """Open and acknowledged exceptions, highest score first."""
+    """Open and acknowledged exceptions of this site, highest score first (row-level security
+    adds the tenant)."""
     moment = read_moment(conn, site)
     cursor = query(
         conn,
@@ -141,3 +147,108 @@ def inbox(conn: Connection, site: UUID) -> Inbox:
             )
         )
     return Inbox(moment.as_of, moment.time_zone, found)
+
+
+# ---------------------------------------------------------------- get_open_exceptions (D5, step 7)
+
+TYPE_TEXT = {
+    "STOCKOUT_RISK": "Stockout risk",
+    "DELAYED_ORDER": "Delayed order",
+    "LOW_STOCK": "Low stock",
+    "DEAD_STOCK": "Dead stock",
+    "SLOW_IN_PRIME": "Slow stock in a prime location",
+    "CAPACITY_HOTSPOT": "Capacity hotspot",
+    "FESTIVAL_SHORTAGE": "Festival shortage",
+}
+
+
+def _col(key: str, label: str, kind: str = "text", unit: str | None = None) -> Column:
+    return Column(key=key, label=label, type=kind, unit=unit)  # type: ignore[arg-type]
+
+
+OPEN_EXCEPTION_COLUMNS = (
+    _col("rank", "Rank", "integer"),
+    _col("exception_type", "Type"),
+    _col("subject", "Subject"),
+    _col("score", "Score", "number"),
+    _col("severity", "Severity"),
+    _col("status", "Status"),
+    _col("lines", "Order lines affected", "integer"),
+    _col("hours_until_due", "Hours until due", "number", "hours"),
+    _col("value_at_risk", "Value at risk", "number"),
+)
+
+
+def open_exceptions(
+    conn: Connection,
+    site: UUID,
+    limit: int,
+    exception_type: str | None = None,
+    exception_id: UUID | None = None,
+) -> ResultEnvelope:
+    """The inbox's own records for the copilot (D5): the stored exceptions, ranked exactly as the
+    inbox ranks them, with the components behind each score. Nothing is recalculated. `rank` is the
+    position in the whole inbox, so "rank 2" means the same thing to the copilot and the Manager."""
+    request: dict[str, Any] = {"tool": "get_open_exceptions", "limit": limit}
+    if exception_type is not None:
+        request["exception_type"] = exception_type
+    if exception_id is not None:
+        request["exception_id"] = str(exception_id)
+    every = inbox(conn, site)
+    ranked = list(enumerate(every.exceptions, start=1))
+    if exception_id is not None:
+        chosen = [(r, x) for r, x in ranked if x.exception_id == exception_id]
+    else:
+        chosen = [(r, x) for r, x in ranked if exception_type is None or x.exception_type == exception_type]
+    total = len(chosen)
+    shown = chosen[:limit]
+    request["open_exceptions"] = total
+    moment = read_moment(conn, site)
+    how = semantic_model().explain("get_open_exceptions", as_of=moment.local_time)
+    evidence = moment.evidence(STOCK_AND_DEMAND, how)
+    if not shown:
+        message = (
+            "That exception is not open at this site."
+            if exception_id is not None
+            else "No exception of that type is open."
+            if exception_type is not None
+            else "No exception is open."
+        )
+        status = ResultStatus.NOT_FOUND if exception_id is not None else ResultStatus.NO_RESULTS
+        return ResultEnvelope(status=status, message=message, evidence=evidence, normalized_request=request)
+    rows = tuple(
+        {
+            "rank": rank,
+            "exception_type": TYPE_TEXT[x.exception_type],
+            "subject": x.subject_label,
+            "score": x.score,
+            "severity": x.severity.value,
+            "status": x.status,
+            "lines": x.components.get("lines"),
+            "hours_until_due": x.components.get("hours_until_due"),
+            "value_at_risk": x.components.get("value_at_risk"),
+            "lines_normalized": x.components.get("lines_normalized"),
+            "urgency_normalized": x.components.get("urgency_normalized"),
+            "value_normalized": x.components.get("value_normalized"),
+            "order_nos": [o.order_no for o in x.orders],
+        }
+        for rank, x in shown
+    )
+    seen: dict[tuple[str, UUID], Highlight] = {}
+    for _, x in shown:
+        for h in x.highlights:
+            seen.setdefault((h.target_type, h.target_id), h)
+    entities = distinct_entities(
+        [EntityRef(type="product", id=x.product_id, label=x.subject_label) for _, x in shown if x.product_id],
+        [EntityRef(type="zone", id=x.zone_id, label=x.subject_label) for _, x in shown if x.zone_id],
+    )
+    return ResultEnvelope(
+        status=ResultStatus.OK,
+        columns=OPEN_EXCEPTION_COLUMNS,
+        rows=rows,
+        truncated=total > len(shown),
+        highlights=tuple(seen.values()),
+        evidence=evidence,
+        entities=entities,
+        normalized_request=request,
+    )
