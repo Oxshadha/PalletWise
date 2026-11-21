@@ -1124,6 +1124,40 @@
         "title": "RackOut",
         "type": "object"
       },
+      "ResetOut": {
+        "properties": {
+          "clock_start": {
+            "format": "date-time",
+            "title": "Clock Start",
+            "type": "string"
+          },
+          "data_status": {
+            "title": "Data Status",
+            "type": "string"
+          },
+          "new_run": {
+            "format": "uuid",
+            "title": "New Run",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "reset",
+              "repeated"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "new_run",
+          "clock_start",
+          "data_status"
+        ],
+        "title": "ResetOut",
+        "type": "object"
+      },
       "ResultEnvelope": {
         "additionalProperties": false,
         "properties": {
@@ -2939,6 +2973,69 @@
           }
         },
         "summary": "Simulation State",
+        "tags": [
+          "simulation"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/simulation/reset": {
+      "post": {
+        "description": "Discards the site's simulation run and rebuilds it from the seed (simulator spec 7.1). The\nsimulator ends the old run first, under the run's lock, so a reset during a shift or scenario is\nrefused as busy before anything changes (D9). Then one transaction resets PalletWise's side and\naudits it; the simulation admin service loads the new run as at the first load.",
+        "operationId": "reset_simulation_api_sites__site_id__simulation_reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{8,128}$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResetOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "409": {
+            "description": "NOT_SIMULATED or SIMULATION_BUSY"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "SIMULATOR_UNAVAILABLE"
+          }
+        },
+        "summary": "Reset Simulation",
         "tags": [
           "simulation"
         ]

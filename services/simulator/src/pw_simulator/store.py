@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS sim.input_log (
   scenario_id  text,
   PRIMARY KEY (run_id, n)
 );
+-- Slice 4 reset: an ended run takes no more shifts or scenarios (simulator spec 7.1 step 2).
+ALTER TABLE sim.run ADD COLUMN IF NOT EXISTS ended_at timestamptz;
 REVOKE ALL ON sim.run, sim.outbox, sim.command, sim.input_log FROM PUBLIC;
 GRANT SELECT ON sim.outbox TO sim_outbox_reader;
 """
@@ -125,18 +127,25 @@ def run_state(conn: psycopg.Connection, run_id: str) -> dict[str, Any]:
     return {"run_id": run_id, "clock_start": row[0].isoformat(), "emitted_until": row[1].isoformat()}
 
 
+class RunEnded(ValueError):
+    """The run was ended by a reset; a new run replaces it."""
+
+
 def _lock(conn: psycopg.Connection, run_id: str) -> tuple[int, str, datetime, int, datetime]:
     """The run row, locked without waiting: a second operation meanwhile is refused as busy (D9)."""
     try:
         row = conn.execute(
             "SELECT seed, dataset_version, clock_start, history_days,"
-            " coalesce(emitted_until, clock_start) FROM sim.run WHERE run_id = %s FOR UPDATE NOWAIT",
+            " coalesce(emitted_until, clock_start), ended_at"
+            " FROM sim.run WHERE run_id = %s FOR UPDATE NOWAIT",
             (run_id,),
         ).fetchone()
     except psycopg.errors.LockNotAvailable as exc:
         raise Busy(run_id) from exc
     if row is None:
         raise UnknownRun(run_id)
+    if row[5] is not None:
+        raise RunEnded("This simulation run was reset; a new run replaces it.")
     return (int(row[0]), str(row[1]), row[2], int(row[3]), row[4])
 
 
@@ -224,6 +233,30 @@ def run_scenario(conn: psycopg.Connection, run_id: str, scenario_id: str, key: s
         }
         _record(conn, run_id, key, "SCENARIO", result)
         return result
+
+
+def end_run(conn: psycopg.Connection, run_id: str) -> dict[str, Any]:
+    """Ends a run for a reset (simulator spec 7.1 step 2): under the run's lock, so a reset while a
+    shift or scenario runs is refused as busy (D9). Idempotent: ending an ended run changes nothing.
+    Its outbox stays; the connector skips an ended run's records (spec 2.1)."""
+    with conn.transaction():
+        try:
+            row = conn.execute(
+                "SELECT ended_at FROM sim.run WHERE run_id = %s FOR UPDATE NOWAIT", (run_id,)
+            ).fetchone()
+        except psycopg.errors.LockNotAvailable as exc:
+            raise Busy(run_id) from exc
+        if row is None:
+            raise UnknownRun(run_id)
+        ended: datetime | None = row[0]
+        if ended is None:
+            stamped = conn.execute(
+                "UPDATE sim.run SET ended_at = now() WHERE run_id = %s RETURNING ended_at", (run_id,)
+            ).fetchone()
+            assert stamped is not None
+            ended = stamped[0]
+    assert ended is not None
+    return {"run_id": run_id, "ended_at": ended.isoformat()}
 
 
 def write_run(conn: psycopg.Connection, params: RunParams, records: Sequence[OutRecord]) -> None:

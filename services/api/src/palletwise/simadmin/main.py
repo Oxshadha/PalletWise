@@ -6,7 +6,8 @@ Slice 0 responsibility: the initial load.
   3. Wait until the connector has ingested everything up to LOAD_COMPLETE.
   4. Compute the dataset hash; compare with the golden hash for the seed if one exists.
   5. Mark the run ACTIVE and the site READY, or both FAILED.
-Play, pause, speed, jump, scenarios and reset arrive in a later slice.
+After the first load it keeps watching the site: a reset (the API's `pw.reset_simulated_site()`,
+Slice 4 step 4) leaves a new BUILDING run, which is loaded by the same steps 2 to 5.
 
 `palletwise-simadmin record-golden` writes the current run's hash as the golden file.
 """
@@ -39,6 +40,7 @@ log = logging.getLogger("palletwise.simadmin")
 SITE_WIDTH_M = 80.0
 SITE_DEPTH_M = 50.0
 LOAD_TIMEOUT_SECONDS = float(os.environ.get("PW_SIM_LOAD_TIMEOUT_SECONDS", "1800"))
+WATCH_SECONDS = float(os.environ.get("PW_SIM_WATCH_SECONDS", "2"))
 
 
 def golden_path(sim: SimulationSettings) -> Path:
@@ -173,19 +175,41 @@ class SimAdmin:
                 raise TimeoutError(f"initial load did not finish within {LOAD_TIMEOUT_SECONDS:.0f} seconds")
             clock.sleep(2)
 
+    def load(self, run: site_repo.RunState) -> None:
+        """Steps 2 to 5 for a BUILDING run: the first load, or the new run after a reset."""
+        if run.status != "BUILDING":
+            return
+        try:
+            self.start_generation(run)
+            run = self.wait_for_load(run)
+            self.finalize(run)
+        except Exception as exc:
+            log.exception("load of run %s failed", run.run_id)
+            with self._pool.connection() as conn:
+                site_repo.fail_load(conn, DEMO_TENANT_ID, DEMO_SITE_ID, run.run_id, str(exc))
+            self._set(ready=False, data_status="FAILED", detail=str(exc))
+            return
+        self.report()
+
     def run(self) -> None:
-        run = self.ensure_run()
-        if run.status == "BUILDING":
+        self.load(self.ensure_run())
+        self.report()
+
+    def watch(self) -> None:
+        """Loads each new BUILDING run a reset leaves; a failed run waits for the next reset."""
+        while True:
+            clock.sleep(WATCH_SECONDS)
             try:
-                self.start_generation(run)
-                run = self.wait_for_load(run)
-                self.finalize(run)
-            except Exception as exc:
-                log.exception("initial load failed")
-                with self._pool.connection() as conn:
-                    site_repo.fail_load(conn, DEMO_TENANT_ID, DEMO_SITE_ID, run.run_id, str(exc))
-                self._set(ready=False, data_status="FAILED", detail=str(exc))
-                return
+                current = self.latest_run()
+            except Exception:
+                log.exception("status read failed; retrying")
+                continue
+            if current is not None and current.status == "BUILDING":
+                log.info("run %s is BUILDING: loading it", current.run_id)
+                self._set(ready=False, data_status="REBUILDING")
+                self.load(current)
+
+    def report(self) -> None:
         with self._pool.connection() as conn:
             site = status_repo.site_status(conn, DEMO_TENANT_ID, DEMO_SITE_ID)
         self._set(
@@ -221,8 +245,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     serve_health(health_port(8082), admin.status)
     admin.run()
-    while True:  # stays up for the admin controls added in a later slice
-        clock.sleep(3600)
+    admin.watch()
+    return 0
 
 
 if __name__ == "__main__":

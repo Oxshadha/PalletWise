@@ -6,9 +6,10 @@ whether a shift is still being ingested; for every reader of the site.
 `POST /api/sites/{id}/simulation/shift`: by +1 hour, +4 hours, +1 day, +1 week, to the next
 operating morning, or to a time. `GET .../simulation/scenarios` lists the scenarios and
 `POST .../simulation/scenario` stages one (step 3): its events go to the simulator's input log and
-time moves one tick. Both writes: scope `simulation.control` (Manager and Admin, D3), refused unless
-the site's clock mode is `SIMULATED`; `Idempotency-Key` required; audited with before and after;
-the CSRF check applies as to every state change. PalletWise never moves its own clock: the
+time moves one tick. `POST .../simulation/reset` discards the run and rebuilds the site from the
+seed (simulator spec 7.1). All three writes: scope `simulation.control` (Manager and Admin, D3),
+refused unless the site's clock mode is `SIMULATED`; `Idempotency-Key` required; audited with
+before and after; the CSRF check applies as to every state change. PalletWise never moves its own clock: the
 simulator emits the period through the outbox and the clock follows the ingested tick markers (D1).
 """
 
@@ -26,7 +27,8 @@ from palletwise.api.problems import problem
 from palletwise.api.security import CurrentPrincipal
 from palletwise.api.sites import Reads, authorize_site
 from palletwise.db.audit_repo import AuditEntry
-from palletwise.db.simulation_repo import site_simulation
+from palletwise.db.ids import uuid7
+from palletwise.db.simulation_repo import Reset, reset_site, site_simulation
 from palletwise.settings import SimulationSettings
 from palletwise.telemetry.tracing import current_trace_id
 
@@ -64,6 +66,8 @@ class Simulator(Protocol):
     def scenarios(self) -> list[dict[str, Any]]: ...
 
     def run_scenario(self, run_id: UUID, scenario: str, key: str) -> dict[str, Any]: ...
+
+    def end_run(self, run_id: UUID) -> dict[str, Any]: ...
 
 
 @dataclass
@@ -103,6 +107,9 @@ class HttpSimulator:
             self._call("POST", f"/runs/{run_id}/scenario", {"scenario": scenario, "idempotency_key": key})
         )
 
+    def end_run(self, run_id: UUID) -> dict[str, Any]:
+        return dict(self._call("POST", f"/runs/{run_id}/end"))
+
 
 def simulator(request: Request) -> Simulator:
     found: Simulator | None = getattr(request.app.state, "simulator", None)
@@ -141,6 +148,13 @@ class ShiftOut(BaseModel):
     from_time: datetime
     to: datetime
     records: int
+
+
+class ResetOut(BaseModel):
+    outcome: Literal["reset", "repeated"]
+    new_run: UUID
+    clock_start: datetime
+    data_status: str  # REBUILDING until the new run is loaded and checked
 
 
 class ScenarioInfo(BaseModel):
@@ -364,4 +378,86 @@ async def run_scenario(
         scenario=str(result["scenario"]), title=str(result["title"]), events=int(result["events"]),
         from_time=datetime.fromisoformat(result["from"]), to=datetime.fromisoformat(result["to"]),
         records=int(result["records"]), tour=[str(t) for t in result["tour"]],
+    )  # fmt: skip
+
+
+RESET_REFUSALS = {
+    "not_found": (404, "NOT_FOUND", "Not found."),
+    "not_simulated": (409, "NOT_SIMULATED", "This site's data comes from a real WMS; it cannot be reset."),
+    "loading": (409, "SIMULATION_BUSY", "The site is still loading. Try again when it is ready."),
+    "busy": (409, "SIMULATION_BUSY", "Another time shift or reset is running. Try again shortly."),
+}
+
+
+@router.post(
+    "/reset",
+    response_model=ResetOut,
+    responses={
+        403: {"description": "FORBIDDEN"},
+        409: {"description": "NOT_SIMULATED or SIMULATION_BUSY"},
+        503: {"description": "SIMULATOR_UNAVAILABLE"},
+    },
+)
+async def reset_simulation(
+    site_id: UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    reads: Reads,
+    idempotency_key: Annotated[str, Header(pattern=IDEMPOTENCY_KEY)],
+) -> Any:
+    """Discards the site's simulation run and rebuilds it from the seed (simulator spec 7.1). The
+    simulator ends the old run first, under the run's lock, so a reset during a shift or scenario is
+    refused as busy before anything changes (D9). Then one transaction resets PalletWise's side and
+    audits it; the simulation admin service loads the new run as at the first load."""
+    refused = await authorize_site(
+        principal, site_id, "simulation.reset", reads, scope=CONTROL_SCOPE,
+        refusal="You do not have permission to reset this site's simulation.",
+    )  # fmt: skip
+    if refused is not None:
+        return refused
+    trace_id = current_trace_id()
+    found = await asyncio.to_thread(site_simulation, reads.app_pool, principal.tenant, site_id)
+    if found is None:
+        return problem(404, "NOT_FOUND", "Not found.", trace_id)
+    if found.mode != "SIMULATED":
+        status, code, message = RESET_REFUSALS["not_simulated"]
+        return problem(status, code, message, trace_id)
+    identity = principal.identity
+
+    def entry(outcome: str, result: Reset | None) -> AuditEntry:
+        return AuditEntry(
+            actor_type="USER", action="simulation.reset", outcome=outcome, trace_id=trace_id, site_id=site_id,
+            user_subject=identity.subject, user_role=identity.role, scope=CONTROL_SCOPE, decision="ALLOW",
+            parameters={
+                "idempotency_key": idempotency_key,
+                "from_time": found.site_time.isoformat() if found.site_time else None,
+                "old_run": str(result.old_run) if result and result.old_run else None,
+                "new_run": str(result.new_run) if result and result.new_run else None,
+            },
+        )  # fmt: skip
+
+    if found.run_id is not None:  # an ACTIVE run: the simulator ends it first
+        try:
+            await asyncio.to_thread(simulator(request).end_run, found.run_id)
+        except SimulatorUnavailable:
+            return problem(
+                503, "SIMULATOR_UNAVAILABLE", "The simulator is not reachable right now.", trace_id
+            )
+        except SimulatorRefused as exc:
+            if exc.status != 409:
+                raise
+            await asyncio.to_thread(reads.audit.append, identity.tenant, entry("BUSY", None))
+            status, code, message = RESET_REFUSALS["busy"]
+            return problem(status, code, message, trace_id)
+    result = await asyncio.to_thread(
+        reset_site, reads.app_pool, principal.tenant, site_id, uuid7(), identity.subject, idempotency_key,
+        lambda r: entry(r.outcome.upper(), r),
+    )  # fmt: skip
+    if result.outcome in RESET_REFUSALS:
+        status, code, message = RESET_REFUSALS[result.outcome]
+        return problem(status, code, message, trace_id)
+    assert result.new_run is not None and result.clock_start is not None
+    return ResetOut(
+        outcome=result.outcome,  # pyright: ignore[reportArgumentType]
+        new_run=result.new_run, clock_start=result.clock_start, data_status="REBUILDING",
     )  # fmt: skip

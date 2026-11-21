@@ -1,5 +1,7 @@
 """Regression tests for code-review findings on Slice 0 (no database needed)."""
 
+import contextlib
+import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -96,3 +98,28 @@ def test_access_log_never_records_query_strings() -> None:
     DropQueryStrings().filter(record)
     message = record.getMessage()
     assert "/api/auth/callback" in message and "s3cret" not in message and "c0de" not in message
+
+
+def test_simadmin_records_a_failed_load_as_failed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A run left by a reset whose generation fails becomes FAILED, never READY (simulator 7.1)."""
+    from palletwise.simadmin import main as simadmin
+
+    run = simadmin.site_repo.RunState(uuid.uuid4(), "BUILDING", False, None, 42, "test")
+    admin: Any = object.__new__(simadmin.SimAdmin)
+    admin._lock, admin._status = threading.Lock(), {}
+    failed: list[str] = []
+
+    class Pool:
+        def connection(self) -> Any:
+            return contextlib.nullcontext(None)
+
+    admin._pool = Pool()
+
+    def refuse(_run: object) -> None:
+        raise RuntimeError("simulator refused the run")
+
+    monkeypatch.setattr(admin, "start_generation", refuse, raising=False)
+    monkeypatch.setattr(simadmin.site_repo, "fail_load", lambda *a: failed.append(a[-1]))
+    simadmin.SimAdmin.load(admin, run)
+    assert failed == ["simulator refused the run"]
+    assert admin._status["data_status"] == "FAILED"

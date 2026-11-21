@@ -350,6 +350,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sites/{site_id}/simulation/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Simulation
+         * @description Discards the site's simulation run and rebuilds it from the seed (simulator spec 7.1). The
+         *     simulator ends the old run first, under the run's lock, so a reset during a shift or scenario is
+         *     refused as busy before anything changes (D9). Then one transaction resets PalletWise's side and
+         *     audits it; the simulation admin service loads the new run as at the first load.
+         */
+        post: operations["reset_simulation_api_sites__site_id__simulation_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sites/{site_id}/simulation/scenario": {
         parameters: {
             query?: never;
@@ -857,6 +880,26 @@ export interface components {
              * Format: uuid
              */
             zone_id: string;
+        };
+        /** ResetOut */
+        ResetOut: {
+            /**
+             * Clock Start
+             * Format: date-time
+             */
+            clock_start: string;
+            /** Data Status */
+            data_status: string;
+            /**
+             * New Run
+             * Format: uuid
+             */
+            new_run: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "reset" | "repeated";
         };
         /** ResultEnvelope */
         ResultEnvelope: {
@@ -1894,6 +1937,60 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    reset_simulation_api_sites__site_id__simulation_reset_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetOut"];
+                };
+            };
+            /** @description FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description NOT_SIMULATED or SIMULATION_BUSY */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description SIMULATOR_UNAVAILABLE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

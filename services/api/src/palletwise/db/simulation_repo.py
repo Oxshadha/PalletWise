@@ -4,11 +4,15 @@ PalletWise never moves its own clock: it reads the site's state here and asks th
 emits the period through the outbox like any WMS (slice-4-acceptance D1).
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from palletwise.db.connection import Pool, tenant_session
+from psycopg.types.json import Jsonb
+
+from palletwise.db.audit_repo import AuditEntry
+from palletwise.db.connection import Pool, tenant_session, tenant_transaction
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,3 +42,28 @@ def site_simulation(pool: Pool, tenant: UUID, site: UUID) -> SiteSimulation | No
             (site,),
         ).fetchone()
     return SiteSimulation(*row) if row else None
+
+
+@dataclass(frozen=True, slots=True)
+class Reset:
+    outcome: str  # reset, repeated, not_found, not_simulated, loading, busy
+    old_run: UUID | None
+    new_run: UUID | None
+    clock_start: datetime | None
+
+
+def reset_site(
+    pool: Pool, tenant: UUID, site: UUID, new_run: UUID, subject: str, key: str,
+    audit: Callable[[Reset], AuditEntry],
+) -> Reset:  # fmt: skip
+    """`pw.reset_simulated_site()` (CWM 7.4 step 1) and its audit entry in one transaction: a
+    failed audit rolls the reset back."""
+    with pool.connection() as conn, tenant_transaction(conn, tenant):
+        row = conn.execute(
+            "SELECT outcome, old_run, new_run, clock_start FROM pw.reset_simulated_site(%s, %s, %s, %s)",
+            (site, new_run, subject, key),
+        ).fetchone()
+        assert row is not None
+        found = Reset(*row)
+        conn.execute("SELECT pw.append_audit(%s, %s)", (tenant, Jsonb(audit(found).as_json())))
+    return found
