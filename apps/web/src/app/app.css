@@ -212,3 +212,39 @@
   align-items: center;
   gap: var(--pw-space-2);
 }
+
+/* Sign-in screen: one centred glass card. */
+.pw-signin {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: var(--pw-space-6) var(--pw-space-4);
+}
+
+.pw-signin-card {
+  width: min(26rem, 100%);
+  align-items: center;
+  gap: var(--pw-space-3);
+  padding: var(--pw-space-8) var(--pw-space-6);
+  text-align: center;
+  box-shadow: var(--pw-shadow-popover);
+}
+
+.pw-signin-card h1,
+.pw-signin-card p {
+  margin: 0;
+}
+
+.pw-signin-logo {
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
+.pw-signin-error {
+  color: var(--pw-color-status-critical);
+}
+
+.pw-signin-button {
+  width: 100%;
+  margin-top: var(--pw-space-2);
+}

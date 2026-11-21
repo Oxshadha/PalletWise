@@ -12,7 +12,6 @@ import {
   fetchMe,
   fetchSiteStatus,
   type Me,
-  signIn,
   SignedOut,
   signOut,
   type SiteStatus,
@@ -27,6 +26,7 @@ import { useSiteChanges } from "../shared/api/siteEvents";
 import { formatSiteTime, siteDate } from "../shared/format";
 import { Icon } from "../shared/ui/Icon";
 import { WorkspaceProvider } from "../shared/workspace/WorkspaceContext";
+import { SignIn } from "./SignIn";
 
 /** Data status text (UX spec 2); the copilot input shows the same text while not READY. */
 const NOT_READY_TEXT: Record<string, string> = {
@@ -141,13 +141,14 @@ function ProfileMenu({ me, siteName }: { me: Me; siteName: string | null }) {
  */
 export function App() {
   const [authError] = useState(signInError);
+  const [signedOut, setSignedOut] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const [site, setSite] = useState<SiteStatus | null>(null);
   const [unreachable, setUnreachable] = useState(false);
   const [panel, setPanel] = useState<Panel>("warehouse");
 
   useEffect(() => {
-    if (authError) return;
+    if (authError || signedOut) return;
     const controller = new AbortController();
     const load = async () => {
       try {
@@ -157,7 +158,7 @@ export function App() {
         setSite(first ? await fetchSiteStatus(first.id, controller.signal) : null);
         setUnreachable(false);
       } catch (error) {
-        if (error instanceof SignedOut) signIn();
+        if (error instanceof SignedOut) setSignedOut(true);
         else if (!controller.signal.aborted) setUnreachable(true);
       }
     };
@@ -167,7 +168,7 @@ export function App() {
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [authError]);
+  }, [authError, signedOut]);
 
   // The header's site time and data status follow the site stream (agent spec 9.2).
   const siteId = me?.sites[0]?.id ?? null;
@@ -198,6 +199,9 @@ export function App() {
   const siteInfo = me?.sites[0] ?? null;
   const notReady =
     site && site.data_status !== "READY" ? (NOT_READY_TEXT[site.data_status] ?? null) : null;
+
+  // No session, or a sign-in that failed: the sign-in screen alone.
+  if (authError || signedOut) return <SignIn error={authError} />;
 
   const shell = (
     <div className="pw-app">
@@ -282,18 +286,6 @@ export function App() {
             choosePanel("copilot");
           }}
         />
-      )}
-
-      {authError && (
-        <main className="pw-center">
-          <section className="pw-panel pw-message-card">
-            <h1>Sign-in was not completed</h1>
-            <p role="alert">{authError}</p>
-            <button type="button" className="pw-button" onClick={signIn}>
-              Sign in
-            </button>
-          </section>
-        </main>
       )}
 
       {unreachable && (

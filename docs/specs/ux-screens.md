@@ -228,3 +228,4 @@ Per slice-4-acceptance D2, D3, D6 and D8. Shown below the page heading, only whe
 | 2026-11-21 | Slice 3 step 5: section 6a, today's brief in the copilot panel (product owner choice Q1 a). |
 | 2026-11-21 | Slice 3 step 6: the search command box as built (section 2). |
 | 2026-11-21 | Slice 4 step 5: section 9b (time bar, confirmations, progress, guided demo, bell). The 3D scene renders on demand (`frameloop="demand"`); in the 2D plan a highlighted zone's mark carries the zone's name in place of its plain label, so the two no longer overlap. |
+| 2026-11-21 | Sign-in screen: without a session (or after sign-out) the app shows one centred card with the logo, a line about the product and **Sign in**, instead of jumping to the identity provider; a failed sign-in shows its reason there. Sign in starts at the API (BFF); the identity provider's page still takes the password. |
