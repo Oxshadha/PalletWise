@@ -214,6 +214,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sites/{site_id}/brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Daily Brief */
+        get: operations["daily_brief_api_sites__site_id__brief_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Site Events */
+        get: operations["site_events_api_sites__site_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/exceptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Exceptions */
+        get: operations["list_exceptions_api_sites__site_id__exceptions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/exceptions/{exception_id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge Exception */
+        post: operations["acknowledge_exception_api_sites__site_id__exceptions__exception_id__acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sites/{site_id}/layout": {
         parameters: {
             query?: never;
@@ -248,6 +316,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sites/{site_id}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search */
+        get: operations["search_api_sites__site_id__search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sites/{site_id}/status": {
         parameters: {
             query?: never;
@@ -269,6 +354,33 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcknowledgementOut */
+        AcknowledgementOut: {
+            /**
+             * Acknowledged At
+             * Format: date-time
+             */
+            acknowledged_at: string;
+            /** Acknowledged By */
+            acknowledged_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "ACKNOWLEDGED";
+        };
+        /** AffectedOrderOut */
+        AffectedOrderOut: {
+            /** Order Id */
+            order_id: string | null;
+            /** Order No */
+            order_no: string;
+        };
         /** BinOut */
         BinOut: {
             /** Bay */
@@ -318,6 +430,65 @@ export interface components {
              * @enum {string}
              */
             state: "NORMAL" | "EMPTY" | "LOW_STOCK" | "OVER_CAPACITY";
+        };
+        /** BriefItemOut */
+        BriefItemOut: {
+            /** Highlights */
+            highlights: components["schemas"]["Highlight"][];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "top_exceptions" | "orders_at_risk_today" | "throughput" | "data_freshness";
+            link: components["schemas"]["BriefLinkOut"] | null;
+            result: components["schemas"]["ResultEnvelope"];
+            /** Text */
+            text: string;
+            /**
+             * Text Source
+             * @enum {string}
+             */
+            text_source: "model" | "template";
+            /** Title */
+            title: string;
+            /** Why */
+            why: string;
+        };
+        /** BriefLinkOut */
+        BriefLinkOut: {
+            suggestion?: components["schemas"]["SuggestionOut"] | null;
+            /**
+             * To
+             * @enum {string}
+             */
+            to: "inbox" | "copilot";
+        };
+        /** BriefOut */
+        BriefOut: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Business Date
+             * Format: date
+             */
+            business_date: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Items */
+            items: components["schemas"]["BriefItemOut"][];
+            /** Time Zone */
+            time_zone: string;
+            /**
+             * Wording Source
+             * @enum {string}
+             */
+            wording_source: "model" | "template" | "mixed";
         };
         /** Column */
         Column: {
@@ -407,6 +578,73 @@ export interface components {
             settings_version_id: string | null;
             /** Settings Version No */
             settings_version_no?: number | null;
+            /** Time Zone */
+            time_zone: string;
+        };
+        /** ExceptionOut */
+        ExceptionOut: {
+            /** Acknowledged At */
+            acknowledged_at: string | null;
+            /** Acknowledged By */
+            acknowledged_by: string | null;
+            components: components["schemas"]["ScoreComponentsOut"];
+            /**
+             * Exception Type
+             * @enum {string}
+             */
+            exception_type: "STOCKOUT_RISK" | "DELAYED_ORDER" | "LOW_STOCK" | "DEAD_STOCK" | "SLOW_IN_PRIME" | "CAPACITY_HOTSPOT" | "FESTIVAL_SHORTAGE";
+            /**
+             * First Detected At
+             * Format: date-time
+             */
+            first_detected_at: string;
+            /** Highlights */
+            highlights: components["schemas"]["Highlight"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Evaluated At
+             * Format: date-time
+             */
+            last_evaluated_at: string;
+            /** Order Id */
+            order_id: string | null;
+            /** Orders */
+            orders: components["schemas"]["AffectedOrderOut"][];
+            /** Product Id */
+            product_id: string | null;
+            /** Score */
+            score: number;
+            /**
+             * Settings Version Id
+             * Format: uuid
+             */
+            settings_version_id: string;
+            severity: components["schemas"]["Severity"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "OPEN" | "ACKNOWLEDGED";
+            /** Subject Key */
+            subject_key: string;
+            /** Subject Label */
+            subject_label: string;
+            /** Zone Id */
+            zone_id: string | null;
+        };
+        /** ExceptionsOut */
+        ExceptionsOut: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Exceptions */
+            exceptions: components["schemas"]["ExceptionOut"][];
             /** Time Zone */
             time_zone: string;
         };
@@ -514,6 +752,10 @@ export interface components {
         PageContext: {
             /** Selected Bin */
             selected_bin?: string | null;
+            /** Selected Exception Id */
+            selected_exception_id?: string | null;
+            /** Selected Exception Type */
+            selected_exception_type?: ("STOCKOUT_RISK" | "DELAYED_ORDER" | "LOW_STOCK" | "DEAD_STOCK" | "SLOW_IN_PRIME" | "CAPACITY_HOTSPOT" | "FESTIVAL_SHORTAGE") | null;
             /** Selected Zone */
             selected_zone?: string | null;
         };
@@ -642,6 +884,66 @@ export interface components {
             suggestions: unknown[];
             /** Trace Id */
             trace_id: string;
+        };
+        /**
+         * ScoreComponentsOut
+         * @description The raw inputs, their 0 to 1 normalization, caps and weights (semantic 6.1).
+         */
+        ScoreComponentsOut: {
+            /** Hours Cap */
+            hours_cap: number;
+            /** Hours Until Due */
+            hours_until_due: number | null;
+            /** Lines */
+            lines: number;
+            /** Lines Cap */
+            lines_cap: number;
+            /** Lines Normalized */
+            lines_normalized: number;
+            /** Urgency Normalized */
+            urgency_normalized: number;
+            /** Value At Risk */
+            value_at_risk: number;
+            /** Value Cap */
+            value_cap: number;
+            /** Value Normalized */
+            value_normalized: number;
+            /** Weight Lines */
+            weight_lines: number;
+            /** Weight Urgency */
+            weight_urgency: number;
+            /** Weight Value */
+            weight_value: number;
+        };
+        /** SearchOut */
+        SearchOut: {
+            /** Query */
+            query: string;
+            /** Results */
+            results: components["schemas"]["SearchResultOut"][];
+        };
+        /** SearchResultOut */
+        SearchResultOut: {
+            /** Code */
+            code: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "product" | "bin" | "order";
+            /** Label */
+            label: string | null;
+            /**
+             * Match
+             * @enum {string}
+             */
+            match: "exact" | "prefix" | "name";
+            suggestion: components["schemas"]["SuggestionOut"];
         };
         /**
          * Severity
@@ -1122,6 +1424,183 @@ export interface operations {
             };
         };
     };
+    daily_brief_api_sites__site_id__brief_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefOut"];
+                };
+            };
+            /** @description FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description DATA_NOT_READY or BRIEF_PREPARING */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    site_events_api_sites__site_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "last-event-id"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Site change hints (agent spec 9.2) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_exceptions_api_sites__site_id__exceptions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExceptionsOut"];
+                };
+            };
+            /** @description FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description DATA_NOT_READY */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    acknowledge_exception_api_sites__site_id__exceptions__exception_id__acknowledge_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                site_id: string;
+                exception_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcknowledgementOut"];
+                };
+            };
+            /** @description FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description EXCEPTION_RESOLVED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description VALIDATION_FAILED */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     layout_api_sites__site_id__layout_get: {
         parameters: {
             query?: never;
@@ -1190,6 +1669,44 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    search_api_sites__site_id__search_get: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchOut"];
+                };
+            };
+            /** @description FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description VALIDATION_FAILED */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

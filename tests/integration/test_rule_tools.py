@@ -150,16 +150,20 @@ def test_capacity_hotspots_highlight_zones_and_their_over_capacity_bins(
     run: Any, connect_as: Connect
 ) -> None:
     f = FixtureSite(connect_as)
-    a, b = f.zone("A"), f.zone("B")
+    a, b, c = f.zone("A"), f.zone("B"), f.zone("C")
     bulky = f.product("BULKY", volume_m3=0.05, weight_kg=0.5)
     f.stock(f.bin(a, "A-01"), bulky, 25)  # 125%: over capacity
     f.stock(f.bin(a, "A-02"), bulky, 1)
     f.stock(f.bin(b, "B-01"), bulky, 2)  # 10%: not a hotspot
+    f.stock(f.bin(c, "C-01"), bulky, 19)  # 95%: hot by utilization, no bin over capacity
     envelope = ok(run(f, "get_capacity_hotspots"))
-    assert [r["zone_code"] for r in envelope.rows] == ["A"]
-    assert codes(f, envelope) == [
+    assert sorted(r["zone_code"] for r in envelope.rows) == ["A", "C"]
+    # One severity per exception, as the inbox shows it (agent spec 10): a zone with a bin over
+    # capacity is critical whatever its utilization; a zone hot by utilization alone is a warning.
+    assert sorted(codes(f, envelope)) == [
         ("bin", "A-01", "capacity", "critical"),
-        ("zone", "A", "capacity", "warning"),
+        ("zone", "A", "capacity", "critical"),
+        ("zone", "C", "capacity", "warning"),
     ]
     assert "90 percent" in envelope.evidence.how_computed[0]
 

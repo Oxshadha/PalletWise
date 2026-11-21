@@ -12,7 +12,7 @@ import threading
 import time
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 from uuid import UUID, uuid4
@@ -32,10 +32,11 @@ from palletwise.api.app import create_app
 from palletwise.auth.crypto import KeyRing
 from palletwise.auth.oidc import OidcClient
 from palletwise.auth.service import AuthService
+from palletwise.contracts.results import exception_severity
 from palletwise.db import dataset_hash, site_repo
 from palletwise.db.agent_repo import AgentRegistry
 from palletwise.db.audit_repo import AuditLog
-from palletwise.db.connection import role_pool
+from palletwise.db.connection import role_pool, tenant_session
 from palletwise.db.copilot_repo import ConversationStore, RateLimiter, UsageLedger
 from palletwise.db.session_repo import SessionStore
 from palletwise.llm import ResolvedModel
@@ -134,7 +135,7 @@ class Env:
 
 
 @pytest.fixture
-def env(ready_site: Site, connect_session: Connect, opa_url: str) -> Generator[Env]:
+def env(ready_site: Site, connect_as: Connect, opa_url: str) -> Generator[Env]:
     idp, models = FakeIdp(), Models()
     oidc = OidcClient(
         OidcSettings(
@@ -176,7 +177,7 @@ def env(ready_site: Site, connect_session: Connect, opa_url: str) -> Generator[E
         PolicyClient(PolicySettings(url=opa_url)), audit, app_pool, role_pool("PW_AGENT_READ")
     )
     client = TestClient(create_app(auth, WebSettings(public_origin=ORIGIN), services, reads), base_url=ORIGIN)
-    db = connect_session("postgres")
+    db = connect_as("postgres")  # closed after the test (a session connection per test exhausted slots)
     db.autocommit = True
     env = Env(idp, client, ready_site, db, models)
     yield env
@@ -751,3 +752,664 @@ def test_a_persona_question_is_answered_on_the_fast_path_without_a_model(env: En
         assert finished["outcome"] == "ANSWER" and "at or below the minimum" in text
         assert {h["reason"] for h in result["result"]["highlights"]} == {"low_stock"}
     assert not any(d in text for d in ("\u2013", "\u2014"))
+
+
+# ---------------------------------------------------------------- site live stream (Slice 3 step 2)
+
+
+def read_events(lines: Any, count: int) -> list[tuple[str, int, dict[str, Any]]]:
+    """The next `count` SSE events as (event, id, data)."""
+    found: list[tuple[str, int, dict[str, Any]]] = []
+    event, ident = "", 0
+    for line in lines:
+        if line.startswith("event: "):
+            event = line[7:]
+        elif line.startswith("id: "):
+            ident = int(line[4:])
+        elif line.startswith("data: "):
+            found.append((event, ident, json.loads(line[6:])))
+            if len(found) == count:
+                return found
+    return found
+
+
+def tick(env: Env) -> None:
+    with env.db.transaction():
+        env.db.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
+        env.db.execute(
+            "UPDATE pw.site_clock SET sim_time = sim_time + interval '1 second' WHERE site_id = %s",
+            (env.site.site,),
+        )
+
+
+def test_the_site_stream_says_hello_then_what_changed(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    from palletwise.api import events
+
+    monkeypatch.setattr(events, "HEARTBEAT_SECONDS", 0.5)
+    env.sign_in()
+    url = f"/api/sites/{env.site.site}/events"
+    with env.client.stream("GET", url) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        lines = response.iter_lines()
+        ((kind, start, _),) = read_events(lines, 1)
+        assert kind == "hello"
+        tick(env)
+        ((kind, seq, data),) = read_events((x for x in lines if not x.startswith("event: heartbeat")), 1)
+        while kind == "heartbeat":
+            ((kind, seq, data),) = read_events(lines, 1)
+        assert kind == "change" and seq == start + 1 and data == {"kinds": ["clock"], "complete": True}
+    # A reconnecting client names the last event it applied and is told what it missed.
+    tick(env)
+    with env.client.stream("GET", url, headers={"Last-Event-ID": str(start)}) as response:
+        ((kind, seq, data),) = read_events(response.iter_lines(), 1)
+        assert kind == "change" and seq == start + 2 and data["kinds"] == ["clock"]
+
+
+def test_the_site_stream_is_site_scoped_and_needs_a_session(env: Env) -> None:
+    assert env.client.get(f"/api/sites/{env.site.site}/events").status_code == 401
+    env.sign_in()
+    assert env.client.get(f"/api/sites/{uuid4()}/events").status_code == 404
+
+
+# ---------------------------------------------------------------- Slice 3 step 3: exceptions API
+
+
+def evaluate(env: Env) -> None:
+    with tenant_session(role_pool("PW_EVALUATOR"), env.site.tenant) as conn:
+        conn.execute("SELECT * FROM pw.evaluate_site_exceptions(%s)", (env.site.site,)).fetchone()
+
+
+def current_records(env: Env) -> dict[str, dict[str, Any]]:
+    cursor = env.db.execute(
+        "SELECT * FROM pw.exception_record WHERE site_id = %s AND status <> 'RESOLVED'", (env.site.site,)
+    )
+    names = [c.name for c in cursor.description or ()]
+    return {str(r[0]): dict(zip(names, r, strict=True)) for r in cursor.fetchall()}
+
+
+def acknowledge(env: Env, exception_id: str, key: str | None = None, site: UUID | None = None) -> Any:
+    headers = {"Origin": ORIGIN, "Idempotency-Key": key or uuid4().hex}
+    url = f"/api/sites/{site or env.site.site}/exceptions/{exception_id}/acknowledge"
+    return env.client.post(url, headers=headers)
+
+
+def site_time(env: Env) -> tuple[datetime] | None:
+    sql = "SELECT sim_time FROM pw.site_clock WHERE site_id = %s"
+    return env.db.execute(sql, (env.site.site,)).fetchone()
+
+
+def audited(env: Env, exception_id: str) -> list[tuple[str, str]]:
+    return [
+        (r[0], r[1])
+        for r in env.db.execute(
+            "SELECT outcome, user_role FROM pw.audit_event WHERE tenant_id = %s"
+            " AND action = 'exception.acknowledge' AND parameters->>'exception_id' = %s ORDER BY seq",
+            (env.site.tenant, exception_id),
+        ).fetchall()
+    ]
+
+
+def test_the_inbox_ranks_current_exceptions_and_explains_each_rank(env: Env) -> None:
+    evaluate(env)
+    records = current_records(env)
+    assert records, "the reference data raises exceptions"
+    env.sign_in()
+    body = env.client.get(f"/api/sites/{env.site.site}/exceptions").json()
+    listed = body["exceptions"]
+    assert {x["id"] for x in listed} == set(records)
+    assert [x["score"] for x in listed] == sorted((x["score"] for x in listed), reverse=True)
+    for x in listed:
+        stored = records[x["id"]]
+        assert x["score"] == float(stored["score"]) and x["components"] == stored["score_components"]
+        assert x["severity"] == exception_severity(stored["exception_type"], stored["critical"])
+        assert datetime.fromisoformat(x["first_detected_at"]) == stored["first_detected_at"]
+        bins = {
+            str(r[0])
+            for r in env.db.execute("SELECT bin_id FROM pw.exception_bin WHERE exception_id = %s", (x["id"],))
+        }
+        assert {h["target_id"] for h in x["highlights"] if h["target_type"] == "bin"} == bins
+        assert {h["severity"] for h in x["highlights"]} <= {x["severity"]}
+        orders = env.db.execute(
+            "SELECT order_no FROM pw.exception_order WHERE exception_id = %s ORDER BY order_no", (x["id"],)
+        ).fetchall()
+        assert [o["order_no"] for o in x["orders"]] == [r[0] for r in orders]
+    clock = site_time(env)
+    assert clock is not None and datetime.fromisoformat(body["as_of"]) == clock[0]
+
+
+def test_a_manager_acknowledges_once_and_a_repeat_changes_nothing(env: Env) -> None:
+    evaluate(env)
+    target = next(k for k, r in current_records(env).items() if r["status"] == "OPEN")
+    env.sign_in(subject="manager-ack")
+    assert acknowledge(env, target, key="short").status_code == 422  # the key is required and well formed
+    first = acknowledge(env, target)
+    assert first.status_code == 200
+    clock = site_time(env)
+    assert first.json()["acknowledged_by"] == "manager-ack"
+    assert clock is not None and datetime.fromisoformat(first.json()["acknowledged_at"]) == clock[0]
+    again = acknowledge(env, target)
+    assert again.status_code == 200 and again.json() == first.json()
+    events = env.db.execute(
+        "SELECT event FROM pw.exception_evaluation WHERE exception_id = %s AND event = 'ACKNOWLEDGED'",
+        (target,),
+    ).fetchall()
+    assert len(events) == 1
+    assert audited(env, target) == [("ACKNOWLEDGED", "warehouse_manager"), ("UNCHANGED", "warehouse_manager")]
+    # Acknowledged is not resolved: still listed, same score, still evaluated (2.4 rule 1).
+    evaluate(env)
+    inbox = env.client.get(f"/api/sites/{env.site.site}/exceptions").json()
+    listed = {x["id"]: x for x in inbox["exceptions"]}
+    assert listed[target]["status"] == "ACKNOWLEDGED"
+    assert listed[target]["score"] == float(current_records(env)[target]["score"])
+    # A state change needs our origin (CSRF, identity spec 7).
+    url = f"/api/sites/{env.site.site}/exceptions/{target}/acknowledge"
+    assert env.client.post(url, headers={"Idempotency-Key": uuid4().hex}).status_code == 403
+
+
+def test_an_admin_reads_the_inbox_but_cannot_acknowledge(env: Env) -> None:
+    evaluate(env)
+    target = next(k for k, r in current_records(env).items() if r["status"] == "OPEN")
+    env.sign_in(subject="admin-ack", role="admin")
+    assert env.client.get(f"/api/sites/{env.site.site}/exceptions").status_code == 200
+    refused = acknowledge(env, target)
+    assert refused.status_code == 403 and refused.json()["code"] == "FORBIDDEN"
+    assert current_records(env)[target]["status"] == "OPEN"
+    denied = env.db.execute(
+        "SELECT user_role, deny_reasons FROM pw.audit_event WHERE tenant_id = %s"
+        " AND action = 'exception.acknowledge' AND decision = 'DENY' ORDER BY seq DESC LIMIT 1",
+        (env.site.tenant,),
+    ).fetchone()
+    assert denied == ("admin", ["role_lacks_scope"])
+
+
+def test_another_sites_or_tenants_exception_is_not_found(env: Env) -> None:
+    evaluate(env)
+    target = next(k for k, r in current_records(env).items() if r["status"] == "OPEN")
+    other_site = uuid4()
+    env.sign_in(subject="manager-two-sites", sites=[env.site.site, other_site])
+    assert acknowledge(env, target, site=other_site).status_code == 404  # allowed site, not its record
+    assert acknowledge(env, str(uuid4())).status_code == 404
+    assert acknowledge(env, target, site=uuid4()).status_code == 404  # a site outside the session
+    with tenant_session(role_pool("PW_APP"), uuid4()) as conn:
+        row = conn.execute(
+            "SELECT outcome FROM pw.acknowledge_exception(%s, %s, 'intruder')", (env.site.site, target)
+        ).fetchone()
+    assert row == ("not_found",)
+    assert current_records(env)[target]["status"] == "OPEN"
+    # pw_app writes exceptions only through the function (CWM 11.3).
+    with (
+        pytest.raises(psycopg.errors.InsufficientPrivilege),
+        tenant_session(role_pool("PW_APP"), env.site.tenant) as conn,
+    ):
+        conn.execute("UPDATE pw.exception_record SET status = 'ACKNOWLEDGED' WHERE id = %s", (target,))
+
+
+def test_a_resolved_exception_cannot_be_acknowledged(env: Env) -> None:
+    evaluate(env)
+    target = next(k for k, r in current_records(env).items() if r["status"] == "OPEN")
+    env.db.execute(
+        "UPDATE pw.exception_record SET status = 'RESOLVED', resolution_reason = 'CONDITION_CLEARED',"
+        " resolved_at = last_evaluated_at WHERE id = %s",
+        (target,),
+    )
+    env.sign_in()
+    refused = acknowledge(env, target)
+    assert refused.status_code == 409 and refused.json()["code"] == "EXCEPTION_RESOLVED"
+    listed = env.client.get(f"/api/sites/{env.site.site}/exceptions").json()["exceptions"]
+    assert target not in {x["id"] for x in listed}
+
+
+def test_concurrent_acknowledgements_make_one_transition(env: Env, connect_as: Connect) -> None:
+    evaluate(env)
+    target = next(k for k, r in current_records(env).items() if r["status"] == "OPEN")
+    call = "SELECT outcome FROM pw.acknowledge_exception(%s, %s, %s)"
+    first, second = connect_as("pw_app"), connect_as("pw_app")
+    outcomes: list[str] = []
+    with first.transaction():
+        first.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
+        row = first.execute(call, (env.site.site, target, "manager-a")).fetchone()
+        assert row is not None
+        outcomes.append(row[0])
+
+        def other() -> None:  # waits on the row lock until the first commits
+            with second.transaction():
+                second.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
+                found = second.execute(call, (env.site.site, target, "manager-b")).fetchone()
+                assert found is not None
+                outcomes.append(found[0])
+
+        waiting = threading.Thread(target=other)
+        waiting.start()
+        time.sleep(0.5)
+        assert waiting.is_alive(), "the second acknowledgement waits for the first"
+    waiting.join(10)
+    assert outcomes == ["acknowledged", "unchanged"]
+    events = env.db.execute(
+        "SELECT count(*) FROM pw.exception_evaluation WHERE exception_id = %s AND event = 'ACKNOWLEDGED'",
+        (target,),
+    ).fetchone()
+    assert events == (1,) and current_records(env)[target]["acknowledged_by"] == "manager-a"
+
+
+def test_a_failed_audit_rolls_the_acknowledgement_back(env: Env) -> None:
+    from palletwise.db import exceptions_repo
+    from palletwise.db.audit_repo import AuditEntry
+
+    evaluate(env)
+    target = next(k for k, r in current_records(env).items() if r["status"] == "OPEN")
+
+    def broken(outcome: exceptions_repo.Outcome) -> AuditEntry:  # refused by the audit table
+        return AuditEntry(actor_type="NOBODY", action="exception.acknowledge", outcome=outcome, trace_id="t")  # type: ignore[arg-type]
+
+    with pytest.raises(psycopg.errors.CheckViolation):
+        exceptions_repo.acknowledge(
+            role_pool("PW_APP"), env.site.tenant, env.site.site, UUID(target), "manager-x", broken
+        )
+    assert current_records(env)[target]["status"] == "OPEN"
+    events = env.db.execute(
+        "SELECT count(*) FROM pw.exception_evaluation WHERE exception_id = %s AND event = 'ACKNOWLEDGED'",
+        (target,),
+    ).fetchone()
+    assert events == (0,)
+
+
+# ---------------------------------------------------------------- Slice 3 step 5: daily brief
+
+
+def clear_briefs(env: Env) -> None:
+    env.db.execute("DELETE FROM pw.daily_brief_claim WHERE site_id = %s", (env.site.site,))
+    env.db.execute("DELETE FROM pw.daily_brief WHERE site_id = %s", (env.site.site,))
+
+
+def claims(env: Env) -> int:
+    row = env.db.execute(
+        "SELECT count(*) FROM pw.daily_brief_claim WHERE site_id = %s", (env.site.site,)
+    ).fetchone()
+    return row[0] if row else 0
+
+
+def put_claim(env: Env, expires: str) -> None:
+    """A claim held by another generator, its lease ending at `expires` from now."""
+    with env.db.transaction():
+        env.db.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
+        env.db.execute(
+            "INSERT INTO pw.daily_brief_claim (tenant_id, site_id, business_date, run_key, token, expires_at)"
+            " SELECT s.tenant_id, s.id, sem.business_date(s.id, c.sim_time),"
+            "        coalesce((SELECT r.id::text FROM pw.simulation_run r WHERE r.site_id = s.id"
+            "                   AND r.status = 'ACTIVE'), '-'), gen_random_uuid(), now() + %s::interval"
+            "   FROM pw.site s JOIN pw.site_clock c ON c.site_id = s.id WHERE s.id = %s",
+            (expires, env.site.site),
+        )
+
+
+def brief_rows(env: Env) -> int:
+    row = env.db.execute(
+        "SELECT count(*) FROM pw.daily_brief WHERE site_id = %s", (env.site.site,)
+    ).fetchone()
+    return row[0] if row else 0
+
+
+def brief_model(env: Env, calls: list[float], delay: float = 0.0) -> FunctionModel:
+    """Flash-Lite that words each item exactly as its template does, so every sentence is
+    grounded: the facts are read the way the brief reads them."""
+    from palletwise.agent.templates import template_answer
+    from palletwise.contracts.results import ResultStatus
+    from palletwise.semantic import brief as facts
+
+    def fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        calls.append(time.monotonic())
+        time.sleep(delay)
+        with tenant_session(role_pool("PW_AGENT_READ"), env.site.tenant, read_snapshot=True) as conn:
+            items = facts.brief_facts(conn, env.site.site).items
+        asked = [i for i in items if i.result.status is ResultStatus.OK]
+        lines = [f"{n}. {template_answer(i.result_name, i.result)}" for n, i in enumerate(asked, 1)]
+        return ModelResponse(parts=[TextPart("\n".join(lines))])
+
+    return FunctionModel(fn)
+
+
+def test_the_brief_is_made_once_a_day_and_read_by_managers_and_admins(env: Env) -> None:
+    from palletwise.agent.guardrails import grounding_problems
+    from palletwise.contracts.results import ResultEnvelope
+
+    evaluate(env)
+    clear_briefs(env)
+    calls: list[float] = []
+    env.models.models["gemini_flash_lite"] = brief_model(env, calls)
+    env.sign_in(subject="manager-brief")
+    inbox = env.client.get(f"/api/sites/{env.site.site}/exceptions").json()["exceptions"]
+    first = env.client.get(f"/api/sites/{env.site.site}/brief")
+    assert first.status_code == 200, first.text
+    body = first.json()
+    assert [i["kind"] for i in body["items"]] == [
+        "top_exceptions", "orders_at_risk_today", "throughput", "data_freshness",
+    ]  # fmt: skip
+    assert len(calls) == 1 and any(i["text_source"] == "model" for i in body["items"])
+    # The top three exceptions are the inbox's first three, with exactly their highlights.
+    top = body["items"][0]
+    assert inbox and [r["score"] for r in top["result"]["rows"]] == [x["score"] for x in inbox[:3]]
+    expected = {(h["target_type"], h["target_id"]) for x in inbox[:3] for h in x["highlights"]}
+    assert {(h["target_type"], h["target_id"]) for h in top["highlights"]} == expected
+    assert top["result"]["normalized_request"]["open_exceptions"] == len(inbox)
+    # Every number and identifier in the wording is in its own stored item (D6, FR-BRF-01).
+    for item in body["items"]:
+        result = ResultEnvelope.model_validate(item["result"])
+        assert grounding_problems(item["text"], [result], "") == [], item
+        assert item["highlights"] == item["result"]["highlights"]
+    # The same day: the stored brief, unchanged, with no model call; an Admin reads the same one.
+    assert env.client.get(f"/api/sites/{env.site.site}/brief").json() == body
+    env.sign_in(subject="admin-brief", role="admin")
+    assert env.client.get(f"/api/sites/{env.site.site}/brief").json() == body
+    assert len(calls) == 1 and brief_rows(env) == 1
+    links = {i["kind"]: i["link"] for i in body["items"]}
+    assert links["top_exceptions"] == {"to": "inbox", "suggestion": None}
+    assert links["orders_at_risk_today"]["suggestion"]["tool"] == "get_order_stockout_risks"
+    # Told apart from the copilot's usage, with the brief it was for (product owner review).
+    usage = env.db.execute(
+        "SELECT u.purpose, u.run_id FROM pw.model_usage u JOIN pw.daily_brief b ON b.id = u.brief_id"
+        " WHERE b.site_id = %s",
+        (env.site.site,),
+    ).fetchall()
+    assert usage == [("BRIEF", None)]
+
+
+def test_concurrent_first_requests_make_one_brief(env: Env) -> None:
+    clear_briefs(env)
+    calls: list[float] = []
+    env.models.models["gemini_flash_lite"] = brief_model(env, calls, delay=1.0)
+    env.sign_in(subject="manager-race")
+    bodies: list[dict[str, Any]] = []
+
+    def visit() -> None:
+        response = env.client.get(f"/api/sites/{env.site.site}/brief")
+        assert response.status_code == 200
+        bodies.append(response.json())
+
+    visitors = [threading.Thread(target=visit) for _ in range(2)]
+    for v in visitors:
+        v.start()
+    for v in visitors:
+        v.join(30)
+    assert len(bodies) == 2 and bodies[0] == bodies[1]
+    assert len(calls) == 1 and brief_rows(env) == 1
+
+
+def test_a_new_site_day_makes_a_new_brief(env: Env) -> None:
+    clear_briefs(env)
+    env.models.models.pop("gemini_flash_lite", None)
+    env.sign_in(subject="manager-days")
+    today = env.client.get(f"/api/sites/{env.site.site}/brief").json()["business_date"]
+    shift = "UPDATE pw.site_clock SET sim_time = sim_time + %s::interval WHERE site_id = %s"
+    with env.db.transaction():
+        env.db.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
+        env.db.execute(shift, ("1 day", env.site.site))
+    try:
+        tomorrow = env.client.get(f"/api/sites/{env.site.site}/brief").json()["business_date"]
+    finally:
+        with env.db.transaction():
+            env.db.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
+            env.db.execute(shift, ("-1 day", env.site.site))
+    assert date.fromisoformat(tomorrow) == date.fromisoformat(today) + timedelta(days=1)
+    assert brief_rows(env) == 2
+
+
+def test_a_suspended_copilot_or_spent_budget_gives_the_template_brief(env: Env) -> None:
+    calls: list[float] = []
+    env.models.models["gemini_flash_lite"] = brief_model(env, calls)
+    env.sign_in(subject="manager-template")
+    for change in ({"status": "SUSPENDED"}, {"daily_token_budget": 1}):
+        clear_briefs(env)
+        env.set_agent(**change)
+        body = env.client.get(f"/api/sites/{env.site.site}/brief").json()
+        assert body["wording_source"] == "template" and {i["text_source"] for i in body["items"]} == {
+            "template"
+        }
+        env.set_agent(status="ACTIVE", daily_token_budget=2_000_000)
+    assert calls == []
+
+
+def test_a_failed_generation_leaves_nothing_and_the_next_request_generates(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from palletwise.semantic import brief as facts
+
+    clear_briefs(env)
+    env.models.models.pop("gemini_flash_lite", None)
+    env.sign_in(subject="manager-crash")
+    real = facts.brief_facts
+
+    def crash(conn: Any, site: UUID) -> Any:
+        raise RuntimeError("the generator crashed")
+
+    monkeypatch.setattr(facts, "brief_facts", crash)
+    with pytest.raises(RuntimeError):
+        env.client.get(f"/api/sites/{env.site.site}/brief")
+    assert brief_rows(env) == 0 and claims(env) == 0  # nothing stored, the claim released at once
+    monkeypatch.setattr(facts, "brief_facts", real)
+    assert env.client.get(f"/api/sites/{env.site.site}/brief").status_code == 200
+    assert brief_rows(env) == 1
+
+
+def test_the_brief_needs_ready_data_and_a_site_in_the_session(env: Env, connect_as: Connect) -> None:
+    _, loading_site = provision_site(connect_as, tenant=env.site.tenant, site_code="LDB")
+    env.sign_in(sites=[env.site.site, loading_site])
+    refused = env.client.get(f"/api/sites/{loading_site}/brief")
+    assert refused.status_code == 503 and refused.json()["code"] == "DATA_NOT_READY"
+    assert env.client.get(f"/api/sites/{uuid4()}/brief").status_code == 404
+
+
+def test_a_stored_brief_is_never_changed(env: Env) -> None:
+    env.sign_in(subject="manager-immutable")
+    env.client.get(f"/api/sites/{env.site.site}/brief")
+    with (
+        pytest.raises(psycopg.errors.InsufficientPrivilege),
+        tenant_session(role_pool("PW_BRIEF"), env.site.tenant) as conn,
+    ):
+        conn.execute(
+            "UPDATE pw.daily_brief SET wording_source = 'model' WHERE site_id = %s", (env.site.site,)
+        )
+
+
+def test_no_database_transaction_is_held_while_the_model_words(env: Env) -> None:
+    clear_briefs(env)
+    open_during_call: list[int] = []
+
+    def fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        row = env.db.execute(
+            "SELECT count(*) FROM pg_stat_activity WHERE usename = 'pw_brief' AND xact_start IS NOT NULL"
+            " AND pid <> pg_backend_pid()"
+        ).fetchone()
+        open_during_call.append(row[0] if row else -1)
+        time.sleep(0.5)
+        return ModelResponse(parts=[TextPart("1. A sentence the checks will not accept.")])
+
+    env.models.models["gemini_flash_lite"] = FunctionModel(fn)
+    env.sign_in(subject="manager-slow")
+    assert env.client.get(f"/api/sites/{env.site.site}/brief").status_code == 200
+    # The claim was committed before the call: no pw_brief transaction waits on the model.
+    assert open_during_call and set(open_during_call) == {0}
+    assert claims(env) == 0 and brief_rows(env) == 1
+
+
+def test_an_expired_claim_is_taken_over_and_a_valid_one_is_waited_for(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from palletwise.api import brief
+
+    clear_briefs(env)
+    env.models.models.pop("gemini_flash_lite", None)
+    env.sign_in(subject="manager-lease")
+    put_claim(env, "-1 second")  # a generator that crashed: its lease ran out
+    assert env.client.get(f"/api/sites/{env.site.site}/brief").status_code == 200
+    assert brief_rows(env) == 1 and claims(env) == 0
+    clear_briefs(env)
+    put_claim(env, "1 minute")  # a generator still within its lease
+    monkeypatch.setattr(brief, "WAIT_SECONDS", 0.5)
+    waiting = env.client.get(f"/api/sites/{env.site.site}/brief")
+    assert waiting.status_code == 503 and waiting.json()["code"] == "BRIEF_PREPARING"
+    assert waiting.headers["retry-after"] == "2" and brief_rows(env) == 0
+    clear_briefs(env)
+
+
+def test_a_simulation_reset_gives_the_day_a_new_brief(env: Env) -> None:
+    clear_briefs(env)
+    env.models.models.pop("gemini_flash_lite", None)
+    env.sign_in(subject="manager-reset")
+    before = env.client.get(f"/api/sites/{env.site.site}/brief").json()
+    old = env.db.execute(
+        "SELECT id FROM pw.simulation_run WHERE site_id = %s AND status = 'ACTIVE'", (env.site.site,)
+    ).fetchone()
+    assert old is not None
+    new = uuid4()
+    with env.db.transaction():
+        env.db.execute(
+            "UPDATE pw.simulation_run SET status = 'ENDED', ended_at = now() WHERE id = %s", (old[0],)
+        )
+        env.db.execute(
+            "INSERT INTO pw.simulation_run (id, tenant_id, site_id, seed, dataset_version, history_start,"
+            " clock_start, status, started_at, started_by)"
+            " SELECT %s, tenant_id, site_id, seed + 1, dataset_version, history_start, clock_start, 'ACTIVE',"
+            " now(), 'test' FROM pw.simulation_run WHERE id = %s",
+            (new, old[0]),
+        )
+    try:
+        after = env.client.get(f"/api/sites/{env.site.site}/brief").json()
+        stored = env.db.execute(
+            "SELECT simulation_run_id FROM pw.daily_brief WHERE site_id = %s ORDER BY generated_at",
+            (env.site.site,),
+        ).fetchall()
+    finally:
+        with env.db.transaction():
+            env.db.execute("DELETE FROM pw.daily_brief WHERE simulation_run_id = %s", (new,))
+            env.db.execute("DELETE FROM pw.simulation_run WHERE id = %s", (new,))
+            env.db.execute(
+                "UPDATE pw.simulation_run SET status = 'ACTIVE', ended_at = NULL WHERE id = %s", (old[0],)
+            )
+    assert after["business_date"] == before["business_date"] and after != before
+    assert stored == [(old[0],), (new,)]  # the earlier run's brief is never served for the new run
+
+
+# ---------------------------------------------------------------- Slice 3 step 6: search
+
+
+def test_search_finds_an_order_and_its_choice_answers_on_the_fast_path(env: Env) -> None:
+    order = env.db.execute(
+        "SELECT order_no FROM pw.outbound_order WHERE site_id = %s ORDER BY order_no LIMIT 1",
+        (env.site.site,),
+    ).fetchone()
+    assert order is not None
+    env.sign_in(subject="manager-search")
+    body = env.client.get(f"/api/sites/{env.site.site}/search", params={"q": order[0].lower()}).json()
+    first = body["results"][0]
+    assert (first["kind"], first["code"], first["match"]) == ("order", order[0], "exact")
+    suggestion = first["suggestion"]
+    assert suggestion == {
+        "label": f"What is the status of order {order[0]}?",
+        "tool": "get_order_status",
+        "arguments": {"order_no": order[0]},
+    }
+    # Choosing it is a copilot run on the fast path: routed, executed through tools.executor.
+    status, _, events = env.ask(suggestion["label"], suggestion=suggestion)
+    assert status == 200
+    result = of_type(events, "pw.result")[0]["result"]
+    assert result["status"] == "OK" and result["rows"][0]["order_no"] == order[0]
+    assert of_type(events, "RUN_FINISHED")[0]["path"] in ("A", "B")
+
+
+def test_search_is_site_scoped_bounded_and_says_when_nothing_matches(env: Env) -> None:
+    env.sign_in(subject="admin-search", role="admin")  # a read: the Admin may search too
+    url = f"/api/sites/{env.site.site}/search"
+    assert env.client.get(url, params={"q": "zzzz-no-such-thing"}).json()["results"] == []
+    assert len(env.client.get(url, params={"q": "SKU"}).json()["results"]) <= 8
+    assert env.client.get(url, params={"q": ""}).status_code == 422
+    assert env.client.get(url, params={"q": "x" * 65}).status_code == 422
+    assert env.client.get(f"/api/sites/{uuid4()}/search", params={"q": "SKU"}).status_code == 404
+
+
+def test_wording_that_calls_an_on_time_order_delayed_is_replaced_by_the_template(env: Env) -> None:
+    order = env.db.execute(
+        "SELECT o.order_no FROM pw.outbound_order o JOIN pw.site_clock c ON c.site_id = o.site_id"
+        " WHERE o.site_id = %s AND o.status NOT IN ('SHIPPED', 'CANCELLED')"
+        " AND o.dispatch_deadline > c.sim_time"
+        " ORDER BY o.dispatch_deadline LIMIT 1",
+        (env.site.site,),
+    ).fetchone()
+    assert order is not None, "the reference data has an open order still on time"
+    env.models.models["gemini_flash_lite"] = FunctionModel(
+        lambda messages, info: ModelResponse(parts=[TextPart(f"Order {order[0]} is delayed.")])
+    )
+    env.sign_in(subject="manager-contradiction")
+    status, _, events = env.ask(f"Status of order {order[0]}?")
+    assert status == 200
+    text = answer(events)
+    assert "delayed" not in text and text.startswith(f"Order {order[0]}")
+    assert of_type(events, "RUN_FINISHED")[0]["path"] == "B"  # the template, not the model's claim
+
+
+def test_concurrent_and_failing_searches_return_every_connection(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from palletwise.api import search
+
+    env.sign_in(subject="manager-pool")
+    pool = role_pool("PW_AGENT_READ")
+    url = f"/api/sites/{env.site.site}/search"
+    statuses: list[int] = []
+
+    def look(text: str) -> None:
+        statuses.append(env.client.get(url, params={"q": text}).status_code)
+
+    workers = [threading.Thread(target=look, args=(f"SKU-{n}",)) for n in range(30)]
+    for w in workers:
+        w.start()
+    for w in workers:
+        w.join(30)
+    assert statuses.count(200) == 30
+
+    def broken(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("the database call failed")
+
+    monkeypatch.setattr(search, "query", broken)
+    for _ in range(3):
+        with pytest.raises(RuntimeError):
+            env.client.get(url, params={"q": "SKU"})
+    stats = pool.get_stats()
+    # Every connection is back: none still checked out after successes and failures.
+    assert stats["pool_available"] == stats["pool_size"] and stats.get("requests_waiting", 0) == 0
+
+
+def test_a_busy_stream_still_rechecks_access_and_ends(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Code review of Slice 3: wake-ups on an active site must not skip the periodic session and
+    policy check; a revoked user's stream ends even while changes keep arriving."""
+    from palletwise.api import events, problems
+
+    monkeypatch.setattr(events, "HEARTBEAT_SECONDS", 0.6)
+    env.sign_in(subject="manager-busy-stream")
+    busy = threading.Event()
+
+    def ticking() -> None:
+        while not busy.is_set():
+            tick(env)
+            time.sleep(0.2)
+
+    with env.client.stream("GET", f"/api/sites/{env.site.site}/events") as response:
+        lines = response.iter_lines()
+        ((kind, _, _),) = read_events(lines, 1)
+        assert kind == "hello"
+        worker = threading.Thread(target=ticking)
+        worker.start()
+        try:
+
+            async def refused(*args: Any, **kwargs: Any) -> Any:
+                return problems.problem(403, "FORBIDDEN", "No longer allowed.", "t")
+
+            monkeypatch.setattr(events, "authorize_site", refused)  # access revoked mid stream
+            started = time.monotonic()
+            kind = ""
+            while kind != "end" and time.monotonic() - started < 10:
+                ((kind, _, _),) = read_events(lines, 1)
+            assert kind == "end" and time.monotonic() - started < 3
+        finally:
+            busy.set()
+            worker.join(5)

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from palletwise.agent import semantic_router
 from palletwise.agent.runtime import PRODUCTION_RUNTIME, CopilotRuntime
-from palletwise.api import auth_routes, copilot, sites
+from palletwise.api import auth_routes, brief, copilot, events, exceptions, search, sites
 from palletwise.api.observability import request_span
 from palletwise.api.security import CurrentPrincipal, csrf_middleware, require_session, site_in_scope
 from palletwise.auth.crypto import KeyRing
@@ -106,6 +106,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             PolicyClient(PolicySettings()), AuditLog(app_pool), app_pool, role_pool("PW_AGENT_READ")
         )
     yield
+    await app.state.site_changes.stop()
     await app.state.copilot.drain(timeout=SHUTDOWN_GRACE_SECONDS)  # records written before pools close
     close_pools()
 
@@ -151,6 +152,7 @@ def create_app(
     web: WebSettings | None = None,
     copilot_services: copilot.CopilotServices | None = None,
     reads: sites.ReadServices | None = None,
+    site_changes: events.SiteChangeHub | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="PalletWise API",
@@ -165,6 +167,7 @@ def create_app(
     app.state.auth = auth
     app.state.copilot = copilot_services
     app.state.reads = reads
+    app.state.site_changes = site_changes or events.SiteChangeHub()  # listens from the first stream
     app.middleware("http")(csrf_middleware((web or WebSettings()).public_origin))
     app.middleware("http")(request_span)  # added last, so outermost: it sees CSRF refusals too
     app.include_router(public)
@@ -172,6 +175,10 @@ def create_app(
     app.include_router(protected)
     app.include_router(copilot.router)
     app.include_router(sites.router)
+    app.include_router(events.router)
+    app.include_router(exceptions.router)
+    app.include_router(brief.router)
+    app.include_router(search.router)
     return app
 
 

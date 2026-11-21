@@ -47,6 +47,36 @@ DEFAULT_SEVERITY: dict[HighlightReason, Severity] = {
 }
 
 
+ExceptionType = Literal[
+    "STOCKOUT_RISK",
+    "DELAYED_ORDER",
+    "LOW_STOCK",
+    "DEAD_STOCK",
+    "SLOW_IN_PRIME",
+    "CAPACITY_HOTSPOT",
+    "FESTIVAL_SHORTAGE",
+]
+
+# The highlight reason of each exception type (agent spec 10).
+EXCEPTION_REASON: dict[str, HighlightReason] = {
+    "STOCKOUT_RISK": HighlightReason.STOCKOUT_RISK,
+    "DELAYED_ORDER": HighlightReason.DELAYED_ORDER,
+    "LOW_STOCK": HighlightReason.LOW_STOCK,
+    "DEAD_STOCK": HighlightReason.DEAD_STOCK,
+    "SLOW_IN_PRIME": HighlightReason.SLOW_IN_PRIME,
+    "CAPACITY_HOTSPOT": HighlightReason.CAPACITY,
+    "FESTIVAL_SHORTAGE": HighlightReason.FESTIVAL_RISK,
+}
+
+
+def exception_severity(exception_type: str, critical: bool) -> Severity:
+    """One severity per exception (agent spec 10). The rule decides `critical` where the severity
+    depends on the case (stock-out risk, capacity); otherwise the reason's default applies."""
+    if critical:
+        return Severity.CRITICAL
+    return DEFAULT_SEVERITY.get(EXCEPTION_REASON[exception_type], Severity.WARNING)
+
+
 class RequestRejected(ValueError):
     """A tool request refused for a reason the agent can act on (semantic spec 7.4): reported as a
     validation failure with this message, and counted toward the step limit (NFR-REL-03)."""

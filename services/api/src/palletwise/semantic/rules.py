@@ -7,6 +7,7 @@ by semantic spec 7.6, entities for the working set, and evidence with "how compu
 
 from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime, time, timedelta
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -22,6 +23,7 @@ from palletwise.contracts.results import (
     ResultEnvelope,
     ResultStatus,
     Severity,
+    exception_severity,
 )
 from palletwise.db.connection import Connection, query
 from palletwise.semantic.locations import MAX_ROWS, Moment, read_moment
@@ -453,8 +455,13 @@ def capacity_hotspots(conn: Connection, site: UUID) -> ResultEnvelope:
             args,
         ).fetchall()
         hot = {r["zone_id"] for r in rows}
+        # One severity per exception (agent spec 10), as the inbox shows it: a zone with a bin
+        # over capacity is critical even when its utilization is low.
         targets = [("bin", b[0], Severity.CRITICAL) for b in over if b[2] in hot]
-        targets += [("zone", r["zone_id"], Severity.WARNING) for r in rows]
+        targets += [
+            ("zone", r["zone_id"], exception_severity("CAPACITY_HOTSPOT", r["over_capacity_bins"] > 0))
+            for r in rows
+        ]
         located = [EntityRef(type="bin", id=b[0], label=b[1]) for b in over if b[2] in hot]
         return _result(
             moment,
@@ -594,17 +601,31 @@ def _pick_bins(conn: Connection, site: UUID, rows: list[Row]) -> tuple[tuple[Hig
     return distinct_highlights(targets, HighlightReason.STOCKOUT_RISK)
 
 
-def order_stockout_risks(conn: Connection, site: UUID, view: str, hours: int | None) -> ResultEnvelope:
-    request = {"view": view, "hours": hours}
+def _today_horizon(conn: Connection, moment: Moment) -> Decimal:
+    """Hours to just before the end of the site-local day (sem.today_horizon_hours)."""
+    row = query(
+        conn, "today_horizon", "SELECT sem.today_horizon_hours(%s, %s)", (moment.site, moment.as_of)
+    ).fetchone()
+    assert row is not None
+    return row[0]
+
+
+def order_stockout_risks(
+    conn: Connection, site: UUID, view: str, hours: int | None, today: bool = False
+) -> ResultEnvelope:
+    """`today`: orders due before midnight, site time, overdue included (exactly; the daily brief
+    and "at risk today" questions), in place of an hours window."""
+    request: dict[str, Any] = {"view": view, "hours": hours} | ({"today": True} if today else {})
 
     def shape(moment: Moment, explain: dict[str, str] | None) -> ResultEnvelope:
         args: tuple[Any, ...] = (site, moment.as_of, moment.settings_version_id)
+        horizon = _today_horizon(conn, moment) if today else hours
         risks, _ = _fetch(
-            conn, "stockout_risk", "SELECT * FROM sem.stockout_risk(%s, %s, %s, %s)", (*args, hours)
+            conn, "stockout_risk", "SELECT * FROM sem.stockout_risk(%s, %s, %s, %s)", (*args, horizon)
         )
         if view == "orders":
             rows, truncated = _fetch(
-                conn, "orders_at_risk", "SELECT * FROM sem.orders_at_risk(%s, %s, %s, %s)", (*args, hours)
+                conn, "orders_at_risk", "SELECT * FROM sem.orders_at_risk(%s, %s, %s, %s)", (*args, horizon)
             )
             columns, entities, base = (
                 RISK_ORDER_COLUMNS,
@@ -640,7 +661,86 @@ def order_stockout_risks(conn: Connection, site: UUID, view: str, hours: int | N
         )
 
     def explain(moment: Moment) -> dict[str, str]:
+        if today:
+            return {"window": "before midnight, site time"}
         horizon = str(hours) if hours is not None else _setting(conn, moment, "stockout_horizon_hours")
-        return {"hours": horizon}
+        return {"window": f"within {horizon} hours"}
 
     return _run(conn, site, "get_order_stockout_risks", request, STOCK_AND_DEMAND, explain, shape)
+
+
+# ---------------------------------------------------------------- one order (Slice 3 step 6)
+
+
+ORDER_STATUS_COLUMNS = (
+    _col("order_no", "Order"),
+    _col("status", "Status"),
+    _col("dispatch_deadline", "Dispatch deadline", "datetime"),
+    _col("hours_until_due", "Hours until due", "number", "hours"),
+    _col("line_no", "Line", "integer"),
+    SKU,
+    _col("qty_ordered", "Ordered", "integer", UNITS),
+    _col("qty_allocated", "Allocated", "integer", UNITS),
+    _col("qty_picked", "Picked", "integer", UNITS),
+    _col("qty_shipped", "Shipped", "integer", UNITS),
+    _col("at_risk", "Stockout risk", "boolean"),
+)
+# Facts of the whole order, the same on every line; shown once by the template.
+ORDER_FACTS = ("customer_code", "hours_late", "delayed", "in_window", "true_shortage", "name")
+
+
+def order_status(conn: Connection, site: UUID, order_no: str) -> ResultEnvelope:
+    """One order at as_of: its status and timing (semantic 4.5) and each line's ordered, allocated,
+    picked and shipped quantities, with stockout risk from the same rule as
+    get_order_stockout_risks. Highlights: the bins its open lines are allocated in, and the pick
+    locations of quantity not yet allocated; bins of lines at risk carry the stockout reason."""
+    request = {"order_no": order_no}
+
+    def shape(moment: Moment, explain: dict[str, str] | None) -> ResultEnvelope:
+        rows, _ = _fetch(
+            conn,
+            "order_status",
+            "SELECT * FROM sem.order_status(%s, %s, %s, %s)",
+            (site, moment.as_of, moment.settings_version_id, order_no),
+        )
+        if not rows:
+            return _envelope(
+                moment, "get_order_status", request, STOCK_AND_DEMAND, explain,
+                status=ResultStatus.NOT_FOUND, message=f"No order {order_no} at this site.",
+            )  # fmt: skip
+        located = query(
+            conn,
+            "order_locations",
+            "SELECT bin_id, product_id FROM sem.order_locations(%s, %s) ORDER BY bin_id",
+            (site, order_no),
+        ).fetchall()
+        risky = {r["product_id"]: r["true_shortage"] for r in rows if r["at_risk"]}
+        risk_targets = [
+            ("bin", b, Severity.CRITICAL if risky[p] else Severity.WARNING) for b, p in located if p in risky
+        ]
+        plain = [("bin", b, Severity.INFO) for b, p in located if p not in risky]
+        at_risk, _ = distinct_highlights(risk_targets, HighlightReason.STOCKOUT_RISK)
+        others, _ = distinct_highlights(plain, HighlightReason.LOCATION)
+        shown = {h.target_id for h in at_risk}
+        highlights = at_risk + tuple(h for h in others if h.target_id not in shown)
+        lines = [r for r in rows if r["line_no"] is not None]
+        products = [EntityRef(type="product", id=r["product_id"], label=r["sku"]) for r in lines]
+        order = EntityRef(type="order", id=rows[0]["order_id"], label=rows[0]["order_no"])
+        return _envelope(
+            moment,
+            "get_order_status",
+            request,
+            STOCK_AND_DEMAND,
+            explain,
+            status=ResultStatus.OK,
+            columns=ORDER_STATUS_COLUMNS,
+            rows=_rows(rows, [c.key for c in ORDER_STATUS_COLUMNS] + list(ORDER_FACTS)),
+            highlights=highlights[:MAX_HIGHLIGHTS],
+            highlights_truncated=len(highlights) > MAX_HIGHLIGHTS,
+            entities=distinct_entities([order], products),
+        )
+
+    def explain(moment: Moment) -> dict[str, str]:
+        return {"hours": _setting(conn, moment, "stockout_horizon_hours")}
+
+    return _run(conn, site, "get_order_status", request, STOCK_AND_DEMAND, explain, shape)

@@ -3,6 +3,7 @@
     "warehouse_manager": [
       "inventory.read",
       "orders.read",
+      "exception.acknowledge",
       "proposal.create",
       "proposal.approve",
       "proposal.reject"

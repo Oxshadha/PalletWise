@@ -3,6 +3,7 @@
 Templates only restate values that are in the result; they never compute new numbers.
 """
 
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -156,6 +157,97 @@ def _stockout(result: ResultEnvelope) -> str:
     )
 
 
+def _order(result: ResultEnvelope) -> str:
+    r = _first(result)
+    lines = [x for x in result.rows if x["line_no"] is not None]
+    if r["status"] in ("SHIPPED", "CANCELLED"):
+        state = "shipped" if r["status"] == "SHIPPED" else "cancelled"
+        timing = " late, after its deadline" if r["delayed"] else ""
+        return f"Order {r['order_no']} for {r['customer_code']} was {state}{timing}."
+    if r["delayed"]:
+        timing = f"is delayed, {r['hours_late']} hours past its deadline"
+    else:
+        timing = f"is due in {r['hours_until_due']} hours"
+    at_risk = [x for x in lines if x["at_risk"]]
+    risk = (
+        f" {len(at_risk)} of its {len(lines)} lines {_plural(len(at_risk), 'is', 'are')} at stockout risk."
+        if at_risk
+        else ""
+    )
+    return (
+        f"Order {r['order_no']} for {r['customer_code']} {timing} ({str(r['status']).lower()}), with "
+        f"{len(lines)} {_plural(len(lines), 'line', 'lines')}.{risk}"
+    )
+
+
+def _open_exceptions(result: ResultEnvelope) -> str:
+    r = _first(result)
+    total = int(r["open_total"])
+    subject = _subject(str(r["subject"]))
+    which = (
+        f"{str(r['exception_type']).lower()} for {subject}" if subject else str(r["exception_type"]).lower()
+    )
+    if result.normalized_request.get("exception_id"):
+        return f"This is the {which}, rank {r['rank']} in the inbox with score {r['score']}."
+    kind = f"{str(r['exception_type']).lower()} " if result.normalized_request.get("exception_type") else ""
+    return (
+        f"{total} {kind}{_plural(total, 'exception is', 'exceptions are')} open. The highest impact is "
+        f"the {which}, score {r['score']}, rank {r['rank']} in the inbox."
+    )
+
+
+def _subject(text: str) -> str:
+    """A subject in words; never one that carries instruction text found in data (FR-COP-12)."""
+    return "" if instruction_echo(text, "") else text
+
+
+def _brief_exceptions(result: ResultEnvelope) -> str:
+    r = _first(result)
+    total = int(result.normalized_request["open_exceptions"])
+    subject = _subject(str(r["subject"]))
+    which = (
+        f"{str(r['exception_type']).lower()} for {subject}" if subject else str(r["exception_type"]).lower()
+    )
+    return (
+        f"{total} {_plural(total, 'exception is', 'exceptions are')} open. The highest impact is the "
+        f"{which}, score {r['score']}."
+    )
+
+
+def _brief_throughput(result: ResultEnvelope) -> str:
+    r = _first(result)
+    days = result.normalized_request["baseline_operating_days"]
+    if not days:
+        units = f"{r['units_picked']} units were picked, with no earlier operating day to compare"
+    elif r["units_change_pct"] is None:
+        units = f"{r['units_picked']} units were picked, with none on the {days} operating days before"
+    elif r["units_direction"] == "level":
+        units = f"{r['units_picked']} units were picked, level with the average of {r['avg_units_picked']}"
+    else:
+        units = (
+            f"{r['units_picked']} units were picked, {r['units_change_pct']} percent {r['units_direction']} "
+            f"the average of {r['avg_units_picked']} over the {days} operating days before"
+        )
+    orders = (
+        f"{r['orders_shipped']} orders shipped"
+        if not days or r["avg_orders_shipped"] is None
+        else f"{r['orders_shipped']} orders shipped against an average of {r['avg_orders_shipped']}"
+    )
+    return f"Yesterday {units}; {orders}."
+
+
+def _brief_freshness(result: ResultEnvelope) -> str:
+    r = _first(result)
+    if r["minutes_behind"] is None:
+        return f"{r['stream']} has never synced, so this brief may be incomplete."
+    if r["minutes_behind"] == 0:  # rows are oldest first: nothing is behind the site time
+        return "All data is up to date with the site time."
+    return (
+        f"The oldest data, {str(r['stream']).lower()}, synced {r['minutes_behind']} "
+        f"{_plural(int(r['minutes_behind']), 'minute', 'minutes')} before the site time."
+    )
+
+
 QUERY_NOUNS = {
     "product": ("product", "products"),
     "category": ("category", "categories"),
@@ -207,6 +299,11 @@ TEMPLATES: dict[str, Callable[[ResultEnvelope], str]] = {
     "get_delayed_orders": _delayed,
     "get_order_stockout_risks": _stockout,
     "query_inventory": _query,
+    "get_order_status": _order,
+    "get_open_exceptions": _open_exceptions,
+    "brief_top_exceptions": _brief_exceptions,
+    "brief_throughput": _brief_throughput,
+    "brief_data_freshness": _brief_freshness,
 }
 
 
@@ -259,6 +356,24 @@ def key_facts(tool: str, result: ResultEnvelope) -> tuple[str, ...]:
                 facts = [str(r[result.columns[0].key])] + ([str(r[measure.key])] if measure else [])
             else:
                 facts = [_how_many(result), str(r[result.columns[0].key])]
+        case "get_open_exceptions":
+            one = result.normalized_request.get("exception_id")
+            facts = [str(r["score"])] + ([] if one else [str(r["open_total"])])
+        case "get_order_status":
+            # Lateness is a fact the wording must state: "delayed" while open, "late" once shipped.
+            late = ["late" if r["status"] == "SHIPPED" else "delayed"] if r["delayed"] else []
+            facts = [str(r["order_no"]), *late]
+        case "brief_top_exceptions":
+            facts = [str(result.normalized_request["open_exceptions"]), str(r["score"])]
+        case "brief_throughput":
+            # The change is a size and a direction: both must be stated, so "12.5 percent above"
+            # cannot stand for "12.5 percent below" (product owner review of step 5).
+            facts = [str(r["units_picked"]), str(r["orders_shipped"])]
+            if r["units_change_pct"] is not None and r["units_direction"] != "level":
+                facts.append(f"{r['units_change_pct']} percent {r['units_direction']}")
+        case "brief_data_freshness":
+            behind = r["minutes_behind"]
+            facts = [] if behind == 0 else [str(r["stream"]), *([str(behind)] if behind is not None else [])]
         case _:
             facts = []
     return tuple(f for f in facts if f and f != "None")
@@ -270,3 +385,22 @@ def template_answer(tool: str, result: ResultEnvelope) -> str:
         return result.message or "Here is the result."
     text = TEMPLATES[tool](result)
     return text[:1].upper() + text[1:]  # "More than 20 products found", never a lowercase start
+
+
+# ---------------------------------------------------------------- contradictions (step 6 review)
+
+_LATE = re.compile(r"\b(delayed|late|overdue|behind schedule|past (?:its|the) deadline)\b", re.IGNORECASE)
+
+
+def contradictions(tool: str, result: ResultEnvelope, text: str) -> list[str]:
+    """Claims the wording makes against its result, beyond the numbers grounding checks.
+
+    An order on time is never called delayed, even when one of its lines is at stockout risk:
+    the order's status and a line's risk stay separate (product owner review of step 6)."""
+    on_time = (
+        tool == "get_order_status"
+        and result.status is ResultStatus.OK
+        and bool(result.rows)
+        and not result.rows[0].get("delayed")
+    )
+    return ["calls an order that is on time delayed"] if on_time and _LATE.search(text) else []

@@ -1,8 +1,11 @@
 import {
   ArrowRight,
+  Check,
   ChevronDown,
   ChevronUp,
   History,
+  Inbox,
+  Info,
   Layers,
   LocateFixed,
   type LucideIcon,
@@ -10,13 +13,16 @@ import {
   MapPin,
   MessageSquareText,
   Minus,
+  OctagonAlert,
   Plus,
   RotateCcw,
   RotateCw,
+  Search,
   SendHorizontal,
   Square,
   ThumbsDown,
   ThumbsUp,
+  TriangleAlert,
   X,
 } from "lucide-react";
 
@@ -41,6 +47,12 @@ const ICONS = {
   "tilt-down": ChevronDown,
   "thumbs-up": ThumbsUp,
   "thumbs-down": ThumbsDown,
+  inbox: Inbox,
+  check: Check,
+  info: Info,
+  warning: TriangleAlert,
+  critical: OctagonAlert,
+  search: Search,
 } as const satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

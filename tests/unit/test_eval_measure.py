@@ -291,3 +291,21 @@ def test_cached_wording_is_checked_for_grounding() -> None:
     case = SimpleNamespace(question="Which bins hold the mouse?")
     assert _grounding_violations(case, trace, "cache")  # type: ignore[arg-type]
     assert _grounding_violations(case, trace, "message") == []  # type: ignore[arg-type]
+
+
+def test_the_brief_wording_gates() -> None:
+    from evals.measure import BRIEF_GATES, check_gates, combined_status
+
+    good = {"brief": {"items": 4, "ungrounded": 0, "model_share": 0.75}}
+    assert combined_status(check_gates(good, BRIEF_GATES)) == "pass"
+    for broken, metric in (
+        ({"items": 3, "ungrounded": 0, "model_share": 1.0}, "brief.items"),
+        ({"items": 4, "ungrounded": 1, "model_share": 1.0}, "brief.ungrounded"),
+        ({"items": 4, "ungrounded": 0, "model_share": 0.25}, "brief.model_share"),
+    ):
+        assert combined_status(check_gates({"brief": broken}, BRIEF_GATES)) == f"fail: {metric}"
+    # A brief that could not be read is no data, never a silent pass.
+    missing = combined_status(
+        check_gates({"brief": {"items": 0, "ungrounded": None, "model_share": None}}, BRIEF_GATES)
+    )
+    assert missing.startswith("fail: brief.items")

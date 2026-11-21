@@ -13,6 +13,13 @@ export type ConversationDetail = Schemas["ConversationDetailOut"];
 export type RunRecord = Schemas["RunOut"];
 export type RunRequest = Schemas["RunIn"];
 export type Starter = Schemas["SuggestionOut"];
+export type PageContext = Schemas["PageContext"];
+export type Inbox = Schemas["ExceptionsOut"];
+export type InboxException = Schemas["ExceptionOut"];
+export type Acknowledgement = Schemas["AcknowledgementOut"];
+export type Brief = Schemas["BriefOut"];
+export type SearchResult = Schemas["SearchResultOut"];
+export type BriefItem = Schemas["BriefItemOut"];
 
 /** Thrown when the session is missing or has ended; the shell sends the user to sign in. */
 export class SignedOut extends Error {}
@@ -69,15 +76,20 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function post(path: string, body?: unknown): Promise<void> {
-  const init: RequestInit = { method: "POST" };
+async function send(path: string, body?: unknown, headers: Record<string, string> = {}) {
+  const init: RequestInit = { method: "POST", headers: { ...headers } };
   if (body !== undefined) {
-    init.headers = { "Content-Type": "application/json" };
+    init.headers = { ...headers, "Content-Type": "application/json" };
     init.body = JSON.stringify(body);
   }
   const response = await fetch(path, init);
   if (response.status === 401) throw new SignedOut();
   if (!response.ok) throw await problemFrom(response);
+  return response;
+}
+
+async function post(path: string, body?: unknown): Promise<void> {
+  await send(path, body);
 }
 
 const site = (siteId: string) => `/api/sites/${encodeURIComponent(siteId)}`;
@@ -122,3 +134,30 @@ export const sendFeedback = (
     rating,
     comment: comment ?? null,
   });
+
+/** Site search (D8): SKUs, bin codes and order numbers, at most 8, best match first. */
+export const searchSite = (siteId: string, q: string, signal?: AbortSignal) =>
+  getJson<Schemas["SearchOut"]>(`${site(siteId)}/search?q=${encodeURIComponent(q)}`, signal);
+
+/** Today's brief for the site: generated on the first request of the site day, then stored. */
+export const fetchBrief = (siteId: string, signal?: AbortSignal) =>
+  getJson<Brief>(`${site(siteId)}/brief`, signal);
+
+export const fetchExceptions = (siteId: string, signal?: AbortSignal) =>
+  getJson<Inbox>(`${site(siteId)}/exceptions`, signal);
+
+/**
+ * Acknowledges an exception (Managers only). The key correlates the request in the audit; a
+ * repeat changes nothing (agent spec 16, 2026-11-21).
+ */
+export async function acknowledgeException(
+  siteId: string,
+  exceptionId: string,
+): Promise<Acknowledgement> {
+  const response = await send(
+    `${site(siteId)}/exceptions/${encodeURIComponent(exceptionId)}/acknowledge`,
+    undefined,
+    { "Idempotency-Key": crypto.randomUUID() },
+  );
+  return (await response.json()) as Acknowledgement;
+}

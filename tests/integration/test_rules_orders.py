@@ -138,3 +138,46 @@ def test_delayed_orders_open_overdue_and_shipped_late_since_from(connect_as: Con
     ]
     since_two_days = call(f, "SELECT * FROM sem.delayed_orders(%s, %s, %s, %s)", now - 48 * H)
     assert shipped_late_yesterday in {r["order_id"] for r in since_two_days}
+
+
+# ---------------------------------------------------------------- "today" (daily brief, step 5)
+
+
+def test_today_means_before_midnight_site_time_with_overdue_orders(connect_as: Connect) -> None:
+    """The exact site-local day (product owner review of step 5): an order due at 23:59 is today's,
+    one due at 00:00 is tomorrow's, an overdue one is still at risk; the cutoff follows the site's
+    time zone, not UTC."""
+    from palletwise.semantic import rules
+
+    f = FixtureSite(connect_as)
+    now = f.as_of()
+    zone = f.db.execute("SELECT time_zone FROM pw.site WHERE id = %s", (f.site,)).fetchone()
+    assert zone is not None
+    tz = ZoneInfo(zone[0])
+    midnight = datetime.combine(now.astimezone(tz).date() + timedelta(days=1), datetime.min.time(), tz)
+    assert midnight.utcoffset() != timedelta(0), "the fixture site is not on UTC"
+    pick = f.zone("P", zone_type="FAST_PICK", prime=True)
+    product = f.product("T")
+    f.stock(f.bin(pick, "P-T"), product, 0)  # nothing on the pick face: every due line is at risk
+    due = {
+        "late_evening": f.order(deadline=midnight - timedelta(minutes=1)),  # 23:59 today
+        "midnight": f.order(deadline=midnight),  # 00:00: tomorrow
+        "just_before": f.order(deadline=midnight - timedelta(microseconds=1)),  # still today
+        "overdue": f.order(deadline=now - H),
+    }
+    for order in due.values():
+        f.line(order, product, 3)
+    with tenant_session(role_pool("PW_AGENT_READ"), f.tenant, read_snapshot=True) as conn:
+        today = rules.order_stockout_risks(conn, f.site, "orders", None, today=True)
+        window = rules.order_stockout_risks(conn, f.site, "orders", 48)
+
+    def orders(result: Any) -> set[UUID]:
+        return {e.id for e in result.entities if e.type == "order"}
+
+    assert orders(today) == {due["late_evening"], due["just_before"], due["overdue"]}
+    assert today.row_count == 3
+    assert due["midnight"] in orders(window)  # due, just not today
+    assert today.normalized_request == {
+        "tool": "get_order_stockout_risks", "view": "orders", "hours": None, "today": True,
+    }  # fmt: skip
+    assert "before midnight, site time" in today.evidence.how_computed[0]

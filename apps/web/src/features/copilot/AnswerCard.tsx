@@ -32,7 +32,8 @@ function header(label: string, unit: string | null | undefined): string {
   return `${label} (${unit === "percent" ? "%" : unit})`;
 }
 
-function ResultTable({ result }: { result: ResultEnvelope }) {
+/** A result's rows as a table; shared by answer cards and the brief's details. */
+export function ResultTable({ result }: { result: ResultEnvelope }) {
   const [all, setAll] = useState(false);
   const columns = result.columns;
   const rows = result.rows;

@@ -86,7 +86,7 @@ class ModelCall:
 
     model: str
     region: str
-    purpose: Literal["WORDING", "AGENT", "CLASSIFIER"]
+    purpose: Literal["WORDING", "AGENT", "CLASSIFIER", "BRIEF"]  # BRIEF: the daily brief's wording
     input_tokens: int
     output_tokens: int
     cached_tokens: int
@@ -404,13 +404,13 @@ class MeteredModel(WrapperModel):
         self,
         resolved: ResolvedModel,
         meter: ModelMeter,
-        purpose: Literal["WORDING", "AGENT"],
+        purpose: Literal["WORDING", "AGENT", "BRIEF"],
         state: RunState,
     ):
         super().__init__(resolved.model)
         self._resolved = resolved
         self._meter = meter
-        self._purpose: Literal["WORDING", "AGENT"] = purpose
+        self._purpose: Literal["WORDING", "AGENT", "BRIEF"] = purpose
         self._state = state
 
     async def request(
@@ -497,11 +497,11 @@ class MeteredModel(WrapperModel):
         latency = round((clock.monotonic() - started) * 1000)
         return ModelCall(
             self._resolved.name, self._resolved.region, self._purpose, i, o, c, latency, outcome,
-            stage or ("WORDING" if self._purpose == "WORDING" else "UNKNOWN"), estimated,
+            stage or ("WORDING" if self._purpose in ("WORDING", "BRIEF") else "UNKNOWN"), estimated,
         )  # fmt: skip
 
     def _stage(self, response: ModelResponse) -> Stage:
-        if self._purpose == "WORDING":
+        if self._purpose in ("WORDING", "BRIEF"):
             return "WORDING"
         return "TOOL_CHOICE" if any(isinstance(p, ToolCallPart) for p in response.parts) else "ANSWER_TEXT"
 
@@ -611,6 +611,11 @@ class CopilotRuntime:
         self._provider = provider
         self._run_timeout = run_timeout
         self._tool_names = frozenset(t.name for t in registry)
+
+    @property
+    def provider(self) -> LLMProvider:
+        """The model provider, shared with the daily brief's wording (one per process)."""
+        return self._provider
 
     def agent_settings(self) -> ModelSettings:
         """The agent's model settings, with the configured thinking level (ADR 0001 change 4)."""
@@ -1111,8 +1116,14 @@ class CopilotRuntime:
         return bool(echoed)
 
     def _drops_key_facts(self, tool: str, result: ResultEnvelope, text: str) -> bool:
-        """Model wording that leaves out a key fact of its result is not shown; the template,
-        which states every key fact, is shown instead (no retry: a retry costs a round trip)."""
+        """Model wording that leaves out a key fact of its result, or contradicts it (always on),
+        is not shown; the template, which states every key fact, is shown instead (no retry: a
+        retry costs a round trip)."""
+        contradicted = templates.contradictions(tool, result, text)
+        if contradicted:
+            metrics.guardrail_triggers.labels(kind="contradiction").inc()
+            log.info("answer contradicts its result: %s; showing the template", contradicted)
+            return True
         if not self.config.headline_first:
             return False
         missing = facts_missing(templates.key_facts(tool, result), text)
@@ -1216,7 +1227,10 @@ def choose_route(
         if suggestion.tool not in tool_names:
             return None, 3
         return fast_path.Route("suggestion", suggestion.tool, dict(suggestion.arguments)), 1
-    found = fast_path.route(question)
+    # A question about an exception the user has open ("what should I do about ...") asks for
+    # advice in its context: the model decides, even when the wording names an identifier that an
+    # exact route would take as a plain lookup (code review, Slice 3).
+    found = None if page_context and page_context.get("selected_exception_id") else fast_path.route(question)
     if found and found.tool in tool_names:
         return found, 1
     if semantic and not page_context:

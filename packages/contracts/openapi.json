@@ -1,6 +1,63 @@
 {
   "components": {
     "schemas": {
+      "AcknowledgementOut": {
+        "properties": {
+          "acknowledged_at": {
+            "format": "date-time",
+            "title": "Acknowledged At",
+            "type": "string"
+          },
+          "acknowledged_by": {
+            "title": "Acknowledged By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "ACKNOWLEDGED",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "acknowledged_by",
+          "acknowledged_at"
+        ],
+        "title": "AcknowledgementOut",
+        "type": "object"
+      },
+      "AffectedOrderOut": {
+        "properties": {
+          "order_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "order_no": {
+            "title": "Order No",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "order_no"
+        ],
+        "title": "AffectedOrderOut",
+        "type": "object"
+      },
       "BinOut": {
         "properties": {
           "bay": {
@@ -126,6 +183,148 @@
           "on_hand"
         ],
         "title": "BinStateOut",
+        "type": "object"
+      },
+      "BriefItemOut": {
+        "properties": {
+          "highlights": {
+            "items": {
+              "$ref": "#/components/schemas/Highlight"
+            },
+            "title": "Highlights",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "top_exceptions",
+              "orders_at_risk_today",
+              "throughput",
+              "data_freshness"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BriefLinkOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "$ref": "#/components/schemas/ResultEnvelope"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "text_source": {
+            "enum": [
+              "model",
+              "template"
+            ],
+            "title": "Text Source",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "text",
+          "text_source",
+          "why",
+          "link",
+          "highlights",
+          "result"
+        ],
+        "title": "BriefItemOut",
+        "type": "object"
+      },
+      "BriefLinkOut": {
+        "properties": {
+          "suggestion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SuggestionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to": {
+            "enum": [
+              "inbox",
+              "copilot"
+            ],
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to"
+        ],
+        "title": "BriefLinkOut",
+        "type": "object"
+      },
+      "BriefOut": {
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "business_date": {
+            "format": "date",
+            "title": "Business Date",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BriefItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          },
+          "wording_source": {
+            "enum": [
+              "model",
+              "template",
+              "mixed"
+            ],
+            "title": "Wording Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "business_date",
+          "as_of",
+          "time_zone",
+          "generated_at",
+          "wording_source",
+          "items"
+        ],
+        "title": "BriefOut",
         "type": "object"
       },
       "Column": {
@@ -342,6 +541,191 @@
           "how_computed"
         ],
         "title": "Evidence",
+        "type": "object"
+      },
+      "ExceptionOut": {
+        "properties": {
+          "acknowledged_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged At"
+          },
+          "acknowledged_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged By"
+          },
+          "components": {
+            "$ref": "#/components/schemas/ScoreComponentsOut"
+          },
+          "exception_type": {
+            "enum": [
+              "STOCKOUT_RISK",
+              "DELAYED_ORDER",
+              "LOW_STOCK",
+              "DEAD_STOCK",
+              "SLOW_IN_PRIME",
+              "CAPACITY_HOTSPOT",
+              "FESTIVAL_SHORTAGE"
+            ],
+            "title": "Exception Type",
+            "type": "string"
+          },
+          "first_detected_at": {
+            "format": "date-time",
+            "title": "First Detected At",
+            "type": "string"
+          },
+          "highlights": {
+            "items": {
+              "$ref": "#/components/schemas/Highlight"
+            },
+            "title": "Highlights",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_evaluated_at": {
+            "format": "date-time",
+            "title": "Last Evaluated At",
+            "type": "string"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/AffectedOrderOut"
+            },
+            "title": "Orders",
+            "type": "array"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "settings_version_id": {
+            "format": "uuid",
+            "title": "Settings Version Id",
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "status": {
+            "enum": [
+              "OPEN",
+              "ACKNOWLEDGED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subject_key": {
+            "title": "Subject Key",
+            "type": "string"
+          },
+          "subject_label": {
+            "title": "Subject Label",
+            "type": "string"
+          },
+          "zone_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zone Id"
+          }
+        },
+        "required": [
+          "id",
+          "exception_type",
+          "status",
+          "subject_key",
+          "subject_label",
+          "product_id",
+          "zone_id",
+          "order_id",
+          "severity",
+          "score",
+          "components",
+          "settings_version_id",
+          "first_detected_at",
+          "last_evaluated_at",
+          "acknowledged_by",
+          "acknowledged_at",
+          "highlights",
+          "orders"
+        ],
+        "title": "ExceptionOut",
+        "type": "object"
+      },
+      "ExceptionsOut": {
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "exceptions": {
+            "items": {
+              "$ref": "#/components/schemas/ExceptionOut"
+            },
+            "title": "Exceptions",
+            "type": "array"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "as_of",
+          "time_zone",
+          "exceptions"
+        ],
+        "title": "ExceptionsOut",
         "type": "object"
       },
       "FeatureOut": {
@@ -626,6 +1010,38 @@
               }
             ],
             "title": "Selected Bin"
+          },
+          "selected_exception_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Exception Id"
+          },
+          "selected_exception_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "STOCKOUT_RISK",
+                  "DELAYED_ORDER",
+                  "LOW_STOCK",
+                  "DEAD_STOCK",
+                  "SLOW_IN_PRIME",
+                  "CAPACITY_HOTSPOT",
+                  "FESTIVAL_SHORTAGE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Exception Type"
           },
           "selected_zone": {
             "anyOf": [
@@ -948,6 +1364,158 @@
           "finished_at"
         ],
         "title": "RunOut",
+        "type": "object"
+      },
+      "ScoreComponentsOut": {
+        "description": "The raw inputs, their 0 to 1 normalization, caps and weights (semantic 6.1).",
+        "properties": {
+          "hours_cap": {
+            "title": "Hours Cap",
+            "type": "number"
+          },
+          "hours_until_due": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours Until Due"
+          },
+          "lines": {
+            "title": "Lines",
+            "type": "integer"
+          },
+          "lines_cap": {
+            "title": "Lines Cap",
+            "type": "number"
+          },
+          "lines_normalized": {
+            "title": "Lines Normalized",
+            "type": "number"
+          },
+          "urgency_normalized": {
+            "title": "Urgency Normalized",
+            "type": "number"
+          },
+          "value_at_risk": {
+            "title": "Value At Risk",
+            "type": "number"
+          },
+          "value_cap": {
+            "title": "Value Cap",
+            "type": "number"
+          },
+          "value_normalized": {
+            "title": "Value Normalized",
+            "type": "number"
+          },
+          "weight_lines": {
+            "title": "Weight Lines",
+            "type": "number"
+          },
+          "weight_urgency": {
+            "title": "Weight Urgency",
+            "type": "number"
+          },
+          "weight_value": {
+            "title": "Weight Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lines",
+          "hours_until_due",
+          "value_at_risk",
+          "lines_normalized",
+          "urgency_normalized",
+          "value_normalized",
+          "lines_cap",
+          "hours_cap",
+          "value_cap",
+          "weight_lines",
+          "weight_urgency",
+          "weight_value"
+        ],
+        "title": "ScoreComponentsOut",
+        "type": "object"
+      },
+      "SearchOut": {
+        "properties": {
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResultOut"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "query",
+          "results"
+        ],
+        "title": "SearchOut",
+        "type": "object"
+      },
+      "SearchResultOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "product",
+              "bin",
+              "order"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "match": {
+            "enum": [
+              "exact",
+              "prefix",
+              "name"
+            ],
+            "title": "Match",
+            "type": "string"
+          },
+          "suggestion": {
+            "$ref": "#/components/schemas/SuggestionOut"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "code",
+          "label",
+          "match",
+          "suggestion"
+        ],
+        "title": "SearchResultOut",
         "type": "object"
       },
       "Severity": {
@@ -1729,6 +2297,227 @@
         ]
       }
     },
+    "/api/sites/{site_id}/brief": {
+      "get": {
+        "operationId": "daily_brief_api_sites__site_id__brief_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "DATA_NOT_READY or BRIEF_PREPARING"
+          }
+        },
+        "summary": "Daily Brief",
+        "tags": [
+          "brief"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/events": {
+      "get": {
+        "operationId": "site_events_api_sites__site_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "last-event-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {}
+            },
+            "description": "Site change hints (agent spec 9.2)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Site Events",
+        "tags": [
+          "map"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/exceptions": {
+      "get": {
+        "operationId": "list_exceptions_api_sites__site_id__exceptions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExceptionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "DATA_NOT_READY"
+          }
+        },
+        "summary": "List Exceptions",
+        "tags": [
+          "exceptions"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/exceptions/{exception_id}/acknowledge": {
+      "post": {
+        "operationId": "acknowledge_exception_api_sites__site_id__exceptions__exception_id__acknowledge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "exception_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Exception Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{8,128}$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcknowledgementOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          },
+          "409": {
+            "description": "EXCEPTION_RESOLVED"
+          },
+          "422": {
+            "description": "VALIDATION_FAILED"
+          }
+        },
+        "summary": "Acknowledge Exception",
+        "tags": [
+          "exceptions"
+        ]
+      }
+    },
     "/api/sites/{site_id}/layout": {
       "get": {
         "operationId": "layout_api_sites__site_id__layout_get",
@@ -1831,6 +2620,56 @@
         "summary": "Current Map State",
         "tags": [
           "map"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/search": {
+      "get": {
+        "operationId": "search_api_sites__site_id__search_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "422": {
+            "description": "VALIDATION_FAILED"
+          }
+        },
+        "summary": "Search",
+        "tags": [
+          "search"
         ]
       }
     },

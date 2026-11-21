@@ -161,18 +161,31 @@
   .pw-workspace[data-panel="copilot"] {
     grid-template-columns: minmax(560px, 45fr) minmax(380px, 55fr);
   }
+
+  .pw-workspace[data-panel="inbox"] {
+    grid-template-columns: minmax(560px, 55fr) minmax(380px, 45fr);
+  }
+}
+
+/* The copilot and the inbox share the column beside the map (D4); both stay mounted, so an
+   answer in progress keeps streaming while the inbox is shown. */
+.pw-workspace[data-panel="inbox"] .pw-copilot,
+.pw-workspace:not([data-panel="inbox"]) .pw-inbox {
+  display: none;
 }
 
 /* Below 1200 px: one panel at a time; the view switch toggles between them. */
 @media (max-width: 1199px) {
   .pw-workspace,
   .pw-workspace[data-panel="warehouse"],
-  .pw-workspace[data-panel="copilot"] {
+  .pw-workspace[data-panel="copilot"],
+  .pw-workspace[data-panel="inbox"] {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .pw-workspace[data-panel="warehouse"] .pw-copilot,
-  .pw-workspace[data-panel="copilot"] .pw-map-panel {
+  .pw-workspace[data-panel="copilot"] .pw-map-panel,
+  .pw-workspace[data-panel="inbox"] .pw-map-panel {
     display: none;
   }
 }
@@ -190,4 +203,12 @@
   .pw-page-head h1 {
     font-size: var(--pw-font-size-xl);
   }
+}
+
+/* Search and profile share the top bar's right edge. */
+.pw-topbar-actions {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: var(--pw-space-2);
 }

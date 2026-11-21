@@ -22,6 +22,7 @@ LOGIN_ROLES: tuple[str, ...] = (
     "pw_agent_read",
     "pw_memory",
     "pw_cache",
+    "pw_brief",
     "sim_owner",
     "sim_outbox_reader",
 )

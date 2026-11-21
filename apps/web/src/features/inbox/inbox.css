@@ -1,0 +1,142 @@
+/* Exceptions inbox (slice-3-acceptance step 4). Tokens only. */
+
+.pw-inbox {
+  min-width: 0;
+}
+
+.pw-exceptions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--pw-space-2);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.pw-exception {
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-md);
+  background: var(--pw-color-surface);
+}
+
+.pw-exception[data-chosen] {
+  border-color: var(--pw-color-accent);
+  box-shadow: var(--pw-shadow-card);
+}
+
+.pw-exception-row {
+  display: grid;
+  gap: var(--pw-space-1);
+  width: 100%;
+  padding: var(--pw-space-3) var(--pw-space-4);
+  border: 0;
+  border-radius: var(--pw-radius-md);
+  background: transparent;
+  color: var(--pw-color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pw-exception-row:focus-visible {
+  outline: 2px solid var(--pw-color-focus-ring);
+  outline-offset: -2px;
+}
+
+.pw-exception-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pw-space-2);
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-exception-type {
+  font-weight: var(--pw-font-weight-navigation);
+}
+
+.pw-exception-ack {
+  padding: 0 var(--pw-space-2);
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-accent-soft);
+  color: var(--pw-color-accent-text);
+  font-size: var(--pw-font-size-xs);
+}
+
+.pw-exception-subject {
+  font-size: var(--pw-font-size-md);
+}
+
+.pw-exception-score {
+  color: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-sm);
+}
+
+/* Severity: an icon and a word in the status color; never color alone (FR-MAP-03). */
+.pw-severity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pw-space-1);
+  font-weight: var(--pw-font-weight-navigation);
+}
+
+.pw-severity.is-info {
+  color: var(--pw-color-status-info);
+}
+
+.pw-severity.is-warning {
+  color: var(--pw-color-status-warning);
+}
+
+.pw-severity.is-critical {
+  color: var(--pw-color-status-critical);
+}
+
+.pw-exception-details {
+  display: grid;
+  gap: var(--pw-space-3);
+  padding: 0 var(--pw-space-4) var(--pw-space-4);
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-exception-details p {
+  margin: 0;
+}
+
+.pw-why {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.pw-why caption {
+  margin-bottom: var(--pw-space-2);
+  text-align: left;
+  color: var(--pw-color-text-muted);
+}
+
+.pw-why th,
+.pw-why td {
+  padding: var(--pw-space-1) var(--pw-space-2) var(--pw-space-1) 0;
+  border-bottom: 1px solid var(--pw-color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.pw-why thead th {
+  color: var(--pw-color-text-muted);
+  font-weight: var(--pw-font-weight-body);
+}
+
+.pw-exception-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pw-space-2);
+}
+
+.pw-inbox-message {
+  display: grid;
+  gap: var(--pw-space-2);
+  justify-items: start;
+}

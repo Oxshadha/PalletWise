@@ -50,6 +50,15 @@ ingest_records = Counter("pw_ingest_records", "Records ingested", ["record_type"
 export_failures = Counter(
     "pw_telemetry_export_failures", "Span export batches that failed", ["exporter"], registry=REGISTRY
 )
+exception_evaluations = Counter(
+    "pw_exception_evaluations", "Exception engine evaluations of a site", ["outcome"], registry=REGISTRY
+)
+exception_evaluation_duration = Histogram(
+    "pw_exception_evaluation_seconds",
+    "Time to evaluate one site's exceptions",
+    registry=REGISTRY,
+    buckets=LATENCY_BUCKETS,
+)
 ingest_lag = Gauge(
     "pw_ingest_lag_seconds",
     "Newest source record time minus the site clock; positive means ingestion is behind",

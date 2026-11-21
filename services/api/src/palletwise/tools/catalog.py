@@ -4,17 +4,19 @@ semantic layer: no business rule lives here (semantic spec 8). Descriptions are 
 
 from collections.abc import Callable
 from typing import Literal, Self
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from palletwise.contracts.results import ResultEnvelope
-from palletwise.semantic import locations, query, rules
+from palletwise.semantic import exceptions, locations, query, rules
 from palletwise.semantic.model import semantic_model
 from palletwise.semantic.query_request import QueryRequest, check
 from palletwise.tools.executor import ToolContext, ToolRegistry, ToolSpec
 
 SKU_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$"
 BIN_CODE_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9-]{0,31}$"
+ORDER_NO_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,47}$"  # a WMS order number, nothing else
 
 
 class StrictInput(BaseModel):
@@ -107,6 +109,18 @@ class GetOrderStockoutRisksInput(StrictInput):
         default=None, ge=1, le=168,
         description="Orders due within this many hours; omit to use the site setting (24 by default)",
     )  # fmt: skip
+    today: bool = Field(
+        default=False,
+        description="Only orders due before midnight, site time (overdue included); not with hours",
+    )
+
+    @model_validator(mode="after")
+    def one_window(self) -> Self:
+        if self.today and self.hours is not None:
+            raise ValueError("give hours or today, not both")
+        if self.today and self.view == "replenish_before_first_dispatch":
+            raise ValueError("today applies to the products and orders views")
+        return self
 
 
 def _rule_tool[I: BaseModel](
@@ -184,7 +198,7 @@ GET_ORDER_STOCKOUT_RISKS = _rule_tool(
     "affected orders ('which of today's orders are at risk'); view=replenish_before_first_dispatch "
     "lists what to replenish before today's next dispatch deadline.",
     GetOrderStockoutRisksInput, "orders.read",
-    lambda ctx, p: rules.order_stockout_risks(ctx.conn, ctx.site, p.view, p.hours),
+    lambda ctx, p: rules.order_stockout_risks(ctx.conn, ctx.site, p.view, p.hours, p.today),
 )  # fmt: skip
 
 
@@ -210,11 +224,56 @@ def _query_description() -> str:
         "fixed tool when one fits. Request: measures (1 to 3), dimensions (0 to 2), filters (0 to 5, "
         "each {field, op, value}; field is a dimension or a measure), time_range ({last_days: n} or "
         "{from, to} dates; required with flow measures, not allowed otherwise), sort {by, direction}, "
-        "limit (1 to 100), scope {working_set: true} to narrow the previous result. Text operators: "
+        "limit (1 to 100), scope {working_set: true} to narrow the previous result. With no dimensions "
+        "the answer is one total for everything the filters select, such as a category as a whole; add "
+        "a dimension only when the question asks for a breakdown. Text operators: "
         "=, !=, in; product also name_contains; numbers: =, !=, <, <=, >, >=, between [low, high]; "
         "day, week, month: within_last_days, older_than_days. Measures: " + measures + ". A refusal "
         "explains what to change."
     )
+
+
+ExceptionTypeName = Literal[
+    "STOCKOUT_RISK", "DELAYED_ORDER", "LOW_STOCK", "DEAD_STOCK", "SLOW_IN_PRIME", "CAPACITY_HOTSPOT",
+]  # fmt: skip
+
+
+class GetOpenExceptionsInput(StrictInput):
+    limit: int = Field(default=5, ge=1, le=20, description="How many, highest impact first")
+    exception_type: ExceptionTypeName | None = Field(default=None, description="Only this type")
+    exception_id: UUID | None = Field(
+        default=None, description="One exception the user has open (page context); not with exception_type"
+    )
+
+    @model_validator(mode="after")
+    def one_filter(self) -> Self:
+        if self.exception_id is not None and self.exception_type is not None:
+            raise ValueError("give exception_id or exception_type, not both")
+        return self
+
+
+GET_OPEN_EXCEPTIONS = _rule_tool(
+    "get_open_exceptions",
+    "The open and acknowledged exceptions the inbox shows, ranked by impact score, with the order "
+    "lines affected, hours until due and value at risk behind each score. Read only.",
+    GetOpenExceptionsInput,
+    "inventory.read",
+    lambda ctx, p: exceptions.open_exceptions(ctx.conn, ctx.site, p.limit, p.exception_type, p.exception_id),
+)
+
+
+class GetOrderStatusInput(StrictInput):
+    order_no: str = Field(pattern=ORDER_NO_PATTERN, description="Exact order number, for example SO-1042")
+
+
+GET_ORDER_STATUS = _rule_tool(
+    "get_order_status",
+    "One order by its exact number: status, dispatch deadline, whether it is delayed, and each "
+    "line's units ordered, allocated, picked and shipped, with lines at stockout risk.",
+    GetOrderStatusInput,
+    "orders.read",
+    lambda ctx, p: rules.order_status(ctx.conn, ctx.site, p.order_no),
+)
 
 
 QUERY_INVENTORY = _rule_tool(
@@ -231,5 +290,8 @@ SLICE_2_TOOLS = (
 )  # fmt: skip
 
 
+SLICE_3_TOOLS = (GET_ORDER_STATUS, GET_OPEN_EXCEPTIONS)
+
+
 def v1_tools() -> ToolRegistry:
-    return ToolRegistry([FIND_PRODUCT_LOCATIONS, GET_BIN_CONTENTS, *SLICE_2_TOOLS])
+    return ToolRegistry([FIND_PRODUCT_LOCATIONS, GET_BIN_CONTENTS, *SLICE_2_TOOLS, *SLICE_3_TOOLS])

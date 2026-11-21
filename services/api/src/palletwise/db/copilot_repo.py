@@ -279,7 +279,7 @@ class UsageRecord:
     run_id: UUID | None
     agent_id: str
     agent_version: str | None
-    purpose: str  # WORDING, AGENT, CLASSIFIER
+    purpose: str  # WORDING, AGENT, CLASSIFIER, BRIEF
     model: str
     region: str
     input_tokens: int
@@ -290,6 +290,7 @@ class UsageRecord:
     outcome: str  # OK, ERROR, CANCELLED
     stage: str  # TOOL_CHOICE, ANSWER_TEXT, WORDING, CLASSIFIER, UNKNOWN (ADR 0001)
     usage_estimated: bool
+    brief_id: UUID | None = None  # the daily brief a BRIEF call worded
 
     def as_json(self) -> dict[str, Any]:
         return {

@@ -1,0 +1,91 @@
+/* Command box (UX spec 2, slice-3-acceptance step 6). Tokens only. */
+
+.pw-search-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  justify-items: center;
+  align-items: start;
+  padding: var(--pw-space-12) var(--pw-space-4) var(--pw-space-4);
+  background: var(--pw-color-scroll-shade);
+}
+
+.pw-search {
+  width: min(36rem, 100%);
+  gap: var(--pw-space-3);
+  box-shadow: var(--pw-shadow-popover);
+}
+
+.pw-search-field {
+  display: flex;
+  align-items: center;
+  gap: var(--pw-space-2);
+  padding: var(--pw-space-2) var(--pw-space-3);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-md);
+  background: var(--pw-color-surface);
+  color: var(--pw-color-text-muted);
+}
+
+.pw-search-field:focus-within {
+  outline: 2px solid var(--pw-color-focus-ring);
+  outline-offset: 1px;
+}
+
+.pw-search-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pw-color-text-primary);
+  font: inherit;
+  font-size: var(--pw-font-size-md);
+}
+
+.pw-search-field input:focus {
+  outline: none;
+}
+
+.pw-search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--pw-space-1);
+}
+
+.pw-search-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--pw-space-2);
+  padding: var(--pw-space-2) var(--pw-space-3);
+  border-radius: var(--pw-radius-sm);
+  cursor: pointer;
+}
+
+.pw-search-result[aria-selected="true"] {
+  background: var(--pw-color-accent-soft);
+}
+
+.pw-search-kind {
+  min-width: 5rem;
+  color: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-xs);
+  letter-spacing: var(--pw-letter-spacing-label);
+  text-transform: uppercase;
+}
+
+.pw-search-code {
+  font-weight: var(--pw-font-weight-navigation);
+}
+
+.pw-search-status {
+  margin: 0;
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-search-status:empty {
+  display: none;
+}

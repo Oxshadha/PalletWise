@@ -3,6 +3,8 @@ import "./app.css";
 import { useEffect, useState } from "react";
 
 import { CopilotPanel } from "../features/copilot/CopilotPanel";
+import { InboxPanel } from "../features/inbox/InboxPanel";
+import { Search } from "../features/search/SearchBox";
 import { MapPanel } from "../features/map/MapPanel";
 import {
   fetchMe,
@@ -19,7 +21,8 @@ import {
   storedThemeChoice,
   type ThemeChoice,
 } from "../shared/theme/theme";
-import { formatSiteTime } from "../shared/format";
+import { useSiteChanges } from "../shared/api/siteEvents";
+import { formatSiteTime, siteDate } from "../shared/format";
 import { Icon } from "../shared/ui/Icon";
 import { WorkspaceProvider } from "../shared/workspace/WorkspaceContext";
 
@@ -50,7 +53,16 @@ const THEMES: { value: ThemeChoice; label: string }[] = [
   { value: "system", label: "System" },
 ];
 
-type Panel = "warehouse" | "copilot";
+type Panel = "warehouse" | "copilot" | "inbox";
+
+const PANEL_HEADING: Record<Panel, string> = {
+  warehouse: "pw-warehouse-title",
+  copilot: "pw-copilot-title",
+  inbox: "pw-inbox-title",
+};
+
+/** Below this width one panel shows at a time (UX spec 9, app.css). */
+const ONE_PANEL = "(max-width: 1199px)";
 
 function signInError(): string | null {
   const reason = new URLSearchParams(window.location.search).get("auth_error");
@@ -121,7 +133,10 @@ function ProfileMenu({ me, siteName }: { me: Me; siteName: string | null }) {
   );
 }
 
-/** Workspace shell (UX spec 2, 9): the warehouse and the copilot, nothing added to fill space. */
+/**
+ * Workspace shell (UX spec 2, 9): the warehouse beside the copilot or the inbox (D4), nothing
+ * added to fill space.
+ */
 export function App() {
   const [authError] = useState(signInError);
   const [me, setMe] = useState<Me | null>(null);
@@ -152,13 +167,27 @@ export function App() {
     };
   }, [authError]);
 
+  // The header's site time and data status follow the site stream (agent spec 9.2).
+  const siteId = me?.sites[0]?.id ?? null;
+  const statusChanged = useSiteChanges(siteId, ["clock", "data_status"]);
+  useEffect(() => {
+    if (!siteId || statusChanged === 0) return;
+    const controller = new AbortController();
+    fetchSiteStatus(siteId, controller.signal)
+      .then(setSite)
+      .catch(() => {
+        /* the 15-second reload above retries */
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [siteId, statusChanged]);
+
   const choosePanel = (next: Panel) => {
     setPanel(next);
     // Reveal the panel and move focus to its heading (UX spec 2).
     window.requestAnimationFrame(() => {
-      const heading = document.getElementById(
-        next === "warehouse" ? "pw-warehouse-title" : "pw-copilot-title",
-      );
+      const heading = document.getElementById(PANEL_HEADING[next]);
       heading?.scrollIntoView({ block: "nearest" });
       heading?.focus();
     });
@@ -168,7 +197,7 @@ export function App() {
   const notReady =
     site && site.data_status !== "READY" ? (NOT_READY_TEXT[site.data_status] ?? null) : null;
 
-  return (
+  const shell = (
     <div className="pw-app">
       <header className="pw-topbar">
         <div className="pw-brand">
@@ -198,11 +227,32 @@ export function App() {
             >
               <Icon name="chat" size={16} /> Copilot
             </button>
+            <button
+              type="button"
+              aria-pressed={panel === "inbox"}
+              onClick={() => {
+                choosePanel("inbox");
+              }}
+            >
+              <Icon name="inbox" size={16} /> Inbox
+            </button>
           </nav>
         )}
-        {me && (
-          <ProfileMenu me={me} siteName={siteInfo ? `${siteInfo.name} (${siteInfo.code})` : null} />
-        )}
+        <div className="pw-topbar-actions">
+          {me && siteInfo && (
+            <Search
+              onAsked={() => {
+                choosePanel("copilot");
+              }}
+            />
+          )}
+          {me && (
+            <ProfileMenu
+              me={me}
+              siteName={siteInfo ? `${siteInfo.name} (${siteInfo.code})` : null}
+            />
+          )}
+        </div>
       </header>
 
       {me && siteInfo && (
@@ -247,13 +297,39 @@ export function App() {
       )}
 
       {me && siteInfo && (
-        <WorkspaceProvider me={me} siteId={siteInfo.id} dataReady={!notReady}>
-          <main className="pw-workspace" data-panel={panel}>
-            <MapPanel />
-            <CopilotPanel notReadyText={notReady} />
-          </main>
-        </WorkspaceProvider>
+        <main className="pw-workspace" data-panel={panel}>
+          <MapPanel />
+          <CopilotPanel
+            notReadyText={notReady}
+            onOpenInbox={() => {
+              choosePanel("inbox");
+            }}
+          />
+          <InboxPanel
+            onAskCopilot={() => {
+              choosePanel("copilot");
+            }}
+            onShowOnMap={() => {
+              // Beside the map on wide screens; on narrow ones, show the map.
+              if (window.matchMedia(ONE_PANEL).matches) choosePanel("warehouse");
+            }}
+          />
+        </main>
       )}
     </div>
+  );
+
+  // The workspace spans the header too: search asks the copilot like any other question.
+  return me && siteInfo ? (
+    <WorkspaceProvider
+      me={me}
+      siteId={siteInfo.id}
+      dataReady={!notReady}
+      siteDate={site?.sim_time ? siteDate(site.sim_time, site.time_zone) : null}
+    >
+      {shell}
+    </WorkspaceProvider>
+  ) : (
+    shell
   );
 }

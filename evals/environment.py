@@ -318,6 +318,15 @@ def standalone() -> Generator[EvalEnv]:
         admin = connect("pw_sim_admin")
         digest, _ = dataset_hash.compute(admin, tenant, site)
         site_repo.complete_load(admin, tenant, site, run, digest)
+        # The exception engine evaluates the loaded site, as the evaluator worker does once the
+        # site is READY (slice-3-acceptance 2.3), so the inbox and its tool have their records.
+        evaluator = connect("pw_evaluator")
+        with evaluator.transaction():
+            evaluator.execute("SELECT set_config('app.tenant_id', %s, true)", (str(tenant),))
+            evaluated = evaluator.execute(
+                "SELECT outcome FROM pw.evaluate_site_exceptions(%s)", (site,)
+            ).fetchone()
+        assert evaluated is not None and evaluated[0] == "evaluated", evaluated
 
         superuser = connect("postgres")
         superuser.autocommit = True

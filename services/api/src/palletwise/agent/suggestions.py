@@ -95,6 +95,9 @@ RULES: dict[str, Callable[[ResultEnvelope], list[Suggestion]]] = {
     "get_delayed_orders": _ok(lambda r: [ORDERS_AT_RISK, PRODUCTS_SHORT]),
     "get_order_stockout_risks": _ok(lambda r: [*_first_sku(r), REPLENISH_FIRST, ORDERS_AT_RISK]),
     "query_inventory": _ok(_first_sku),
+    # After one order: where its first product is, then the day's other orders at risk.
+    "get_order_status": _ok(lambda r: [*_first_sku(r), ORDERS_AT_RISK]),
+    "get_open_exceptions": _ok(lambda r: [ORDERS_AT_RISK, REPLENISH_FIRST]),
 }
 
 

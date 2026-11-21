@@ -78,6 +78,7 @@ services:
       PW_AGENT_READ_PASSWORD: ${PW_AGENT_READ_PASSWORD}
       PW_MEMORY_PASSWORD: ${PW_MEMORY_PASSWORD}
       PW_CACHE_PASSWORD: ${PW_CACHE_PASSWORD}
+      PW_BRIEF_PASSWORD: ${PW_BRIEF_PASSWORD}
       SIM_OWNER_PASSWORD: ${SIM_OWNER_PASSWORD}
       SIM_OUTBOX_READER_PASSWORD: ${SIM_OUTBOX_READER_PASSWORD}
     depends_on:
@@ -182,6 +183,8 @@ services:
       PW_MEMORY_PASSWORD: ${PW_MEMORY_PASSWORD}
       PW_CACHE_USER: pw_cache
       PW_CACHE_PASSWORD: ${PW_CACHE_PASSWORD}
+      PW_BRIEF_USER: pw_brief
+      PW_BRIEF_PASSWORD: ${PW_BRIEF_PASSWORD}
       # Gemini on Vertex AI (optional). Without a project and key file the copilot uses path B.
       PW_LLM_PROJECT: ${GCP_PROJECT_ID:-}
       PW_LLM_LOCATION: ${PW_LLM_LOCATION:-global}

@@ -1,0 +1,14 @@
+{
+ "ref": "get_open_exceptions:5",
+ "dataset_version": "sim-v1-seed42-14d",
+ "locations": [
+  "A7-02-03",
+  "A7-03-04",
+  "B1-01-02",
+  "B1-01-04",
+  "B1-04-04",
+  "D1-01-02",
+  "zone:B",
+  "zone:D"
+ ]
+}

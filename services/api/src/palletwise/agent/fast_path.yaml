@@ -6,6 +6,7 @@ version: 1
 identifiers:
   sku: '\bSKU-\d{1,6}\b'
   bin: '\b[A-Z]\d{1,2}-\d{2}-\d{2}\b|\b[A-Z]-[A-Z]\d{2}\b'
+  order: '\bSO-\d[A-Z0-9-]*[A-Z0-9]\b'
 
 rules:
   - name: product_location
@@ -18,6 +19,11 @@ rules:
     identifier: bin
     argument: bin_code
     words: [what, contents, content, inside, holds, hold, contain, contains, stored, in]
+  - name: order_status
+    tool: get_order_status
+    identifier: order
+    argument: order_no
+    words: [status, order, late, delayed, due, shipped, ready, progress, where]
 
 # The personas questions that need no identifier (Slice 2). Matched exactly after normalizing
 # case, spacing, apostrophes and end punctuation; any rewording or extra condition ("in zone B")
@@ -49,4 +55,20 @@ questions:
     arguments: {}
   - text: are slow movers sitting in the fast-pick zone
     tool: get_slow_in_prime
+    arguments: {}
+  # Slice 3 step 7 (D5): what the inbox shows, from its own records.
+  - text: what needs my attention
+    tool: get_open_exceptions
+    arguments: {}
+  - text: what needs my attention today
+    tool: get_open_exceptions
+    arguments: {}
+  - text: what should i look at first
+    tool: get_open_exceptions
+    arguments: {}
+  - text: show me the open exceptions
+    tool: get_open_exceptions
+    arguments: {}
+  - text: what are the top exceptions
+    tool: get_open_exceptions
     arguments: {}

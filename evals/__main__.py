@@ -11,10 +11,12 @@ from pathlib import Path
 from evals.cases import load_set
 from evals.configs import named
 from evals.environment import standalone
+from evals.measure import BRIEF_GATES, check_gates, combined_status
 from evals.runner import (
     REPORTS_DIR,
     TOOL_NAMES,
     ConfigRun,
+    brief_wording,
     compare,
     config_names,
     deterministic,
@@ -97,6 +99,13 @@ def main(argv: list[str] | None = None) -> int:
             ConfigRun(name, config.as_json(), results)
             for (name, results), config in zip(compared, configs, strict=True)
         ]
+        # The daily brief, once: it is stored per site and day, so every configuration reads it.
+        brief = brief_wording(env, lambda: build_provider(LlmSettings()))
+        for entry in entries:
+            entry.metrics.update(brief)
+            entry.gates += check_gates(entry.metrics, BRIEF_GATES)
+            invalid = entry.status.split("; ")[0] + "; " if entry.status.startswith("invalid") else ""
+            entry.status = invalid + combined_status(entry.gates)
         paths = write_model_report(
             hashes,
             env,
