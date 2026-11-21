@@ -21,6 +21,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/agent/governed-query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Governed Query
+         * @description Custom queries on or off for the organisation (ADR 0002 section 7, D5); audited.
+         */
+        put: operations["set_governed_query_api_admin_agent_governed_query_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/agent/status": {
         parameters: {
             query?: never;
@@ -600,6 +620,8 @@ export interface components {
         AgentOut: {
             /** Daily Token Budget */
             daily_token_budget: number;
+            /** Governed Query Enabled */
+            governed_query_enabled: boolean;
             /** Id */
             id: string;
             /** Primary Model */
@@ -957,6 +979,21 @@ export interface components {
              * @enum {string}
              */
             rating: "HELPFUL" | "NOT_HELPFUL";
+        };
+        /** GovernedIn */
+        GovernedIn: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** GovernedOut */
+        GovernedOut: {
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "changed" | "unchanged";
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1524,6 +1561,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentOut"];
+                };
+            };
+        };
+    };
+    set_governed_query_api_admin_agent_governed_query_put: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GovernedIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

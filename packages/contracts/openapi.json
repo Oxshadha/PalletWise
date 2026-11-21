@@ -64,6 +64,10 @@
             "title": "Daily Token Budget",
             "type": "integer"
           },
+          "governed_query_enabled": {
+            "title": "Governed Query Enabled",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -100,7 +104,8 @@
           "primary_model",
           "prompt_version",
           "daily_token_budget",
-          "used_tokens_today"
+          "used_tokens_today",
+          "governed_query_enabled"
         ],
         "title": "AgentOut",
         "type": "object"
@@ -1063,6 +1068,41 @@
           "rating"
         ],
         "title": "FeedbackIn",
+        "type": "object"
+      },
+      "GovernedIn": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "GovernedIn",
+        "type": "object"
+      },
+      "GovernedOut": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "outcome": {
+            "enum": [
+              "changed",
+              "unchanged"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "enabled"
+        ],
+        "title": "GovernedOut",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -2514,6 +2554,60 @@
           }
         },
         "summary": "Get Agent",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/agent/governed-query": {
+      "put": {
+        "description": "Custom queries on or off for the organisation (ADR 0002 section 7, D5); audited.",
+        "operationId": "set_governed_query_api_admin_agent_governed_query_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{8,128}$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GovernedIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Governed Query",
         "tags": [
           "admin"
         ]

@@ -62,6 +62,10 @@ class ToolContext:
     tenant: UUID
     site: UUID
     working_set: WorkingSet | None = None  # the previous answer's identifiers (semantic spec 7.5)
+    # The run and the agent acting, for tools that must carry the agent's identity further (the
+    # governed query tags its database session with them, ADR 0002 section 6a).
+    run: "RunContext | None" = None
+    agent: AgentRecord | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,9 +264,11 @@ class ToolExecutor:
         # 4. Handler, as pw_agent_read, bound to the session's tenant.
         try:
             with tenant_session(self._read_pool, run.tenant, read_snapshot=True) as conn:
-                output = spec.handler(ToolContext(conn, run.tenant, run.site, run.working_set), params)
+                context = ToolContext(conn, run.tenant, run.site, run.working_set, run, agent)
+                output = spec.handler(context, params)
         except RequestRejected as exc:  # a reason the agent can act on, not a failure
-            return finish(Outcome.VALIDATION_FAILED, agent=agent, parameters=normalized, decision=decision,
+            audited = {**normalized, **exc.audit} if exc.audit else normalized
+            return finish(Outcome.VALIDATION_FAILED, agent=agent, parameters=audited, decision=decision,
                           message=str(exc))  # fmt: skip
         except Exception:
             log.exception("tool %s failed", name)
@@ -270,6 +276,9 @@ class ToolExecutor:
         if isinstance(output, ResultEnvelope) and "working_set_from" in output.normalized_request:
             # The answer narrowed a previous result: the audit names that result (semantic spec 7.5).
             normalized = {**normalized, "working_set_from": output.normalized_request["working_set_from"]}
+        if isinstance(output, ResultEnvelope) and "audit" in output.normalized_request:
+            # What the tool recorded about how it ran (the governed query's SQL, verdict, size).
+            normalized = {**normalized, **output.normalized_request["audit"]}
         return finish(Outcome.OK, agent=agent, parameters=normalized, decision=decision, output=output)
 
     def _decide(self, run: RunContext, spec: ToolSpec[Any, Any], agent: AgentRecord) -> Decision:

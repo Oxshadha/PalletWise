@@ -57,6 +57,7 @@ class AgentOut(BaseModel):
     prompt_version: str
     daily_token_budget: int
     used_tokens_today: int
+    governed_query_enabled: bool  # custom queries on (ADR 0002); they also need a passed gate
 
 
 class StatusIn(BaseModel):
@@ -113,6 +114,44 @@ async def set_agent_status(
     if change.outcome == "not_found":
         return problem(404, "NOT_FOUND", "Not found.", trace_id)
     return StatusOut(outcome=change.outcome, status=body.status)  # pyright: ignore[reportArgumentType]
+
+
+class GovernedIn(BaseModel):
+    enabled: bool
+
+
+class GovernedOut(BaseModel):
+    outcome: Literal["changed", "unchanged"]
+    enabled: bool
+
+
+@router.put("/agent/governed-query", response_model=GovernedOut)
+async def set_governed_query(
+    body: GovernedIn,
+    principal: CurrentPrincipal,
+    reads: Reads,
+    idempotency_key: Annotated[str, Header(pattern=IDEMPOTENCY_KEY)],
+) -> Any:
+    """Custom queries on or off for the organisation (ADR 0002 section 7, D5); audited."""
+    refused = await authorize(principal, "admin.agent.governed_query", "admin.agents.manage", reads)
+    if refused is not None:
+        return refused
+    identity, trace_id = principal.identity, current_trace_id()
+
+    def entry(change: admin_repo.StatusChange) -> AuditEntry:
+        return AuditEntry(
+            actor_type="USER", action="agent.governed_query", outcome=change.outcome.upper(),
+            trace_id=trace_id, user_subject=identity.subject, user_role=identity.role,
+            scope="admin.agents.manage", decision="ALLOW", agent_id=AGENT,
+            parameters={"before": change.before, "after": change.after, "idempotency_key": idempotency_key},
+        )  # fmt: skip
+
+    change = await asyncio.to_thread(
+        admin_repo.set_governed_query, reads.app_pool, principal.tenant, AGENT, body.enabled, entry
+    )
+    if change.outcome == "not_found":
+        return problem(404, "NOT_FOUND", "Not found.", trace_id)
+    return GovernedOut(outcome=change.outcome, enabled=body.enabled)  # pyright: ignore[reportArgumentType]
 
 
 class UsageRow(BaseModel):

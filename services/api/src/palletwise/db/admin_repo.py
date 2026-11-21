@@ -37,6 +37,7 @@ def agent(tenant: UUID, agent_id: str, day: str) -> dict[str, Any] | None:
         tenant,
         """
         SELECT a.id, a.version, a.status, a.primary_model, a.prompt_version, a.daily_token_budget,
+               a.governed_query_enabled,
                coalesce((SELECT sum(b.used) FROM pw.agent_budget_day b
                           WHERE b.agent_id = a.id AND b.day = %s::date), 0) AS used_tokens_today
           FROM pw.agent a WHERE a.id = %s
@@ -138,5 +139,21 @@ def set_status(
         ).fetchone()
         assert row is not None
         change = StatusChange(*row)
+        conn.execute("SELECT pw.append_audit(%s, %s)", (tenant, Jsonb(audit_entry(change).as_json())))
+    return change
+
+
+def set_governed_query(
+    pool: Pool, tenant: UUID, agent_id: str, enabled: bool, audit_entry: Callable[[StatusChange], AuditEntry]
+) -> StatusChange:
+    """The governed query switch (ADR 0002 section 7, D5) and its audit entry in one transaction."""
+    with pool.connection() as conn, tenant_transaction(conn, tenant):
+        row = conn.execute(
+            "SELECT outcome, before_enabled, after_enabled FROM pw.set_governed_query(%s, %s)",
+            (agent_id, enabled),
+        ).fetchone()
+        assert row is not None
+        change = StatusChange(row[0], None if row[1] is None else str(row[1]).lower(),
+                              None if row[2] is None else str(row[2]).lower())  # fmt: skip
         conn.execute("SELECT pw.append_audit(%s, %s)", (tenant, Jsonb(audit_entry(change).as_json())))
     return change

@@ -19,6 +19,7 @@ class AgentRecord:
     prompt_version: str
     max_steps: int
     daily_token_budget: int
+    governed_query_enabled: bool = True  # the Admin's per-tenant switch (ADR 0002 section 7)
 
     @property
     def active(self) -> bool:
@@ -34,7 +35,7 @@ class AgentRegistry:
             row = conn.execute(
                 """
                 SELECT id, version, status, allowed_scopes, primary_model, fallback_model,
-                       prompt_version, max_steps, daily_token_budget
+                       prompt_version, max_steps, daily_token_budget, governed_query_enabled
                   FROM pw.agent WHERE id = %s
                 """,
                 (agent_id,),

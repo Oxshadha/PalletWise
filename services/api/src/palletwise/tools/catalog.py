@@ -294,4 +294,8 @@ SLICE_3_TOOLS = (GET_ORDER_STATUS, GET_OPEN_EXCEPTIONS)
 
 
 def v1_tools() -> ToolRegistry:
-    return ToolRegistry([FIND_PRODUCT_LOCATIONS, GET_BIN_CONTENTS, *SLICE_2_TOOLS, *SLICE_3_TOOLS])
+    from palletwise.governed.tool import RUN_GOVERNED_QUERY  # the last-resort tier (ADR 0002)
+
+    return ToolRegistry(
+        [FIND_PRODUCT_LOCATIONS, GET_BIN_CONTENTS, *SLICE_2_TOOLS, *SLICE_3_TOOLS, RUN_GOVERNED_QUERY]
+    )
