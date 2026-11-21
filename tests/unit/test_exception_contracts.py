@@ -91,3 +91,16 @@ def test_what_needs_my_attention_reads_the_inbox_on_the_fast_path() -> None:
         route = fast_path.route(question)
         assert route is not None and (route.tool, route.arguments) == ("get_open_exceptions", {}), question
     assert fast_path.route("What needs my attention in zone B?") is None  # qualified: the model
+
+
+def test_a_question_about_an_open_exception_goes_to_the_model() -> None:
+    from uuid import uuid4
+
+    from palletwise.agent.runtime import choose_route
+    from palletwise.tools.catalog import v1_tools
+
+    names = frozenset(t.name for t in v1_tools())
+    question = "What should I do about the delayed order for Order SO-20260401-OUT022?"
+    assert choose_route(question, None, None, names, semantic=False)[0] is not None  # a lookup
+    context = {"selected_exception_id": str(uuid4()), "selected_exception_type": "DELAYED_ORDER"}
+    assert choose_route(question, None, context, names, semantic=True) == (None, 3)

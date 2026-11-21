@@ -23,6 +23,7 @@ from uuid import UUID
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import StreamingResponse
 
+from palletwise import clock
 from palletwise.api.security import SESSION_COOKIE, CurrentPrincipal, auth_service
 from palletwise.api.sites import Reads, authorize_site
 from palletwise.auth.service import SessionEnded
@@ -141,28 +142,35 @@ async def site_events(
         wake = hub.subscribe(site_id)
         sent: int | None = resumed
         heartbeat = False
+        checked = clock.monotonic()  # when the session and policy were last confirmed
         try:
             while not await request.is_disconnected():
-                if heartbeat and not await still_allowed():
-                    yield _event("end", sent or 0, {"reason": "not_allowed"})
-                    return
+                # The session and policy are re-checked every interval, whether or not the site is
+                # busy: on an active site wake-ups never let the heartbeat timeout run (code review).
+                if clock.monotonic() - checked >= HEARTBEAT_SECONDS:
+                    if not await still_allowed():
+                        yield _event("end", sent or 0, {"reason": "not_allowed"})
+                        return
+                    checked = clock.monotonic()
+                # Cleared before the read: a notification that arrives during the read or the send
+                # stays set, so the next wait returns at once (code review).
+                wake.clear()
                 now = await asyncio.to_thread(changes_since, reads.app_pool, tenant, site_id, sent or 0)
                 if sent is None:
                     yield _event("hello", now.seq, {"seq": now.seq})
-                elif now.seq != sent:
+                elif now.seq != sent or not now.complete:
                     kinds = now.kinds if now.complete else ALL_KINDS
                     yield _event("change", now.seq, {"kinds": list(kinds), "complete": now.complete})
                 elif heartbeat:
                     yield _event("heartbeat", now.seq, {"seq": now.seq})
                 sent = now.seq
-                wake.clear()
                 try:
                     await asyncio.wait_for(wake.wait(), HEARTBEAT_SECONDS)
                     heartbeat = False
                     await asyncio.sleep(COALESCE_SECONDS)
                 except TimeoutError:
-                    # No wake-up for a whole interval: check the session and policy, read the
-                    # sequence (a lost notification is found here), and send a heartbeat.
+                    # No wake-up for a whole interval: read the sequence (a lost notification is
+                    # found here) and send a heartbeat.
                     heartbeat = True
         finally:
             hub.unsubscribe(site_id, wake)

@@ -99,6 +99,17 @@ describe("search (slice-3-acceptance step 6)", () => {
     expect(screen.queryByRole("dialog")).toBeNull(); // the box closes once chosen
   });
 
+  it("never chooses a stale result while a new search waits for its pause", async () => {
+    const onAsked = show();
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.change(box(), { target: { value: "SKU" } });
+    await screen.findAllByRole("option");
+    fireEvent.change(box(), { target: { value: "SKU-102" } }); // typed on; its search has not run yet
+    expect(screen.queryAllByRole("option")).toEqual([]);
+    fireEvent.keyDown(box(), { key: "Enter" });
+    expect(onAsked).not.toHaveBeenCalled();
+  });
+
   it("says when nothing matches, and Escape or Ctrl K close and open it", async () => {
     show();
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });

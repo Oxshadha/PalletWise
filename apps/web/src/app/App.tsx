@@ -22,7 +22,7 @@ import {
   type ThemeChoice,
 } from "../shared/theme/theme";
 import { useSiteChanges } from "../shared/api/siteEvents";
-import { formatSiteTime } from "../shared/format";
+import { formatSiteTime, siteDate } from "../shared/format";
 import { Icon } from "../shared/ui/Icon";
 import { WorkspaceProvider } from "../shared/workspace/WorkspaceContext";
 
@@ -321,7 +321,12 @@ export function App() {
 
   // The workspace spans the header too: search asks the copilot like any other question.
   return me && siteInfo ? (
-    <WorkspaceProvider me={me} siteId={siteInfo.id} dataReady={!notReady}>
+    <WorkspaceProvider
+      me={me}
+      siteId={siteInfo.id}
+      dataReady={!notReady}
+      siteDate={site?.sim_time ? siteDate(site.sim_time, site.time_zone) : null}
+    >
       {shell}
     </WorkspaceProvider>
   ) : (

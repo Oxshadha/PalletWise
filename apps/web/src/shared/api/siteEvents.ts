@@ -29,15 +29,17 @@ export function apply(
       // On connect and reconnect every snapshot is refetched: changes may have been missed.
       return { refetch: [...ALL_KINDS], applied: event.id };
     case "change": {
+      // Incomplete: the server's history does not reach the client's sequence, including when the
+      // client is ahead because the database was rebuilt. Refetch everything and adopt the
+      // server's sequence, even when it is lower (code review).
+      if (!event.complete) return { refetch: [...ALL_KINDS], applied: event.id };
       if (applied !== null && event.id <= applied) return { refetch: [], applied };
-      const kinds = event.complete
-        ? ALL_KINDS.filter((k) => event.kinds.includes(k))
-        : [...ALL_KINDS];
-      return { refetch: kinds, applied: event.id };
+      return { refetch: ALL_KINDS.filter((k) => event.kinds.includes(k)), applied: event.id };
     }
     case "heartbeat":
-      // A heartbeat ahead of what was applied means a hint was lost: refetch everything.
-      if (applied !== null && event.id > applied)
+      // A heartbeat ahead of what was applied means a hint was lost; behind it, the server's
+      // sequence restarted. Either way: refetch everything and follow the server.
+      if (applied !== null && event.id !== applied)
         return { refetch: [...ALL_KINDS], applied: event.id };
       return { refetch: [], applied: applied ?? event.id };
     case "end":
@@ -53,19 +55,38 @@ interface Channel {
   applied: number | null;
   pending: Set<ChangeKind>;
   timer: number | null;
+  retry: number | null;
+  failures: number;
 }
 
 const channels = new Map<string, Channel>();
 
+/** Reconnect delays after the browser gives up (a non-200 answer, such as 502 while the API
+ * restarts, ends an EventSource for good): 1, 2, 4 ... up to 30 seconds. */
+export function reconnectDelay(failures: number): number {
+  return Math.min(1000 * 2 ** failures, 30_000);
+}
+
 function open(siteId: string): Channel {
-  const source = new EventSource(`/api/sites/${encodeURIComponent(siteId)}/events`);
   const channel: Channel = {
-    source,
+    source: connect(siteId),
     listeners: new Set(),
     applied: null,
     pending: new Set(),
     timer: null,
+    retry: null,
+    failures: 0,
   };
+  attach(siteId, channel);
+  return channel;
+}
+
+function connect(siteId: string): EventSource {
+  return new EventSource(`/api/sites/${encodeURIComponent(siteId)}/events`);
+}
+
+function attach(siteId: string, channel: Channel): void {
+  const source = channel.source;
   const flush = () => {
     channel.timer = null;
     const kinds = new Set(channel.pending);
@@ -92,6 +113,7 @@ function open(siteId: string): Channel {
   };
   source.addEventListener("hello", (m) => {
     const p = parse(m);
+    channel.failures = 0;
     if (p) receive({ type: "hello", id: p.id });
   });
   source.addEventListener("change", (m) => {
@@ -105,10 +127,24 @@ function open(siteId: string): Channel {
     if (p) receive({ type: "heartbeat", id: p.id });
   });
   source.addEventListener("end", () => {
-    // The session ended or the site is no longer allowed: stop; the next request signs in again.
+    // The session ended or the site is no longer allowed: stop, and forget the channel, so the
+    // next subscriber opens a fresh one (after signing in again).
     source.close();
+    if (channels.get(siteId) === channel) channels.delete(siteId);
   });
-  return channel;
+  source.addEventListener("error", () => {
+    // The browser retries a dropped connection by itself; after a non-200 answer it gives up
+    // (readyState CLOSED). Then reconnect with backoff while anyone still listens; the new
+    // stream's hello refetches every snapshot, so nothing missed meanwhile stays stale.
+    if (source.readyState !== EventSource.CLOSED || channel.retry !== null) return;
+    channel.retry = window.setTimeout(() => {
+      channel.retry = null;
+      if (channel.listeners.size === 0 || channels.get(siteId) !== channel) return;
+      channel.failures += 1;
+      channel.source = connect(siteId);
+      attach(siteId, channel);
+    }, reconnectDelay(channel.failures));
+  });
 }
 
 /** Calls `listener` with the kinds of data that changed at a site, batched. */
@@ -125,7 +161,8 @@ export function subscribeSiteChanges(siteId: string, listener: Listener): () => 
     if (owned.listeners.size === 0) {
       owned.source.close();
       if (owned.timer !== null) window.clearTimeout(owned.timer);
-      channels.delete(siteId);
+      if (owned.retry !== null) window.clearTimeout(owned.retry);
+      if (channels.get(siteId) === owned) channels.delete(siteId);
     }
   };
 }

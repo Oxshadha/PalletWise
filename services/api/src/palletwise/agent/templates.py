@@ -228,7 +228,11 @@ def _brief_throughput(result: ResultEnvelope) -> str:
             f"{r['units_picked']} units were picked, {r['units_change_pct']} percent {r['units_direction']} "
             f"the average of {r['avg_units_picked']} over the {days} operating days before"
         )
-    orders = f"{r['orders_shipped']} orders shipped against an average of {r['avg_orders_shipped']}"
+    orders = (
+        f"{r['orders_shipped']} orders shipped"
+        if not days or r["avg_orders_shipped"] is None
+        else f"{r['orders_shipped']} orders shipped against an average of {r['avg_orders_shipped']}"
+    )
     return f"Yesterday {units}; {orders}."
 
 

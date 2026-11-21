@@ -366,6 +366,7 @@ def test_a_failed_evaluation_keeps_the_last_state_and_is_retried(
         assert engine.records() == before, "the failed evaluation rolled back"
         assert worker.status()["ready"] is False
         assert worker.run_once() == {engine.f.site: "waiting"}  # backing off
+        assert worker.status()["ready"] is False  # still failing while it waits (code review)
     finally:
         engine.f.db.execute("ALTER FUNCTION sem.low_stock_gone(uuid, timestamptz, uuid) RENAME TO low_stock")
     now = main.clock.monotonic()

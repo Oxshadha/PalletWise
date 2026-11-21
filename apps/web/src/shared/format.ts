@@ -18,3 +18,13 @@ export function formatNumber(value: unknown): string {
   const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(n) ? NUMBER.format(n) : String(value);
 }
+
+/** The site-local calendar date of an instant, as YYYY-MM-DD (the site's business day). */
+export function siteDate(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}

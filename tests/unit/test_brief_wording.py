@@ -171,11 +171,13 @@ def test_the_direction_of_a_change_is_a_key_fact() -> None:
 
 def test_no_earlier_operating_day_is_said_plainly() -> None:
     item = throughput_item()
-    row = {**item.result.rows[0], "avg_units_picked": None, "units_change_pct": None, "units_direction": None}
+    row = {**item.result.rows[0], "avg_units_picked": None, "units_change_pct": None, "units_direction": None,
+           "avg_orders_shipped": None}  # fmt: skip
     none = item.result.model_copy(
         update={"rows": (row,), "normalized_request": {"baseline_operating_days": 0}}
     )
-    assert "no earlier operating day to compare" in template_answer("brief_throughput", none)
+    text = template_answer("brief_throughput", none)
+    assert "no earlier operating day to compare" in text and "None" not in text  # code review
 
 
 def test_the_today_window_cannot_be_mixed_with_hours_or_the_replenishment_view() -> None:

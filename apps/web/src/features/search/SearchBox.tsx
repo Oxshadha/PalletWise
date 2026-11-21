@@ -75,7 +75,10 @@ function CommandBox({
     };
   }, [text, siteId]);
 
-  const results = text.trim() && found.kind === "ready" ? found.results : [];
+  // Only the results of what is typed now: Enter never picks a stale list while a new search is
+  // still waiting for its pause (code review).
+  const results =
+    text.trim() && found.kind === "ready" && found.query === text.trim() ? found.results : [];
   const choose = (result: SearchResult) => {
     onChoose(result.suggestion);
     onClose();
@@ -101,7 +104,11 @@ function CommandBox({
   };
 
   const optionId = (i: number) => `${listId}-${String(i)}`;
-  const empty = text.trim() !== "" && found.kind === "ready" && found.results.length === 0;
+  const empty =
+    text.trim() !== "" &&
+    found.kind === "ready" &&
+    found.query === text.trim() &&
+    found.results.length === 0;
 
   return (
     <div className="pw-search-backdrop">

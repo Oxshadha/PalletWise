@@ -1227,7 +1227,10 @@ def choose_route(
         if suggestion.tool not in tool_names:
             return None, 3
         return fast_path.Route("suggestion", suggestion.tool, dict(suggestion.arguments)), 1
-    found = fast_path.route(question)
+    # A question about an exception the user has open ("what should I do about ...") asks for
+    # advice in its context: the model decides, even when the wording names an identifier that an
+    # exact route would take as a plain lookup (code review, Slice 3).
+    found = None if page_context and page_context.get("selected_exception_id") else fast_path.route(question)
     if found and found.tool in tool_names:
         return found, 1
     if semantic and not page_context:

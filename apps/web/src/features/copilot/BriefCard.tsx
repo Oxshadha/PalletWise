@@ -47,13 +47,15 @@ function rememberHidden(siteId: string, businessDate: string | null): void {
 }
 
 /**
- * Today's brief for the site (slice-3-acceptance step 5). Refetched when the site clock or data
- * status changes, so a new site day shows its new brief; a stored brief is returned unchanged.
+ * Today's brief for the site (slice-3-acceptance step 5). Refetched when the site-local date or the
+ * data status changes, so a new site day (or a reset) shows its new brief.
  */
 export function useBrief(): Brief | null {
-  const { siteId, dataReady } = useWorkspace();
+  const { siteId, dataReady, siteDate } = useWorkspace();
   const [brief, setBrief] = useState<Brief | null>(null);
-  const changed = useSiteChanges(siteId, ["clock", "data_status"]);
+  // The brief changes only with the site-local day or the data (a reset); not on every clock
+  // tick, which would cost a request per tick per open screen (code review).
+  const changed = useSiteChanges(siteId, ["data_status"]);
   useEffect(() => {
     if (!dataReady) return;
     const controller = new AbortController();
@@ -67,7 +69,7 @@ export function useBrief(): Brief | null {
     return () => {
       controller.abort();
     };
-  }, [siteId, dataReady, changed]);
+  }, [siteId, dataReady, siteDate, changed]);
   return brief;
 }
 

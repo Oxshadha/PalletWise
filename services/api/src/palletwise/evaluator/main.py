@@ -91,7 +91,9 @@ class EvaluatorWorker:
     def run_once(self) -> dict[UUID, str]:
         outcomes = {site: self.evaluate(site) for site in self.sites()}
         with self._lock:
-            self._ready = "failed" not in outcomes.values()
+            # Not ready while any site's last attempt failed, including while it waits out its
+            # backoff ("waiting" is not success; code review).
+            self._ready = not any(self._retry.get(site, _Retry()).failures for site in outcomes)
             self._evaluations += sum(o == "evaluated" for o in outcomes.values())
         return outcomes
 

@@ -1377,3 +1377,39 @@ def test_concurrent_and_failing_searches_return_every_connection(
     stats = pool.get_stats()
     # Every connection is back: none still checked out after successes and failures.
     assert stats["pool_available"] == stats["pool_size"] and stats.get("requests_waiting", 0) == 0
+
+
+def test_a_busy_stream_still_rechecks_access_and_ends(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Code review of Slice 3: wake-ups on an active site must not skip the periodic session and
+    policy check; a revoked user's stream ends even while changes keep arriving."""
+    from palletwise.api import events, problems
+
+    monkeypatch.setattr(events, "HEARTBEAT_SECONDS", 0.6)
+    env.sign_in(subject="manager-busy-stream")
+    busy = threading.Event()
+
+    def ticking() -> None:
+        while not busy.is_set():
+            tick(env)
+            time.sleep(0.2)
+
+    with env.client.stream("GET", f"/api/sites/{env.site.site}/events") as response:
+        lines = response.iter_lines()
+        ((kind, _, _),) = read_events(lines, 1)
+        assert kind == "hello"
+        worker = threading.Thread(target=ticking)
+        worker.start()
+        try:
+
+            async def refused(*args: Any, **kwargs: Any) -> Any:
+                return problems.problem(403, "FORBIDDEN", "No longer allowed.", "t")
+
+            monkeypatch.setattr(events, "authorize_site", refused)  # access revoked mid stream
+            started = time.monotonic()
+            kind = ""
+            while kind != "end" and time.monotonic() - started < 10:
+                ((kind, _, _),) = read_events(lines, 1)
+            assert kind == "end" and time.monotonic() - started < 3
+        finally:
+            busy.set()
+            worker.join(5)

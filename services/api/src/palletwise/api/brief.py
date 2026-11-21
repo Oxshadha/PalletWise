@@ -40,6 +40,7 @@ router = APIRouter(prefix="/api/sites/{site_id}", tags=["brief"])
 
 WAIT_SECONDS = 15.0  # how long a request waits for another's generation before answering 503
 POLL_SECONDS = 0.25
+CLAIM_RETRY_SECONDS = 2.0  # a waiter retries the claim this often (a crashed holder's lease ends)
 
 TITLES = {
     "top_exceptions": "Top exceptions",
@@ -137,23 +138,30 @@ async def daily_brief(site_id: UUID, request: Request, principal: CurrentPrincip
     waited_until = clock.monotonic() + WAIT_SECONDS
 
     # Read the day's brief, or claim its generation; while another request holds a valid lease,
-    # wait for its brief (no transaction is open meanwhile).
+    # wait for its brief (no transaction is open meanwhile). The site day is read once per round;
+    # a waiter polls only the stored brief and tries the claim again every CLAIM_RETRY_SECONDS,
+    # in case the holder crashed (code review: no write every poll).
     while True:
         today = await asyncio.to_thread(_today, reads, tenant, site_id)
         if today is None:
             return problem(503, "DATA_NOT_READY", "The warehouse data is still loading.", trace_id)
-        found = await asyncio.to_thread(store.find, tenant, site_id, today.business_date, today.run)
-        if found is not None:
-            return _out(found)
-        token = await asyncio.to_thread(store.claim, tenant, site_id, today.business_date, today.run)
-        if token is None:
+        token = None
+        claimed_at = 0.0
+        while token is None:
+            found = await asyncio.to_thread(store.find, tenant, site_id, today.business_date, today.run)
+            if found is not None:
+                return _out(found)
+            if clock.monotonic() - claimed_at >= CLAIM_RETRY_SECONDS:
+                claimed_at = clock.monotonic()
+                token = await asyncio.to_thread(store.claim, tenant, site_id, today.business_date, today.run)
+                if token is not None:
+                    break
             if clock.monotonic() >= waited_until:
                 return problem(
                     503, "BRIEF_PREPARING", "Today's brief is being prepared. Try again shortly.",
                     trace_id, headers={"Retry-After": "2"},
                 )  # fmt: skip
             await asyncio.sleep(POLL_SECONDS)
-            continue
         try:
             stored = await _generate(request, principal, reads, site_id, token, today)
         except _DayChanged:
