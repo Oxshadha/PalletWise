@@ -82,3 +82,60 @@ div.kc-logo-text {
   font-weight: 400;
   letter-spacing: 0.08em;
 }
+
+/* One sign-in page: the PalletWise split card. The floor artwork on the left, the form on the right. */
+.pf-v5-c-login__container {
+  grid-template-columns: min(56rem, calc(100vw - 2rem));
+}
+
+.pf-v5-c-login__header,
+#kc-header {
+  display: none;
+}
+
+.pf-v5-c-login__main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: min-content;
+  align-content: center;
+  min-height: 34rem;
+  padding: 0;
+}
+
+.pf-v5-c-login__main::before {
+  content: "";
+  grid-column: 1;
+  grid-row: 1 / span 10;
+  min-height: 34rem;
+  border-right: 1px solid var(--pw-border);
+  background: url("../img/art.svg") center / cover no-repeat;
+}
+
+.pf-v5-c-login__main > * {
+  grid-column: 2;
+  padding-inline: 2.5rem;
+}
+
+.pf-v5-c-login__main-header {
+  padding-top: 3rem;
+}
+
+.pf-v5-c-login__main-header .pf-v5-c-title,
+#kc-page-title {
+  font-size: 2.25rem;
+  font-weight: 300;
+}
+
+@media (max-width: 767px) {
+  .pf-v5-c-login__main {
+    grid-template-columns: 1fr;
+  }
+
+  .pf-v5-c-login__main::before {
+    display: none;
+  }
+
+  .pf-v5-c-login__main > * {
+    grid-column: 1;
+  }
+}

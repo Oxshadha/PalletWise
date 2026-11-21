@@ -21,13 +21,11 @@ afterEach(() => {
 });
 
 describe("sign-in screen", () => {
-  it("shows the sign-in screen without a session, and signs in only when asked", async () => {
+  it("goes straight to the one sign-in page without a session", async () => {
     render(<App />);
-    const button = await screen.findByRole("button", { name: "Sign in" });
-    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeTruthy();
-    expect(signIn).not.toHaveBeenCalled();
-    button.click();
-    expect(signIn).toHaveBeenCalledOnce();
+    await vi.waitFor(() => {
+      expect(signIn).toHaveBeenCalledOnce();
+    });
   });
 
   it("says why a sign-in did not complete", async () => {

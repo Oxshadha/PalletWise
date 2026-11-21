@@ -13,6 +13,7 @@ import {
   fetchMe,
   fetchSiteStatus,
   type Me,
+  signIn,
   SignedOut,
   signOut,
   type SiteStatus,
@@ -143,14 +144,13 @@ function ProfileMenu({ me, siteName }: { me: Me; siteName: string | null }) {
  */
 export function App() {
   const [authError] = useState(signInError);
-  const [signedOut, setSignedOut] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const [site, setSite] = useState<SiteStatus | null>(null);
   const [unreachable, setUnreachable] = useState(false);
   const [panel, setPanel] = useState<Panel>("warehouse");
 
   useEffect(() => {
-    if (authError || signedOut) return;
+    if (authError) return;
     const controller = new AbortController();
     const load = async () => {
       try {
@@ -160,7 +160,8 @@ export function App() {
         setSite(first ? await fetchSiteStatus(first.id, controller.signal) : null);
         setUnreachable(false);
       } catch (error) {
-        if (error instanceof SignedOut) setSignedOut(true);
+        // One sign-in page: the identity provider's PalletWise page with the form (no extra step).
+        if (error instanceof SignedOut) signIn();
         else if (!controller.signal.aborted) setUnreachable(true);
       }
     };
@@ -170,7 +171,7 @@ export function App() {
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [authError, signedOut]);
+  }, [authError]);
 
   // The header's site time and data status follow the site stream (agent spec 9.2).
   const siteId = me?.sites[0]?.id ?? null;
@@ -202,8 +203,8 @@ export function App() {
   const notReady =
     site && site.data_status !== "READY" ? (NOT_READY_TEXT[site.data_status] ?? null) : null;
 
-  // No session, or a sign-in that failed: the sign-in screen alone.
-  if (authError || signedOut) return <SignIn error={authError} />;
+  // A sign-in that failed: why, and a way to try again.
+  if (authError) return <SignIn error={authError} />;
 
   const shell = (
     <div className="pw-app">
