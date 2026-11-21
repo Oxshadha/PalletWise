@@ -215,15 +215,14 @@ tour:
 | `monsoon_slowdown` | lead-time multiplier 1.5 and receiving capacity down 40 percent for 5 days | less storable stock than the same run without it after 3 days; `LOW_STOCK` not lower |
 | `dead_stock_in_prime` | no events: the condition is planted in the base dataset (3.3) | `DEAD_STOCK` and `SLOW_IN_PRIME` for the six anchor products |
 
-## 7. Admin controls
+## 7. Simulation controls
 
-Provided by the simulation admin service. Every action is confirmed in the UI and audited (FR-SIM-04).
+Provided by the simulation admin service, for holders of `simulation.control` on a simulated site. Every action is confirmed in the UI and audited (FR-SIM-04).
 
 | Control | Effect |
 |---|---|
-| Play, pause | tick on or off |
-| Speed | 1x, 10x, 60x |
-| Jump | forward only, within calendar coverage (FR-SIM-05) |
+| Time shift | +1 hour, +4 hours, +1 day, +1 week, the next operating morning, or a chosen time; forward only, within calendar coverage (FR-SIM-05). Time is paused unless shifted |
+| Play, pause, speed | not built (slice-4-acceptance D2) |
 | Run scenario | checks preconditions, then applies its events from the current simulated time; logged in the input log |
 | Reset | section 7.1 |
 
@@ -305,3 +304,4 @@ Generation of the full history completes in under 2 minutes on the reference mac
 | 2026-11-18 | Revision 2 after review: global outbox sequence, causal order, tick markers and old-run skipping; two narrow connector credentials; task submission, reservation, execution-time revalidation and state mapping; idempotency payload conflicts; cycle-count result handling; daily order, cutoff, allocation, picking and shipping schedule; relative scenario start with preconditions; exception expectations as recalculation; reset sequence on both sides; deterministic hash over natural keys; hidden generator parameters; volume acceptance ranges; extended tests. |
 | 2026-11-21 | Slice 4 step 1 (time shift, slice-4-acceptance): a shift regenerates the run from its seed up to the target (the 180-day history takes about one second) and appends only the new period to the outbox, numbered after the run's last record, with tick markers every 15 simulated minutes; `sim.run.emitted_until` records how far the outbox reaches. Jump equals play by construction, and a simulator restart loses nothing (no in-memory state). One shift per run at a time (`FOR UPDATE NOWAIT`, refused as busy); `sim.command` records each command once per idempotency key, so a retry returns the first result and writes nothing. Shifts are forward only, on the 15-minute grid and within the calendar. The history output is unchanged (same records and hash). |
 | 2026-11-21 | Slice 4 step 3 (scenarios): `sim.input_log` holds each run's staged events and every regeneration replays it, so a scenario survives later shifts and a run shifted in steps writes the same outbox as one shift. Calibrated against the data, not the design: `outlet_window_at_risk` orders 60 units of SKU-258 due in 6 hours (`due_in_hours`, no local time window), because SKU-214's reserve could not cover 120 units (a true shortage, not a fixable one) and a fixed time window would block the guided demo at other times of day. The `monsoon_slowdown` expectation compares storable stock with the same run without the scenario, because every product has a stock policy and `LOW_STOCK` is already at its ceiling in the seeded data, so "rising `LOW_STOCK`" could not be observed. `festival_rush` and `dead_stock_in_prime` have no time precondition. Scenarios are run by `simulation.control` holders (slice-4-acceptance D3). |
+| 2026-11-21 | Section 7 aligned with slice-4-acceptance D2 and D3: time moves only by time shifts; play, pause and speeds are not built; the controls belong to `simulation.control` (Manager and Admin). The earlier rows were left from the first draft. |
