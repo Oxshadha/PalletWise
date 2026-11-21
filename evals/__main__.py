@@ -136,6 +136,9 @@ class _Any(set[str]):
     def __contains__(self, _item: object) -> bool:
         return True
 
+    def __bool__(self) -> bool:  # "some configuration passed": the catalog offers the tool
+        return True
+
 
 def _mark_evaluated() -> None:
     """During this run only, in this process, the configuration under test counts as evaluated, so

@@ -152,3 +152,14 @@ def test_the_tool_is_offered_only_after_a_passed_gate(monkeypatch: pytest.Monkey
     assert v1_tools().get("run_governed_query") is None
     monkeypatch.setattr(governed, "passed_fingerprints", lambda: {"x"})
     assert v1_tools().get("run_governed_query") is not None
+
+
+def test_an_eval_run_offers_the_tool_it_measures(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Found on ee15c06: the eval's 'evaluated' mark was an empty set, so the catalog never offered
+    the tool and the run measured nothing."""
+    from evals.__main__ import _Any
+    from palletwise.governed import tool as governed
+    from palletwise.tools.catalog import v1_tools
+
+    monkeypatch.setattr(governed, "passed_fingerprints", _Any)
+    assert v1_tools().get("run_governed_query") is not None and "any" in governed.passed_fingerprints()
