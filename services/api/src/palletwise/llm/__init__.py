@@ -7,7 +7,7 @@ from datetime import date
 from decimal import Decimal
 from functools import cache
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import yaml
 
@@ -16,6 +16,9 @@ os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")  # no start-up banner in ser
 from pydantic_ai.models import Model
 
 from palletwise.settings import LlmSettings
+
+if TYPE_CHECKING:
+    from google import genai
 
 log = logging.getLogger(__name__)
 
@@ -43,24 +46,12 @@ class DisabledProvider:
         return None
 
 
-class VertexGeminiProvider:
-    def __init__(self, settings: LlmSettings) -> None:
-        from google import genai
-        from google.genai.types import HttpOptions
-        from google.oauth2 import service_account
+class GeminiProvider:
+    """Gemini models through one Google GenAI client: Vertex AI or the Gemini API."""
+
+    def __init__(self, client: "genai.Client", settings: LlmSettings) -> None:
         from pydantic_ai.providers.google import GoogleProvider
 
-        assert settings.project and settings.credentials_file
-        credentials = service_account.Credentials.from_service_account_file(  # pyright: ignore[reportUnknownMemberType]
-            settings.credentials_file, scopes=["https://www.googleapis.com/auth/cloud-platform"]
-        )
-        client = genai.Client(
-            vertexai=True,
-            project=settings.project,
-            location=settings.location,
-            credentials=credentials,
-            http_options=HttpOptions(timeout=int(settings.request_timeout_seconds * 1000)),
-        )
         self._provider = GoogleProvider(client=client)
         self._settings = settings
 
@@ -74,13 +65,49 @@ class VertexGeminiProvider:
         return ResolvedModel(GoogleModel(name, provider=self._provider), name, self._settings.location)
 
 
+def _vertex_client(settings: LlmSettings) -> "genai.Client":
+    """Vertex AI with a service account file (kept outside the repository, mounted read-only)."""
+    from google import genai
+    from google.genai.types import HttpOptions
+    from google.oauth2 import service_account
+
+    assert settings.project and settings.credentials_file
+    credentials = service_account.Credentials.from_service_account_file(  # pyright: ignore[reportUnknownMemberType]
+        settings.credentials_file, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+    return genai.Client(
+        vertexai=True,
+        project=settings.project,
+        location=settings.location,
+        credentials=credentials,
+        http_options=HttpOptions(timeout=int(settings.request_timeout_seconds * 1000)),
+    )
+
+
+def _api_key_client(settings: LlmSettings) -> "genai.Client":
+    """The Gemini API with an API key from Google AI Studio (the same models)."""
+    from google import genai
+    from google.genai.types import HttpOptions
+
+    assert settings.api_key is not None
+    return genai.Client(
+        api_key=settings.api_key.get_secret_value(),
+        http_options=HttpOptions(timeout=int(settings.request_timeout_seconds * 1000)),
+    )
+
+
 def build_provider(settings: LlmSettings) -> LLMProvider:
+    """Vertex AI when a service account is configured, else a Gemini API key, else no model."""
     if not settings.enabled:
         return DisabledProvider()
-    if not settings.project or not settings.credentials_file or not Path(settings.credentials_file).is_file():
-        log.info("model credentials not configured; the copilot answers on path B only")
-        return DisabledProvider()
-    return VertexGeminiProvider(settings)
+    if settings.project and settings.credentials_file and Path(settings.credentials_file).is_file():
+        log.info("model provider: Gemini on Vertex AI")
+        return GeminiProvider(_vertex_client(settings), settings)
+    if settings.api_key is not None and settings.api_key.get_secret_value().strip():
+        log.info("model provider: Gemini API with an API key")
+        return GeminiProvider(_api_key_client(settings), settings)
+    log.info("model credentials not configured; the copilot answers on path B only")
+    return DisabledProvider()
 
 
 @dataclass(frozen=True, slots=True)

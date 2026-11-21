@@ -46,9 +46,18 @@ your machine (`KC_DEV_MANAGER_PASSWORD`, `KC_DEV_ADMIN_PASSWORD` in `.env`); not
 Stop with `docker compose down` (the data volume is kept); start again with
 `docker compose up -d --wait`. With `make` installed, `make setup` and `make up` do the same.
 
-**The model.** The copilot uses Gemini on Vertex AI. Set `GCP_PROJECT_ID` and `GCP_SA_FILE` (a
-service account key file outside the repository) in `.env`. Without them everything else runs, and
-the copilot still answers the suggested and known questions with template wording.
+**The model (enter your own key).** The copilot uses Gemini. No key is included in this
+repository; each installation brings its own, and it stays in `.env`, which git ignores.
+
+| You have | Do this |
+|---|---|
+| Nothing yet | Create a free Gemini API key at https://aistudio.google.com/apikey |
+| A Gemini API key | Setup asks for it (hidden input). To add or change it later: `python scripts/setup.py --llm` (saves it and restarts what needs it) |
+| Google Cloud with Vertex AI | Set `GCP_PROJECT_ID` and `GCP_SA_FILE` (the service account file, kept outside the repository) in `.env`; Vertex AI is used first when both are set |
+| No key | Everything else works; the copilot answers the suggested and known questions with template wording |
+
+Both options run the same Gemini models the copilot was evaluated with. Other model providers are
+not wired in: each would need its own adapter and its own run of the evaluation gate before use.
 
 **Troubleshooting.**
 - A 502 on port 8080 in the first minutes: Keycloak is still starting (up to two minutes on a

@@ -195,6 +195,8 @@ services:
       PW_LLM_PROJECT: ${GCP_PROJECT_ID:-}
       PW_LLM_LOCATION: ${PW_LLM_LOCATION:-global}
       PW_LLM_CREDENTIALS_FILE: /run/secrets/gcp-service-account.json
+      # Or, without Google Cloud: a Gemini API key from Google AI Studio.
+      PW_LLM_API_KEY: ${GEMINI_API_KEY:-}
       PYDANTIC_AI_NO_BANNER: "1"
     healthcheck:
       <<: *health-python

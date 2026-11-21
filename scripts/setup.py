@@ -2,18 +2,22 @@
 
     python scripts/setup.py              # set up, then build and start the stack
     python scripts/setup.py --no-start   # set up only
+    python scripts/setup.py --llm        # enter or change the Gemini API key, then apply it
     # or, without Python installed (set up only; then: docker compose up -d --build --wait):
     docker run --rm -v "${PWD}:/w" -w /w python:3.13-alpine python scripts/setup.py --no-start
 
 1. Creates .env from .env.example with fresh random secrets (an existing .env is kept).
-2. Writes the demo account cards of the sign-in page for this installation
+2. Asks for a Gemini API key (hidden input; Enter skips) when no model is configured and the
+   command runs in a terminal. The key goes only into .env, which git ignores.
+3. Writes the demo account cards of the sign-in page for this installation
    (infra/keycloak/themes/palletwise/login/resources/js/demo-accounts.js, never committed).
-3. Builds and starts the stack with Docker Compose and waits until every service is healthy:
+4. Builds and starts the stack with Docker Compose and waits until every service is healthy:
    migrations, the warehouse calendar, the 180-day simulation and its ingest (about 5 minutes the
    first time).
 """
 
 import base64
+import getpass
 import json
 import os
 import secrets
@@ -44,6 +48,40 @@ def create_env() -> None:
 def read_env() -> dict[str, str]:
     pairs = (line.split("=", 1) for line in ENV.read_text(encoding="utf-8").splitlines())
     return {k.strip(): v.strip() for k, *rest in pairs if rest for v in rest if not k.startswith("#")}
+
+
+def set_env(name: str, value: str) -> None:
+    """Sets NAME=value in .env, replacing the line or its commented-out example, else appending."""
+    lines = ENV.read_text(encoding="utf-8").splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith(f"{name}=") or line.replace(" ", "").startswith(f"#{name}="):
+            lines[i] = f"{name}={value}"
+            break
+    else:
+        lines.append(f"{name}={value}")
+    ENV.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def ask_for_model(env: dict[str, str], always: bool) -> None:
+    """The copilot's model: a Gemini API key, typed without echo, stored only in .env."""
+    if env.get("GCP_SA_FILE") and env.get("GCP_PROJECT_ID") and not always:
+        return  # Vertex AI is configured
+    if env.get("GEMINI_API_KEY") and not always:
+        return
+    if not sys.stdin.isatty():
+        if always:
+            print("--llm needs a terminal to type the key into.")
+        return
+    print("\nThe copilot's model: paste a Gemini API key from https://aistudio.google.com/apikey")
+    print("(free; the input is hidden). Press Enter to skip: the copilot then answers with templates.")
+    key = getpass.getpass("Gemini API key: ").strip()
+    if not key:
+        print("Skipped. Add one later with: python scripts/setup.py --llm")
+        return
+    if not (key.startswith("AIza") and len(key) >= 35):
+        print("Note: Gemini API keys usually start with AIza; keeping it as entered.")
+    set_env("GEMINI_API_KEY", key)
+    print("Saved to .env (ignored by git).")
 
 
 def write_demo_accounts(env: dict[str, str]) -> None:
@@ -79,6 +117,7 @@ def main() -> int:
         print(".env exists; keeping it.")
     else:
         create_env()
+    ask_for_model(read_env(), always="--llm" in sys.argv[1:])
     write_demo_accounts(read_env())
     if "--no-start" in sys.argv[1:]:
         print("Next: docker compose up -d --build --wait   then open http://localhost:8080")

@@ -6,7 +6,7 @@ Each process reads only the database credentials of its own role
 
 from uuid import UUID
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -120,7 +120,8 @@ class PolicySettings(BaseSettings):
 
 
 class LlmSettings(BaseSettings):
-    """Gemini on Vertex AI (agent spec 5). Without credentials the copilot runs on path B."""
+    """Gemini (agent spec 5): on Vertex AI with a service account, or with a Gemini API key from
+    Google AI Studio. Without either, the copilot runs on path B."""
 
     model_config = SettingsConfigDict(env_prefix="PW_LLM_", extra="ignore")
 
@@ -129,6 +130,8 @@ class LlmSettings(BaseSettings):
     # Newer Gemini models are served from the global endpoint only.
     location: str = "global"
     credentials_file: str | None = None
+    # A Gemini API key (Google AI Studio); used when no Vertex service account is configured.
+    api_key: SecretStr | None = None
     # Logical names (agent registry) to provider model ids.
     models: dict[str, str] = {
         "gemini-flash": "gemini-3.8-flash",
