@@ -76,9 +76,35 @@ function narrowScreen(): boolean {
   return typeof window.matchMedia === "function" && window.matchMedia(ONE_PANEL).matches;
 }
 
+const RETRY_KEY = "pw.sign-in-retry";
+/** A fresh sign-in is on its way: render nothing and load nothing. */
+const REDIRECTING = "";
+const RETRY_WINDOW_MS = 60_000;
+
+/**
+ * An expired or already used sign-in link (a sign-in page left open past its 10 minutes, or the
+ * back button) is harmless: start a fresh sign-in once instead of showing an error. A second
+ * failure within a minute shows the message, so this can never loop.
+ */
+function retryExpiredSignIn(reason: string | null): boolean {
+  if (reason !== "state") return false;
+  try {
+    const last = Number(window.sessionStorage.getItem(RETRY_KEY));
+    if (last && Date.now() - last < RETRY_WINDOW_MS) return false;
+    window.sessionStorage.setItem(RETRY_KEY, String(Date.now()));
+  } catch {
+    return false; // storage blocked: show the message rather than risk a loop
+  }
+  return true;
+}
+
 function signInError(): string | null {
   const reason = new URLSearchParams(window.location.search).get("auth_error");
   if (reason === null) return null;
+  if (retryExpiredSignIn(reason)) {
+    signIn();
+    return REDIRECTING;
+  }
   return SIGN_IN_ERRORS[reason] ?? SIGN_IN_ERRORS["failed"] ?? null;
 }
 
@@ -174,7 +200,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (authError) return;
+    if (authError !== null) return;
     const controller = new AbortController();
     const load = async () => {
       try {
@@ -251,6 +277,7 @@ export function App() {
     site && site.data_status !== "READY" ? (NOT_READY_TEXT[site.data_status] ?? null) : null;
 
   // A sign-in that failed: why, and a way to try again.
+  if (authError === REDIRECTING) return null;
   if (authError) return <SignIn error={authError} />;
 
   const shell = (

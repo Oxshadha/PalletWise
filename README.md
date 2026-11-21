@@ -12,26 +12,30 @@ allocations, picks, receipts and 180 days of stock movements.
 ## Run it (Windows, macOS, Linux)
 
 You need **Docker Desktop** (or Docker Engine with Compose v2) with about **6 GB of memory** for
-Docker. Nothing else is needed: no Python, Node or `make`.
+Docker, and ports **8080** and **8180** free. Nothing else: no Node, no `make`, no database.
+
+**One command** (with Python 3 installed; on Windows use `py` if `python` is not found):
 
 ```bash
 git clone <this repository> palletwise && cd palletwise
-
-# 1. Create .env with fresh random secrets and the demo sign-in cards
 python scripts/setup.py
-#    No Python? The same script in a container (PowerShell, bash and zsh alike):
-docker run --rm -v "${PWD}:/w" -w /w python:3.13-alpine python scripts/setup.py
-
-# 2. Build and start the stack: migrations, calendar, 180-day simulation, ingest (about 5 minutes the first time)
-docker compose --env-file infra/images.env --env-file .env -f infra/compose.yaml up -d --build --wait
 ```
 
-With `make` installed, `make setup` and `make up` do the same.
+It creates `.env` with fresh random secrets, writes the demo sign-in cards, builds every image,
+starts the stack and waits until everything is healthy: migrations, the warehouse calendar, the
+180-day simulation and its ingest. About 5 minutes the first time, under a minute after that.
 
-Open **http://localhost:8080**. The sign-in page shows two demo account cards, **Manager** and
-**Admin**: click one to fill in the form (the password is filled, never shown), then sign in. The passwords are the random ones that
-setup wrote into `.env` (`KC_DEV_MANAGER_PASSWORD`, `KC_DEV_ADMIN_PASSWORD`). They are generated
-on your machine and never committed.
+**Without Python, two commands** (PowerShell, bash and zsh alike):
+
+```bash
+docker run --rm -v "${PWD}:/w" -w /w python:3.13-alpine python scripts/setup.py --no-start
+docker compose up -d --build --wait
+```
+
+Open **http://localhost:8080**. The sign-in page shows two demo account cards, **Warehouse
+manager** and **Admin**: click one and sign in. The cards fill in the password without showing
+it. The accounts are created in Keycloak on first start from the passwords setup generated on
+your machine (`KC_DEV_MANAGER_PASSWORD`, `KC_DEV_ADMIN_PASSWORD` in `.env`); nothing is committed.
 
 | What | Where |
 |---|---|
@@ -39,13 +43,20 @@ on your machine and never committed.
 | API documentation | http://localhost:8080/api/docs |
 | Keycloak (development realm) | http://localhost:8180 |
 
+Stop with `docker compose down` (the data volume is kept); start again with
+`docker compose up -d --wait`. With `make` installed, `make setup` and `make up` do the same.
+
 **The model.** The copilot uses Gemini on Vertex AI. Set `GCP_PROJECT_ID` and `GCP_SA_FILE` (a
 service account key file outside the repository) in `.env`. Without them everything else runs, and
 the copilot still answers the suggested and known questions with template wording.
 
-**Troubleshooting.** A 502 on port 8080 in the first minutes means Keycloak is still starting
-(it can take two minutes on a laptop under memory pressure); `--wait` returns once it is healthy.
-`docker compose ... down` stops the stack; the data volume is kept.
+**Troubleshooting.**
+- A 502 on port 8080 in the first minutes: Keycloak is still starting (up to two minutes on a
+  laptop under memory pressure); `--wait` returns once it is healthy.
+- A sign-in page left open for more than 10 minutes, or the browser's back button after signing
+  in, uses an expired sign-in link; PalletWise starts a fresh sign-in by itself.
+- Something not healthy: `docker compose ps` shows which service, `docker compose logs <service>`
+  shows why.
 
 ## Try it
 

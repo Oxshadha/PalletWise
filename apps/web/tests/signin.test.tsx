@@ -33,4 +33,18 @@ describe("sign-in screen", () => {
     render(<App />);
     expect((await screen.findByRole("alert")).textContent).toContain("no PalletWise role");
   });
+
+  it("starts a fresh sign-in once for an expired link, then explains", async () => {
+    window.sessionStorage.clear();
+    window.history.replaceState(null, "", "/?auth_error=state");
+    render(<App />);
+    expect(signIn).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("alert")).toBeNull();
+    cleanup();
+    signIn.mockClear();
+    window.history.replaceState(null, "", "/?auth_error=state");
+    render(<App />);
+    expect((await screen.findByRole("alert")).textContent).toContain("expired");
+    expect(signIn).not.toHaveBeenCalled();
+  });
 });

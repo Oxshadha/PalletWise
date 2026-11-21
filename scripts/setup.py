@@ -1,18 +1,25 @@
-"""First-time setup on any system (Windows, macOS, Linux), standard library only.
+"""First-time setup and start on any system (Windows, macOS, Linux), standard library only.
 
-    python scripts/setup.py
-    # or, without Python installed:
-    docker run --rm -v "${PWD}:/w" -w /w python:3.13-alpine python scripts/setup.py
+    python scripts/setup.py              # set up, then build and start the stack
+    python scripts/setup.py --no-start   # set up only
+    # or, without Python installed (set up only; then: docker compose up -d --build --wait):
+    docker run --rm -v "${PWD}:/w" -w /w python:3.13-alpine python scripts/setup.py --no-start
 
 1. Creates .env from .env.example with fresh random secrets (an existing .env is kept).
 2. Writes the demo account cards of the sign-in page for this installation
    (infra/keycloak/themes/palletwise/login/resources/js/demo-accounts.js, never committed).
+3. Builds and starts the stack with Docker Compose and waits until every service is healthy:
+   migrations, the warehouse calendar, the 180-day simulation and its ingest (about 5 minutes the
+   first time).
 """
 
 import base64
 import json
 import os
 import secrets
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,16 +59,32 @@ def write_demo_accounts(env: dict[str, str]) -> None:
     print("Wrote the sign-in page's demo account cards.")
 
 
-def main() -> None:
+def start() -> int:
+    if shutil.which("docker") is None:
+        print("Docker was not found. Install Docker Desktop (or Docker Engine with Compose v2), then run:")
+        print("  docker compose up -d --build --wait")
+        return 1
+    print("Building and starting PalletWise (about 5 minutes the first time)...")
+    done = subprocess.run(["docker", "compose", "up", "-d", "--build", "--wait"], cwd=ROOT, check=False)  # noqa: S607
+    if done.returncode != 0:
+        print("The stack did not become healthy. See: docker compose ps   and   docker compose logs")
+        return done.returncode
+    print("\nPalletWise is up: http://localhost:8080")
+    print("Sign in with the Warehouse manager or Admin card on the sign-in page.")
+    return 0
+
+
+def main() -> int:
     if ENV.exists():
         print(".env exists; keeping it.")
     else:
         create_env()
     write_demo_accounts(read_env())
-    print("Next: docker compose --env-file infra/images.env --env-file .env -f infra/compose.yaml")
-    print("        up -d --build --wait   (or: make up)")
-    print("Then open http://localhost:8080")
+    if "--no-start" in sys.argv[1:]:
+        print("Next: docker compose up -d --build --wait   then open http://localhost:8080")
+        return 0
+    return start()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
