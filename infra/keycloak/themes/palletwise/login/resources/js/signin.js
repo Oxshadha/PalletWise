@@ -25,14 +25,18 @@
       role.textContent = a.role;
       var user = document.createElement("span");
       user.textContent = "User: " + a.username;
-      var pass = document.createElement("span");
-      pass.textContent = "Password: " + a.password;
       var hint = document.createElement("em");
-      hint.textContent = "Use this account";
-      card.append(role, user, pass, hint);
+      hint.textContent = "Click to fill in";
+      card.append(role, user, hint);
       card.addEventListener("click", function () {
         document.getElementById("username").value = a.username;
-        password.value = a.password;
+        password.value = a.password; // filled, never shown
+        password.type = "password";
+        if (reveal) {
+          reveal.textContent = "Show";
+          reveal.setAttribute("aria-pressed", "false");
+          reveal.setAttribute("aria-label", "Show password");
+        }
         document.getElementById("kc-login").focus();
       });
       cards.appendChild(card);
