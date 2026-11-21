@@ -606,36 +606,69 @@ class Simulation:
     # ------------------------------------------------------------------ run
 
     def run(self) -> list[OutRecord]:
+        """The history up to the clock start, its tick markers and the load-complete marker."""
+        self._simulate(self.p.clock_start)
+        out = [
+            OutRecord(i, t, at, payload)
+            for i, (at, t, payload) in enumerate(self._timeline(self.p.clock_start), 1)
+        ]
+        out.append(OutRecord(len(out) + 1, "LOAD_COMPLETE", self.p.clock_start, {"records": len(out)}))
+        return out
+
+    def _simulate(self, until: datetime) -> None:
+        """Every event up to `until`, in time order. Each simulated day's schedule is generated at
+        that day's start from the seed and the state then, so the events up to any time T are the
+        same whatever later time the simulation runs to (jump equals play, simulator spec 5.2)."""
         self.slot_and_open()
         d = self.history_start.date()
-        while d <= self.p.clock_start.date():
+        while d <= until.date():
             self.schedule(self.local(d, time(0, 0)), lambda day=d: self.day_start(day), order=0)
             d += timedelta(days=1)
         while self._events:
             at, _, _, action = heapq.heappop(self._events)
-            if at > self.p.clock_start:
+            if at > until:
                 break
             self._now = at
             action()
-        return self._sequence()
 
-    def _sequence(self) -> list[OutRecord]:
-        """Order records, keep those up to the clock start, add tick markers (spec 2.1)."""
-        ordered = sorted(
-            (r for r in self.records if r[0] <= self.p.clock_start), key=lambda r: (r[0], r[1], r[2])
-        )
-        out: list[OutRecord] = []
+    def _timeline(self, until: datetime) -> list[tuple[datetime, str, dict[str, Any]]]:
+        """Records up to `until` in emission order, with a tick marker every 15 simulated minutes
+        after the records it covers (spec 2.1): a tick at T follows every record at or before T."""
+        ordered = sorted((r for r in self.records if r[0] <= until), key=lambda r: (r[0], r[1], r[2]))
+        out: list[tuple[datetime, str, dict[str, Any]]] = []
         next_tick = self.history_start
         for at, _, _, rtype, payload in ordered:
             while at > next_tick:
-                out.append(OutRecord(len(out) + 1, "TICK", next_tick, {}))
+                out.append((next_tick, "TICK", {}))
                 next_tick += TICK
-            out.append(OutRecord(len(out) + 1, rtype, at, payload))
-        while next_tick <= self.p.clock_start:
-            out.append(OutRecord(len(out) + 1, "TICK", next_tick, {}))
+            out.append((at, rtype, payload))
+        while next_tick <= until:
+            out.append((next_tick, "TICK", {}))
             next_tick += TICK
-        out.append(OutRecord(len(out) + 1, "LOAD_COMPLETE", self.p.clock_start, {"records": len(out)}))
         return out
+
+
+class ShiftRefused(ValueError):
+    """A time shift outside the rules (simulator spec 5.2, FR-SIM-05): said to the user as is."""
+
+
+def extend(params: RunParams, after: datetime, until: datetime, first_seq: int) -> list[OutRecord]:
+    """The records of the period (after, until], numbered from `first_seq` (Slice 4 time shift).
+
+    The run is regenerated from its seed up to `until` (180 days take about a second) and only
+    the new period is returned, so a shift in one step and a shift in several steps give the same
+    records, and a restart of the simulator loses nothing.
+    """
+    sim = Simulation(params)
+    if until <= after:
+        raise ShiftRefused("Time only moves forward.")
+    if (until - sim.history_start) % TICK:
+        raise ShiftRefused("Time moves in steps of 15 minutes.")
+    if until.astimezone(sim.tz).date() > max(sim.calendar):
+        raise ShiftRefused(f"The business calendar ends on {max(sim.calendar):%d %B %Y}.")
+    sim._simulate(until)  # pyright: ignore[reportPrivateUsage]
+    period = [r for r in sim._timeline(until) if r[0] > after]  # pyright: ignore[reportPrivateUsage]
+    return [OutRecord(first_seq + i, t, at, payload) for i, (at, t, payload) in enumerate(period)]
 
 
 def generate(params: RunParams) -> list[OutRecord]:
