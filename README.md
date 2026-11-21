@@ -254,18 +254,6 @@ with a stronger model or a revised prompt; a pass is recorded in the gate file w
 Evidence per slice (evaluation reports, performance, browser checks) is in
 [`docs/quality/`](docs/quality/).
 
-## Known limits
-
-- The governed SQL tier is off (above).
-- Proposals and task execution, the full admin panel (users, settings) and audit sealing are
-  specified but not built.
-- Play, pause and clock speeds are not built; time moves by explicit shifts.
-- Voice uses the browser's own speech services. In Chrome and Edge, speech recognition is done by
-  the browser vendor's online service; Firefox has no speech recognition, so the microphone is
-  hidden there.
-- On an 8 GB laptop the full stack runs close to its memory limit; close other applications for a
-  live demo.
-
 ## Repository
 
 ```
@@ -280,5 +268,4 @@ infra               compose stack, Keycloak realm and theme, Traefik
 scripts             first-time setup
 ```
 
-Diagrams are generated: `python docs/architecture/build_diagrams.py`.
 Contributor rules: [AGENTS.md](AGENTS.md).
