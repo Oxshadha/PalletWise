@@ -25,6 +25,7 @@ import {
   Object3D,
   type PerspectiveCamera,
   RepeatWrapping,
+  Shape,
 } from "three";
 
 import type { Highlight, Layout, LayoutBin } from "../../shared/api/client";
@@ -677,6 +678,16 @@ function HeatFloor({
 }
 
 /** Zone highlights (semantic spec 7.6): an outline painted round the zone, with its code. */
+/** The zone's outline as a flat shape around its centre, for the floor tint (x, -z in the plane). */
+function zoneShape(outline: readonly (readonly number[])[], cx: number, cy: number): Shape {
+  const shape = new Shape();
+  outline.forEach(([x = 0, y = 0], i) => {
+    if (i === 0) shape.moveTo(x - cx, cy - y);
+    else shape.lineTo(x - cx, cy - y);
+  });
+  return shape;
+}
+
 function ZoneOutlines({ layout, zoneHighlights, colors }: Props) {
   const zones = new Map(layout.zones.map((z) => [z.id, z]));
   return (
@@ -691,10 +702,22 @@ function ZoneOutlines({ layout, zoneHighlights, colors }: Props) {
         const [cx, cy] = zoneCentre(zone.outline);
         return (
           <group key={highlight.target_id}>
+            {/* A light tint of the zone's floor and a thin edge: an area, not a fence. */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[cx, 0.015, cy]} raycast={() => null}>
+              <shapeGeometry args={[zoneShape(zone.outline, cx, cy)]} />
+              <meshBasicMaterial
+                color={colors[SEVERITY_TOKEN[highlight.severity]]}
+                transparent
+                opacity={0.08}
+                depthWrite={false}
+              />
+            </mesh>
             <Line
               points={points}
               color={colors[SEVERITY_TOKEN[highlight.severity]]}
-              lineWidth={highlight.severity === "critical" ? 6 : 4}
+              lineWidth={2.5}
+              transparent
+              opacity={0.85}
             />
             <Html position={[cx, 0.4, cy]} center zIndexRange={[20, 10]} pointerEvents="none">
               <span className={`pw-pin-tag is-${highlight.severity}`}>

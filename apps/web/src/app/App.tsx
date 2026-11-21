@@ -52,10 +52,10 @@ const ROLE_TEXT: Record<string, string> = {
   admin: "Admin",
 };
 
-const THEMES: { value: ThemeChoice; label: string }[] = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "system", label: "System" },
+const THEMES: { value: ThemeChoice; label: string; icon: "sun" | "moon" | "monitor" }[] = [
+  { value: "light", label: "Light", icon: "sun" },
+  { value: "dark", label: "Dark", icon: "moon" },
+  { value: "system", label: "System", icon: "monitor" },
 ];
 
 type Panel = "warehouse" | "copilot" | "inbox" | "admin";
@@ -112,14 +112,21 @@ function ProfileMenu({ me, siteName }: { me: Me; siteName: string | null }) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<ThemeChoice>(storedThemeChoice);
   useEffect(() => followSystemTheme(theme), [theme]);
+  const menu = useRef<HTMLDivElement>(null);
+  // Closes on Escape and on a click or tap anywhere outside the menu.
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
+    const onPointer = (event: PointerEvent) => {
+      if (!menu.current?.contains(event.target as Node)) setOpen(false);
+    };
     window.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointer);
     return () => {
       window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointer);
     };
   }, [open]);
   const initials = me.name
@@ -130,7 +137,7 @@ function ProfileMenu({ me, siteName }: { me: Me; siteName: string | null }) {
     .toUpperCase();
 
   return (
-    <div className="pw-profile">
+    <div className="pw-profile" ref={menu}>
       <button
         type="button"
         className="pw-avatar"
@@ -158,7 +165,7 @@ function ProfileMenu({ me, siteName }: { me: Me; siteName: string | null }) {
                   setTheme(t.value);
                 }}
               >
-                {t.label}
+                <Icon name={t.icon} size={15} /> {t.label}
               </button>
             ))}
           </div>
@@ -285,10 +292,7 @@ export function App() {
       <header className="pw-topbar">
         <div className="pw-brand">
           <span className="pw-brand-logo" role="img" aria-label="PalletWise logo" />
-          <span>
-            PalletWise
-            <span className="pw-brand-sub">Warehouse copilot</span>
-          </span>
+          <span className="pw-brand-name">PalletWise</span>
         </div>
         {me && siteInfo && (
           <nav className="pw-nav" aria-label="Show panel">
@@ -360,20 +364,21 @@ export function App() {
 
       {me && siteInfo && (
         <div className="pw-page-head">
-          <h1>{siteInfo.name}</h1>
-          <p className="pw-muted">
-            Live digital twin of {siteInfo.code}
-            {site?.sim_time ? ` · site time ${formatSiteTime(site.sim_time, site.time_zone)}` : ""}
-          </p>
+          <div className="pw-page-title">
+            <h1>{siteInfo.name}</h1>
+            <p className="pw-muted">
+              Live digital twin of {siteInfo.code}
+              {site?.sim_time
+                ? ` · site time ${formatSiteTime(site.sim_time, site.time_zone)}`
+                : ""}
+            </p>
+          </div>
+          <SimulationControls
+            onAsked={() => {
+              choosePanel("copilot");
+            }}
+          />
         </div>
-      )}
-
-      {me && siteInfo && (
-        <SimulationControls
-          onAsked={() => {
-            choosePanel("copilot");
-          }}
-        />
       )}
 
       {unreachable && (

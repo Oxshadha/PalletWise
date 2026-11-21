@@ -46,6 +46,17 @@ function progressText(operation: Operation, timeZone: string): string {
  * is confirmed before it is sent; while it runs, the bar says what is happening and stays
  * disabled until the site shows the result.
  */
+const FOLD_KEY = "pw.timebar.folded";
+
+/** Folded unless the viewer unfolded it last time (a per-browser convenience). */
+function storedFolded(): boolean {
+  try {
+    return window.localStorage.getItem(FOLD_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
 export function SimulationControls({ onAsked }: { onAsked: () => void }) {
   const { siteId, dispatch } = useWorkspace();
   const onAsk = (question: string) => {
@@ -59,6 +70,16 @@ export function SimulationControls({ onAsked }: { onAsked: () => void }) {
   const [demoOpen, setDemoOpen] = useState(false);
   // A reset starts the story again: the demo goes back to its first step.
   const [demoRun, setDemoRun] = useState(0);
+  // Folded to a small pill beside the site name, so the map and copilot keep the height.
+  const [folded, setFolded] = useState(storedFolded);
+  const fold = (value: boolean) => {
+    setFolded(value);
+    try {
+      window.localStorage.setItem(FOLD_KEY, value ? "1" : "0");
+    } catch {
+      /* storage blocked: the choice lasts for this page only */
+    }
+  };
 
   if (!simulation?.can_control || simulation.mode !== "SIMULATED") return null;
   const zone = simulation.time_zone;
@@ -96,12 +117,35 @@ export function SimulationControls({ onAsked }: { onAsked: () => void }) {
     }
   };
 
+  // Opens by itself whenever something needs attention: a confirmation, a move in progress,
+  // the site not ready, an error, or the demo steps.
+  const attention =
+    pending !== null || picking || operation !== null || !ready || error !== null || demoOpen;
+  const timeText = now ? formatSiteTime(now, zone) : "not set";
+
+  if (folded && !attention) {
+    return (
+      <button
+        type="button"
+        className="pw-timebar-pill"
+        aria-expanded={false}
+        aria-label={`Simulated time ${timeText}. Show the time controls`}
+        onClick={() => {
+          fold(false);
+        }}
+      >
+        <Icon name="history" size={16} />
+        <span className="pw-muted">Simulated time</span> <strong>{timeText}</strong>
+        <Icon name="tilt-down" size={16} />
+      </button>
+    );
+  }
+
   return (
     <section className="pw-timebar" aria-label="Simulation time">
       <div className="pw-timebar-row">
         <p className="pw-timebar-time">
-          <span className="pw-muted">Simulated time</span>{" "}
-          <strong>{now ? formatSiteTime(now, zone) : "not set"}</strong>
+          <span className="pw-muted">Simulated time</span> <strong>{timeText}</strong>
         </p>
         <div className="pw-timebar-actions" role="group" aria-label="Move time forward">
           {STEPS.map((s) => (
@@ -176,6 +220,19 @@ export function SimulationControls({ onAsked }: { onAsked: () => void }) {
             }}
           >
             <Icon name="rotate-left" size={16} /> Reset
+          </button>
+          <button
+            type="button"
+            className="pw-icon-button pw-timebar-fold"
+            aria-expanded={true}
+            aria-label="Fold the time controls"
+            title="Fold the time controls"
+            disabled={attention}
+            onClick={() => {
+              fold(true);
+            }}
+          >
+            <Icon name="tilt-up" size={16} />
           </button>
         </div>
       </div>

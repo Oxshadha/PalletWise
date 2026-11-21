@@ -81,6 +81,9 @@ function show(value: Brief, onOpenInbox = vi.fn(), onAsk = vi.fn()) {
       <Map />
     </WorkspaceProvider>,
   );
+  // The brief starts collapsed; open it as the user would.
+  const reopen = screen.queryByRole("button", { name: "Show today's brief" });
+  if (reopen) fireEvent.click(reopen);
   return { onOpenInbox, onAsk };
 }
 
@@ -132,15 +135,36 @@ describe("today's brief (slice-3-acceptance step 5)", () => {
     expect(screen.getAllByRole("table").length).toBeGreaterThan(0);
   });
 
-  it("hidden stays hidden for that day; a new site day shows its brief again", () => {
+  it("starts collapsed; opened stays open that day; a new site day starts collapsed", () => {
+    render(
+      <WorkspaceProvider
+        me={{ name: "M", role: "warehouse_manager", sites: [] }}
+        siteId="s1"
+        dataReady
+      >
+        <BriefCard brief={brief()} onOpenInbox={vi.fn()} onAsk={vi.fn()} />
+      </WorkspaceProvider>,
+    );
+    expect(screen.queryByText("Top exceptions")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show today's brief" }));
+    expect(screen.getByText("Top exceptions")).toBeTruthy();
+    cleanup();
     show(brief());
+    expect(screen.getByText("Top exceptions")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Hide" }));
     expect(screen.queryByText("Top exceptions")).toBeNull();
     cleanup();
     show(brief());
-    expect(screen.getByRole("button", { name: "Show today's brief" })).toBeTruthy();
     cleanup();
-    show(brief("2026-04-02"));
-    expect(screen.getByText("Top exceptions")).toBeTruthy();
+    render(
+      <WorkspaceProvider
+        me={{ name: "M", role: "warehouse_manager", sites: [] }}
+        siteId="s1"
+        dataReady
+      >
+        <BriefCard brief={brief("2026-04-02")} onOpenInbox={vi.fn()} onAsk={vi.fn()} />
+      </WorkspaceProvider>,
+    );
+    expect(screen.getByRole("button", { name: "Show today's brief" })).toBeTruthy();
   });
 });

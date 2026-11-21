@@ -36,9 +36,10 @@ export function Composer({
   };
 
   // When listening ends (stopped, or the speaker went quiet), the words go where the button said.
-  const wasListening = useRef(false);
+  const active = voice.phase !== "idle";
+  const wasActive = useRef(false);
   useEffect(() => {
-    if (wasListening.current && !voice.listening) {
+    if (wasActive.current && !active) {
       const words = voice.transcript.trim();
       if (words && after.current === "send") send(words);
       else if (words && after.current === "edit") {
@@ -46,10 +47,10 @@ export function Composer({
         window.requestAnimationFrame(() => box.current?.focus());
       }
     }
-    wasListening.current = voice.listening;
+    wasActive.current = active;
     // send is recreated each render; only the end of listening matters here
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voice.listening]);
+  }, [active]);
 
   // Keep the newest words in view while they arrive.
   useEffect(() => {
@@ -68,7 +69,8 @@ export function Composer({
     }
   };
 
-  if (voice.listening) {
+  if (voice.phase === "listening" || voice.phase === "finishing") {
+    const finishing = voice.phase === "finishing";
     const heard = voice.transcript;
     const settled = heard.slice(0, heard.length - voice.interim.length);
     return (
@@ -92,10 +94,14 @@ export function Composer({
                 <span className="pw-voice-interim">{voice.interim}</span>
               </>
             ) : (
-              <span className="pw-muted">Listening...</span>
+              <span className="pw-muted">{finishing ? "Transcribing..." : "Listening..."}</span>
             )}
           </p>
-          <div className="pw-voice-wave" aria-hidden="true">
+          <div
+            className="pw-voice-wave"
+            data-finishing={finishing ? "" : undefined}
+            aria-hidden="true"
+          >
             {voice.levels.map((level, i) => (
               <span key={i} style={{ height: `${String(Math.max(8, level * 100))}%` }} />
             ))}
@@ -105,6 +111,7 @@ export function Composer({
           type="button"
           className="pw-round-button"
           aria-label="Stop listening and edit the question"
+          disabled={finishing}
           onClick={() => {
             after.current = "edit";
             voice.stop();
@@ -116,7 +123,7 @@ export function Composer({
           type="button"
           className="pw-send"
           aria-label="Send the voice question"
-          disabled={disabled || !heard}
+          disabled={disabled || !heard || finishing}
           onClick={() => {
             after.current = "send";
             voice.stop();
@@ -152,9 +159,12 @@ export function Composer({
           <button
             type="button"
             className="pw-round-button pw-mic"
-            aria-label="Ask by voice"
-            title="Ask by voice"
-            disabled={disabled}
+            aria-label={
+              voice.phase === "starting" ? "Getting the microphone ready" : "Ask by voice"
+            }
+            title={voice.phase === "starting" ? "Getting the microphone ready" : "Ask by voice"}
+            data-starting={voice.phase === "starting" ? "" : undefined}
+            disabled={disabled || voice.phase === "starting"}
             onClick={() => {
               after.current = "edit";
               voice.start();

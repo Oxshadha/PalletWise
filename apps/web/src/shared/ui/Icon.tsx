@@ -23,6 +23,8 @@ import {
   Mic,
   Minimize2,
   Minus,
+  Monitor,
+  Moon,
   OctagonAlert,
   Plus,
   RotateCcw,
@@ -31,6 +33,7 @@ import {
   Search,
   SendHorizontal,
   Square,
+  Sun,
   ThumbsDown,
   ThumbsUp,
   TriangleAlert,
@@ -43,6 +46,9 @@ import {
  * Decorative: always hidden from assistive technology; the control carries the accessible name. */
 const ICONS = {
   map: Map,
+  sun: Sun,
+  moon: Moon,
+  monitor: Monitor,
   expand: Maximize2,
   collapse: Minimize2,
   chat: MessageSquareText,

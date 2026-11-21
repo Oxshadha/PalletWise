@@ -16,34 +16,28 @@ import { Icon } from "../../shared/ui/Icon";
 import { useWorkspace } from "../../shared/workspace/WorkspaceContext";
 import { ResultTable } from "./AnswerCard";
 
-const HIDDEN_KEY = "pw.brief.hidden";
+const OPEN_KEY = "pw.brief.open";
 
-/** The business date the user hid the brief for, per site; read and written defensively. */
-function hiddenFor(siteId: string): string | null {
+/** The business date the user opened the brief for, per site; read and written defensively. */
+function openFor(siteId: string): string | null {
   try {
-    const all = JSON.parse(window.localStorage.getItem(HIDDEN_KEY) ?? "{}") as Record<
-      string,
-      string
-    >;
+    const all = JSON.parse(window.localStorage.getItem(OPEN_KEY) ?? "{}") as Record<string, string>;
     return all[siteId] ?? null;
   } catch {
     return null;
   }
 }
 
-function rememberHidden(siteId: string, businessDate: string | null): void {
+function rememberOpen(siteId: string, businessDate: string | null): void {
   try {
-    const all = JSON.parse(window.localStorage.getItem(HIDDEN_KEY) ?? "{}") as Record<
-      string,
-      string
-    >;
+    const all = JSON.parse(window.localStorage.getItem(OPEN_KEY) ?? "{}") as Record<string, string>;
     const kept = Object.fromEntries(Object.entries(all).filter(([site]) => site !== siteId));
     window.localStorage.setItem(
-      HIDDEN_KEY,
+      OPEN_KEY,
       JSON.stringify(businessDate ? { ...kept, [siteId]: businessDate } : kept),
     );
   } catch {
-    /* storage unavailable: the brief simply shows again next time */
+    /* storage unavailable: the brief starts collapsed again next time */
   }
 }
 
@@ -89,9 +83,9 @@ export function BriefCard({
   onAsk: (suggestion: Suggestion) => void;
 }) {
   const { state, dispatch, siteId } = useWorkspace();
-  // The day the user hid the brief for: a new site day's brief shows again by itself.
-  const [hiddenDate, setHiddenDate] = useState(() => hiddenFor(siteId));
-  const hidden = hiddenDate === brief.business_date;
+  // Collapsed until asked for; once opened it stays open for that site day.
+  const [openDate, setOpenDate] = useState(() => openFor(siteId));
+  const hidden = openDate !== brief.business_date;
 
   const show = (item: BriefItem) => {
     dispatch({
@@ -106,8 +100,8 @@ export function BriefCard({
         type="button"
         className="pw-button-quiet pw-brief-reopen"
         onClick={() => {
-          rememberHidden(siteId, null);
-          setHiddenDate(null);
+          rememberOpen(siteId, brief.business_date);
+          setOpenDate(brief.business_date);
         }}
       >
         <Icon name="inbox" size={16} /> Show today&apos;s brief
@@ -123,8 +117,8 @@ export function BriefCard({
           type="button"
           className="pw-button-quiet"
           onClick={() => {
-            rememberHidden(siteId, brief.business_date);
-            setHiddenDate(brief.business_date);
+            rememberOpen(siteId, null);
+            setOpenDate(null);
           }}
         >
           Hide

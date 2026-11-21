@@ -567,3 +567,47 @@
   display: grid;
   gap: var(--pw-space-2);
 }
+
+/* Getting the microphone ready: a ring turns around the mic until listening starts. */
+.pw-mic {
+  position: relative;
+}
+
+.pw-mic[data-starting]::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 2px solid var(--pw-color-accent);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: pw-spin 0.8s linear infinite;
+}
+
+/* Transcribing: the meter pulses while the last words arrive. */
+.pw-voice-wave[data-finishing] span {
+  height: 30% !important;
+  animation: pw-pulse 1s ease-in-out infinite;
+}
+
+.pw-voice-wave[data-finishing] span:nth-child(odd) {
+  animation-delay: 0.25s;
+}
+
+@keyframes pw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pw-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pw-mic[data-starting]::after,
+  .pw-voice-wave[data-finishing] span {
+    animation: none;
+  }
+}

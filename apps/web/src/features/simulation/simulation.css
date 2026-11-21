@@ -126,3 +126,27 @@
   background: var(--pw-color-status-critical);
   box-shadow: 0 0 0 2px var(--pw-color-surface);
 }
+
+/* Folded: one pill with the site time; a click opens the controls. */
+.pw-timebar-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pw-space-2);
+  padding: var(--pw-space-2) var(--pw-space-4);
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-glass);
+  backdrop-filter: blur(var(--pw-blur-glass));
+  color: var(--pw-color-text-primary);
+  font: inherit;
+  font-size: var(--pw-font-size-sm);
+  cursor: pointer;
+}
+
+.pw-timebar-pill:hover {
+  border-color: var(--pw-color-focus-ring);
+}
+
+.pw-timebar-fold {
+  margin-left: var(--pw-space-1);
+}
