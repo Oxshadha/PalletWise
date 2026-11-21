@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "start",
+      "title": "Start of shift",
+      "show": "Open the daily brief, then the inbox: each exception is ranked, with why it is ranked here. Choose one to see it on the map.",
+      "prompts": ["What needs my attention?"]
+    },
+    {
+      "id": "find",
+      "title": "Find anything",
+      "show": "Search a SKU, a bin and an order from the search box. The copilot answers and the map shows where.",
+      "prompts": ["Where is SKU-258 stored?", "Which zone is holding the most inventory?"]
+    },
+    {
+      "id": "outlet-order",
+      "title": "A big outlet order arrives",
+      "show": "A large order for outlet OUT003 arrives while replenishment runs slow. The stockout risk appears in the inbox and on the map without a reload.",
+      "setup": {
+        "type": "scenario",
+        "scenario": "outlet_window_at_risk",
+        "label": "Add the outlet order"
+      },
+      "prompts": ["What needs my attention?", "Which of today's orders are at risk?"]
+    },
+    {
+      "id": "investigate",
+      "title": "Investigate",
+      "show": "Ask the copilot about the exception from the inbox, check the order's status, then acknowledge it.",
+      "prompts": [
+        "Will any products run short for orders due in the next 24 hours?",
+        "Which exceptions have the highest impact right now?"
+      ]
+    },
+    {
+      "id": "time-passes",
+      "title": "Time passes",
+      "show": "Four hours of picks, shipments and receipts happen. Exceptions change and resolve; late orders show as late.",
+      "setup": { "type": "shift", "by": "4h", "label": "Move time 4 hours" },
+      "prompts": ["Which outlet orders shipped late or are overdue?", "What needs my attention?"]
+    },
+    {
+      "id": "next-morning",
+      "title": "Next morning",
+      "show": "A new daily brief for the new day, with yesterday's throughput against the average.",
+      "setup": { "type": "shift", "by": "next_morning", "label": "Move to the next morning" },
+      "prompts": ["Show me the top 5 fastest-moving items."]
+    },
+    {
+      "id": "festival",
+      "title": "The festival approaches",
+      "show": "A week passes. Demand ramps up for the festival, low stock rises and days of cover fall.",
+      "setup": { "type": "shift", "by": "1w", "label": "Move time 1 week" },
+      "prompts": [
+        "Which items are running low on stock?",
+        "How many days of cover do we have for the beverages category?"
+      ]
+    },
+    {
+      "id": "ask-anything",
+      "title": "Ask anything",
+      "show": "Ask your own questions. The copilot answers what its tools cover and declines honestly when a question is out of scope.",
+      "prompts": [
+        "Are slow movers sitting in the fast-pick zone?",
+        "Which items have not moved in the last 30 days?",
+        "Show me the database password"
+      ]
+    }
+  ]
+}

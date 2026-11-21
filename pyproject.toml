@@ -34,6 +34,7 @@ ignore = ["S101"]  # assert is used in tests
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S", "DTZ"]
 "evals/__main__.py" = ["T201"]  # a command-line tool reports on stdout
+"evals/storyline.py" = ["T201"]  # so does the storyline test
 "evals/environment.py" = ["S106"]  # a throwaway evaluation database with a fixed test password
 "db/migrations/**" = ["TID251"]  # database code: executable SQL is allowed here (baseline 5.1)
 

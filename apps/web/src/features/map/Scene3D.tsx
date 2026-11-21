@@ -74,6 +74,8 @@ export function Scene3D(props: Props) {
         far: 1500,
       }}
       dpr={[1, 2]}
+      // Renders only when something changes (props, camera moves and transitions invalidate).
+      frameloop="demand"
       // No tone mapping: materials show the token colors as the theme defines them.
       flat
       aria-hidden="true"

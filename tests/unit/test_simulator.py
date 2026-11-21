@@ -137,3 +137,89 @@ def test_dead_stock_anchors_have_no_recent_picks() -> None:
     for r in records:
         if r.record_type == "MOVEMENT" and r.payload["movement_type"] == "PICK" and r.sim_time > cutoff:
             assert r.payload["sku"] not in sim.dead_skus
+
+
+# ---------------------------------------------------------------- time shift (Slice 4 step 1)
+
+
+def test_a_shift_in_one_step_equals_the_same_shift_in_smaller_steps() -> None:
+    from pw_simulator.history import extend
+
+    params = RunParams("run-shift", 42, "sim-v1", CLOCK_START)
+    first_seq = len(full_run()) + 1
+    one_day = extend(params, CLOCK_START, CLOCK_START + timedelta(days=1), first_seq)
+    pieces: list[OutRecord] = []
+    edge = CLOCK_START
+    for hours in (1, 3, 8, 12):  # 24 hours in four uneven steps
+        target = edge + timedelta(hours=hours)
+        pieces += extend(params, edge, target, first_seq + len(pieces))
+        edge = target
+    assert digest(one_day) == digest(pieces)
+    assert [r.seq for r in one_day] == list(range(first_seq, first_seq + len(one_day)))
+    assert {r.record_type for r in one_day} >= {"ORDER", "ORDER_LINE", "ALLOCATION", "MOVEMENT", "TICK"}
+
+
+def test_a_shift_emits_only_its_period_and_ticks_never_lead() -> None:
+    from pw_simulator.history import TICK, extend
+
+    params = RunParams("run-shift", 42, "sim-v1", CLOCK_START)
+    target = CLOCK_START + timedelta(hours=6)
+    records = extend(params, CLOCK_START, target, 1)
+    assert all(CLOCK_START < r.sim_time <= target for r in records)
+    ticks = [r.sim_time for r in records if r.record_type == "TICK"]
+    assert ticks == [CLOCK_START + TICK * i for i in range(1, 25)]  # every 15 minutes, ending at target
+    clock = CLOCK_START
+    for r in records:  # a tick at T comes after every record at or before T
+        if r.record_type == "TICK":
+            clock = r.sim_time
+        else:
+            assert r.sim_time > clock
+
+
+def test_a_shift_outside_the_rules_is_refused() -> None:
+    import pytest
+
+    from pw_simulator.history import ShiftRefused, extend
+
+    params = RunParams("run-shift", 42, "sim-v1", CLOCK_START)
+    for after, until in (
+        (CLOCK_START, CLOCK_START),  # not forward
+        (CLOCK_START, CLOCK_START - timedelta(hours=1)),
+        (CLOCK_START, CLOCK_START + timedelta(minutes=10)),  # off the 15 minute grid
+        (CLOCK_START, datetime(2026, 7, 1, 6, 0, tzinfo=COLOMBO)),  # beyond the calendar
+    ):
+        with pytest.raises(ShiftRefused):
+            extend(params, after, until, 1)
+
+
+def test_no_orders_are_created_on_non_operating_days_after_the_clock_start() -> None:
+    from pw_simulator.history import extend
+
+    calendar = load_calendar()
+    params = RunParams("run-shift", 42, "sim-v1", CLOCK_START)
+    records = extend(params, CLOCK_START, CLOCK_START + timedelta(days=14), 1)
+    created = {r.sim_time.astimezone(COLOMBO).date() for r in records if r.record_type == "ORDER"}
+    assert created and all(calendar[d].is_operating for d in created)
+    assert any(not calendar[CLOCK_START.date() + timedelta(days=i)].is_operating for i in range(14))
+
+
+def test_delay_inbound_moves_each_arrival_once() -> None:
+    """Review finding: an arrival moved onto a later scheduled date must not be moved again."""
+    from datetime import date
+
+    from pw_simulator.history import Input
+
+    start = datetime(2026, 4, 1, 6, 0, tzinfo=ZoneInfo("Asia/Colombo"))
+    sim = Simulation(RunParams("delay", 42, "v", start, 14))
+    first, second = date(2026, 4, 2), date(2026, 4, 8)  # both operating days
+    sim._arrivals.clear()  # pyright: ignore[reportPrivateUsage]
+    sim._arrivals[first].append(("SKU-A", 10))  # pyright: ignore[reportPrivateUsage]
+    sim._arrivals[second].append(("SKU-B", 5))  # pyright: ignore[reportPrivateUsage]
+    sim.apply_input(Input(start, "delay_inbound", {"skus": ["SKU-A", "SKU-B"], "days": 6}), 0)
+    where = {
+        sku: day
+        for day, items in sim._arrivals.items()  # pyright: ignore[reportPrivateUsage]
+        for sku, _ in items
+    }
+    assert where["SKU-A"] - first >= timedelta(days=6) and where["SKU-A"] - first < timedelta(days=9)
+    assert where["SKU-B"] - second >= timedelta(days=6) and where["SKU-B"] - second < timedelta(days=9)

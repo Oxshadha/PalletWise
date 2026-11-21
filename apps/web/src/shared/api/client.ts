@@ -20,6 +20,11 @@ export type Acknowledgement = Schemas["AcknowledgementOut"];
 export type Brief = Schemas["BriefOut"];
 export type SearchResult = Schemas["SearchResultOut"];
 export type BriefItem = Schemas["BriefItemOut"];
+export type Simulation = Schemas["SimulationOut"];
+export type ShiftBy = NonNullable<Schemas["ShiftIn"]["by"]>;
+export type Shifted = Schemas["ShiftOut"];
+export type ScenarioRun = Schemas["ScenarioOut"];
+export type ResetDone = Schemas["ResetOut"];
 
 /** Thrown when the session is missing or has ended; the shell sends the user to sign in. */
 export class SignedOut extends Error {}
@@ -160,4 +165,32 @@ export async function acknowledgeException(
     { "Idempotency-Key": crypto.randomUUID() },
   );
   return (await response.json()) as Acknowledgement;
+}
+
+/** The site's simulation: clock mode and time, whether a shift is still being ingested, and
+ * whether the viewer may control it (slice-4-acceptance D3). */
+export const fetchSimulation = (siteId: string, signal?: AbortSignal) =>
+  getJson<Simulation>(`${site(siteId)}/simulation`, signal);
+
+/** One key per click: a retried request never applies an operation twice (D9). */
+const once = () => ({ "Idempotency-Key": crypto.randomUUID() });
+
+/** Moves simulated time forward by a step, or to a time with its UTC offset. */
+export async function shiftTime(
+  siteId: string,
+  move: { by: ShiftBy } | { to: string },
+): Promise<Shifted> {
+  const response = await send(`${site(siteId)}/simulation/shift`, move, once());
+  return (await response.json()) as Shifted;
+}
+
+export async function runScenario(siteId: string, scenario: string): Promise<ScenarioRun> {
+  const response = await send(`${site(siteId)}/simulation/scenario`, { scenario }, once());
+  return (await response.json()) as ScenarioRun;
+}
+
+/** Discards the run and rebuilds the site from the seed (simulator spec 7.1). */
+export async function resetSimulation(siteId: string): Promise<ResetDone> {
+  const response = await send(`${site(siteId)}/simulation/reset`, undefined, once());
+  return (await response.json()) as ResetDone;
 }

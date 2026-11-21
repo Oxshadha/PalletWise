@@ -1,0 +1,16 @@
+# Simulator spec 6. Deliveries take half as long again and receiving handles 60 percent of arrivals
+# for five days. Storage stock falls first (pick faces are refilled from reserve), so the expectation
+# is less storable stock than the same run without the scenario, with low stock not lower.
+id: monsoon_slowdown
+title: Monsoon slowdown
+description: Lead times times 1.5 and receiving capacity down 40 percent for 5 days.
+events:
+  - { after: "0m", type: set_param, param: lead_time_multiplier, value: 1.5 }
+  - { after: "0m", type: set_param, param: receiving_capacity, value: 0.6 }
+  - { after: "5d", type: set_param, param: lead_time_multiplier, value: 1.0 }
+  - { after: "5d", type: set_param, param: receiving_capacity, value: 1.0 }
+expect:
+  - { within: "3d", lower: storable_stock, not_lower: LOW_STOCK }
+tour:
+  - "Which items are running low on stock?"
+  - "What needs my attention?"

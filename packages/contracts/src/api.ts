@@ -333,6 +333,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sites/{site_id}/simulation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Simulation State */
+        get: operations["simulation_state_api_sites__site_id__simulation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/simulation/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Simulation
+         * @description Discards the site's simulation run and rebuilds it from the seed (simulator spec 7.1).
+         *
+         *     A key that already reset the site is answered from that reset, without touching the simulator.
+         *     A site still loading is refused first. The simulator then ends the old run under the run's lock,
+         *     so a reset during a shift or scenario is refused as busy before anything changes (D9); a run it
+         *     does not know is nothing to end (reset is how a lost simulator database is recovered). One
+         *     transaction resets PalletWise's side and audits it; if that is refused or fails, the simulator
+         *     run is resumed, so the two sides never disagree. The simulation admin service then loads the new
+         *     run as at the first load.
+         */
+        post: operations["reset_simulation_api_sites__site_id__simulation_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/simulation/scenario": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Scenario */
+        post: operations["run_scenario_api_sites__site_id__simulation_scenario_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/simulation/scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Scenarios */
+        get: operations["list_scenarios_api_sites__site_id__simulation_scenarios_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/simulation/shift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Shift Time */
+        post: operations["shift_time_api_sites__site_id__simulation_shift_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sites/{site_id}/status": {
         parameters: {
             query?: never;
@@ -790,6 +886,26 @@ export interface components {
              */
             zone_id: string;
         };
+        /** ResetOut */
+        ResetOut: {
+            /**
+             * Clock Start
+             * Format: date-time
+             */
+            clock_start: string;
+            /** Data Status */
+            data_status: string;
+            /**
+             * New Run
+             * Format: uuid
+             */
+            new_run: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "reset" | "repeated";
+        };
         /** ResultEnvelope */
         ResultEnvelope: {
             /**
@@ -885,6 +1001,45 @@ export interface components {
             /** Trace Id */
             trace_id: string;
         };
+        /** ScenarioIn */
+        ScenarioIn: {
+            /** Scenario */
+            scenario: string;
+        };
+        /** ScenarioInfo */
+        ScenarioInfo: {
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Tour */
+            tour: string[];
+        };
+        /** ScenarioOut */
+        ScenarioOut: {
+            /** Events */
+            events: number;
+            /**
+             * From Time
+             * Format: date-time
+             */
+            from_time: string;
+            /** Records */
+            records: number;
+            /** Scenario */
+            scenario: string;
+            /** Title */
+            title: string;
+            /**
+             * To
+             * Format: date-time
+             */
+            to: string;
+            /** Tour */
+            tour: string[];
+        };
         /**
          * ScoreComponentsOut
          * @description The raw inputs, their 0 to 1 normalization, caps and weights (semantic 6.1).
@@ -950,6 +1105,50 @@ export interface components {
          * @enum {string}
          */
         Severity: "info" | "warning" | "critical";
+        /** ShiftIn */
+        ShiftIn: {
+            /** By */
+            by?: ("1h" | "4h" | "1d" | "1w" | "next_morning") | null;
+            /** To */
+            to?: string | null;
+        };
+        /** ShiftOut */
+        ShiftOut: {
+            /**
+             * From Time
+             * Format: date-time
+             */
+            from_time: string;
+            /** Records */
+            records: number;
+            /**
+             * To
+             * Format: date-time
+             */
+            to: string;
+        };
+        /** SimulationOut */
+        SimulationOut: {
+            /** Can Control */
+            can_control: boolean;
+            /** Data Status */
+            data_status: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "SIMULATED" | "REAL";
+            /** Next Morning */
+            next_morning: string | null;
+            /** Shifting */
+            shifting: boolean;
+            /** Simulator Time */
+            simulator_time: string | null;
+            /** Site Time */
+            site_time: string | null;
+            /** Time Zone */
+            time_zone: string;
+        };
         /** SiteGeometry */
         SiteGeometry: {
             /** Code */
@@ -1703,6 +1902,255 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    simulation_state_api_sites__site_id__simulation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulationOut"];
+                };
+            };
+            /** @description NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_simulation_api_sites__site_id__simulation_reset_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetOut"];
+                };
+            };
+            /** @description FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description NOT_SIMULATED or SIMULATION_BUSY */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description SIMULATOR_UNAVAILABLE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    run_scenario_api_sites__site_id__simulation_scenario_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScenarioIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioOut"];
+                };
+            };
+            /** @description FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description NOT_SIMULATED or SIMULATION_BUSY */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SCENARIO_REFUSED or VALIDATION_FAILED */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description DATA_NOT_READY or SIMULATOR_UNAVAILABLE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_scenarios_api_sites__site_id__simulation_scenarios_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioInfo"][];
+                };
+            };
+            /** @description FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description SIMULATOR_UNAVAILABLE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    shift_time_api_sites__site_id__simulation_shift_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShiftIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShiftOut"];
+                };
+            };
+            /** @description FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description NOT_SIMULATED or SIMULATION_BUSY */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SHIFT_REFUSED or VALIDATION_FAILED */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description DATA_NOT_READY or SIMULATOR_UNAVAILABLE */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

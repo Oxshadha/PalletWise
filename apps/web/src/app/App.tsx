@@ -6,6 +6,8 @@ import { CopilotPanel } from "../features/copilot/CopilotPanel";
 import { InboxPanel } from "../features/inbox/InboxPanel";
 import { Search } from "../features/search/SearchBox";
 import { MapPanel } from "../features/map/MapPanel";
+import { Bell } from "../features/simulation/Bell";
+import { SimulationControls } from "../features/simulation/SimulationControls";
 import {
   fetchMe,
   fetchSiteStatus,
@@ -246,6 +248,15 @@ export function App() {
               }}
             />
           )}
+          {me && siteInfo && (
+            <Bell
+              siteId={siteInfo.id}
+              inboxOpen={panel === "inbox"}
+              onOpenInbox={() => {
+                choosePanel("inbox");
+              }}
+            />
+          )}
           {me && (
             <ProfileMenu
               me={me}
@@ -263,6 +274,14 @@ export function App() {
             {site?.sim_time ? ` · site time ${formatSiteTime(site.sim_time, site.time_zone)}` : ""}
           </p>
         </div>
+      )}
+
+      {me && siteInfo && (
+        <SimulationControls
+          onAsked={() => {
+            choosePanel("copilot");
+          }}
+        />
       )}
 
       {authError && (

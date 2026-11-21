@@ -57,6 +57,20 @@ PRIORITY = {
 
 
 @dataclass(frozen=True, slots=True)
+class Input:
+    """One entry of the run's input log (simulator spec 5.3, 6): applied at `at`, after the
+    period already emitted, and replayed whenever the run is regenerated."""
+
+    at: datetime
+    type: str  # set_param, create_order, delay_inbound, demand_shock (spec 6, a closed list)
+    args: dict[str, Any]
+
+
+INPUT_TYPES = ("set_param", "create_order", "delay_inbound", "demand_shock")
+PARAMS = ("replenishment_lag_minutes", "lead_time_multiplier", "receiving_capacity", "putaway_delay_minutes")
+
+
+@dataclass(frozen=True, slots=True)
 class RunParams:
     run_id: str
     seed: int
@@ -64,6 +78,7 @@ class RunParams:
     clock_start: datetime
     history_days: int = 180
     time_zone: str = "Asia/Colombo"
+    inputs: tuple[Input, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +144,14 @@ class Simulation:
         self.sku_bins: dict[str, set[str]] = defaultdict(set)  # bins holding stock of a sku
         self.bin_volume: dict[str, float] = defaultdict(float)  # used volume per bin
         self._receiving_rr = 0
+        # Operating parameters a scenario may change (spec 6 set_param); the defaults are the
+        # history's behaviour, so a run without inputs is unchanged.
+        self.replen_lag = AUTO_REPLEN_LAG
+        self.lead_time_multiplier = 1.0
+        self.receiving_capacity = 1.0
+        self.putaway_delay = timedelta(0)
+        self.shocks: list[tuple[date, date, set[str], float]] = []
+        self._staged = 0
 
         self.policies: dict[str, Policy] = {}
         self.dead_skus: set[str] = set()
@@ -401,6 +424,9 @@ class Simulation:
         factor *= 1 + true_uplift(pr.category) * day.festival_ramp
         if pr.brand == "Style" and day.is_monsoon:
             factor *= 0.9
+        for first, last, skus, multiplier in self.shocks:
+            if first <= delivery <= last and pr.sku in skus:
+                factor *= multiplier
         return pr.base_demand * factor
 
     # ------------------------------------------------------------------ daily phases
@@ -506,8 +532,11 @@ class Simulation:
                 target = max(pol.max_qty, required[sku])
                 self.replenish(self._now + timedelta(seconds=i), sku, target - available)
 
-    def allocate(self, d: date, orders: list[_Order]) -> None:
-        at = self.local(d, time(18, 0))
+    def allocate(self, d: date, orders: list[_Order], at: datetime | None = None) -> None:
+        at = at or self.local(d, time(18, 0))
+        picks_from = (
+            self.local(d, time(19, 0)) if at == self.local(d, time(18, 0)) else at + timedelta(minutes=15)
+        )
         for order in sorted(orders, key=lambda o: (o.deadline, o.order_no)):
             for line in order.lines:
                 pol = self.policies[line.sku]
@@ -532,7 +561,7 @@ class Simulation:
                 at, "ORDER_STATUS", {"order_no": order.order_no, "status": "ALLOCATED", "shipped_at": None}
             )
             pick_end = order.ship_time - timedelta(minutes=30)
-            pick_start = max(self.local(d, time(19, 0)), pick_end - timedelta(hours=4))
+            pick_start = max(picks_from, pick_end - timedelta(hours=4))
             picks = [ln for ln in order.lines if ln.allocated > 0]
             step = (pick_end - pick_start) / max(1, len(picks))
             for i, line in enumerate(picks):
@@ -557,7 +586,7 @@ class Simulation:
         line.picked = line.allocated
         if self.on_hand[key] - self.allocated[key] < pol.min_qty and pol.pick_bin not in self.pending_replen:
             self.pending_replen.add(pol.pick_bin)
-            due = at + AUTO_REPLEN_LAG
+            due = at + self.replen_lag
             self.schedule(due, lambda s=line.sku, t=due: self.auto_replenish(s, t), order=65)
 
     def auto_replenish(self, sku: str, at: datetime) -> None:
@@ -577,6 +606,13 @@ class Simulation:
 
     def receive(self, d: date) -> None:
         arrivals = self._arrivals.pop(d, [])
+        if self.receiving_capacity < 1.0 and arrivals:
+            # Less receiving capacity: the rest waits for the next operating day.
+            keep = max(1, math.ceil(len(arrivals) * self.receiving_capacity))
+            later = self.next_operating_day(d)
+            if later is not None:
+                self._arrivals[later] = arrivals[keep:] + self._arrivals[later]
+                arrivals = arrivals[:keep]
         rng = np.random.default_rng([self.p.seed, STREAM_OPERATIONS, d.toordinal()])
         for i, (sku, qty) in enumerate(arrivals):
             at = self.local(d, time(10, 0)) + timedelta(minutes=i)
@@ -584,7 +620,7 @@ class Simulation:
             self._receiving_rr += 1
             self.on_order[sku] -= qty
             self.move(at, "RECEIPT", sku, qty, None, dock)
-            due = at + timedelta(minutes=int(rng.integers(60, 241)))
+            due = at + timedelta(minutes=int(rng.integers(60, 241))) + self.putaway_delay
             self.schedule(due, lambda s=sku, q=qty, src=dock, t=due: self.putaway(s, q, src, t), order=25)
 
     def putaway(self, sku: str, qty: int, src: str, at: datetime) -> None:
@@ -597,7 +633,7 @@ class Simulation:
             if self.storable_on_hand(pr.sku) + self.on_order[pr.sku] >= rop or daily <= 0:
                 continue
             qty = max(10, math.ceil(14 * daily))
-            arrival = d + timedelta(days=pr.lead_days)
+            arrival = d + timedelta(days=math.ceil(pr.lead_days * self.lead_time_multiplier))
             while arrival in self.calendar and not self.calendar[arrival].is_operating:
                 arrival += timedelta(days=1)
             self.on_order[pr.sku] += qty
@@ -605,37 +641,138 @@ class Simulation:
 
     # ------------------------------------------------------------------ run
 
+    # ------------------------------------------------------------------ the input log (spec 6)
+
+    def apply_input(self, inp: Input, n: int) -> None:
+        a = inp.args
+        if inp.type == "set_param":
+            value = float(a["value"])
+            match a["param"]:
+                case "replenishment_lag_minutes":
+                    self.replen_lag = timedelta(minutes=value)
+                case "lead_time_multiplier":
+                    self.lead_time_multiplier = value
+                case "receiving_capacity":
+                    self.receiving_capacity = value
+                case "putaway_delay_minutes":
+                    self.putaway_delay = timedelta(minutes=value)
+                case _:
+                    raise ValueError(f"unknown parameter {a['param']}")
+        elif inp.type == "create_order":
+            self.stage_order(inp.at, a, n)
+        elif inp.type == "delay_inbound":
+            skus, days = set(a["skus"]), int(a["days"])
+            today = inp.at.astimezone(self.tz).date()
+            # Take every matching arrival out first, then put it back later: each moves once.
+            moves: list[tuple[date, list[tuple[str, int]]]] = []
+            for arrival in sorted(d for d in self._arrivals if d >= today):
+                moved = [x for x in self._arrivals[arrival] if x[0] in skus]
+                if moved:
+                    self._arrivals[arrival] = [x for x in self._arrivals[arrival] if x[0] not in skus]
+                    moves.append((arrival, moved))
+            for arrival, moved in moves:
+                later = arrival + timedelta(days=days)
+                while later in self.calendar and not self.calendar[later].is_operating:
+                    later += timedelta(days=1)
+                self._arrivals[later].extend(moved)
+        elif inp.type == "demand_shock":
+            skus = set(a.get("skus") or [p.sku for p in self.products if p.category == a.get("category")])
+            first = inp.at.astimezone(self.tz).date()
+            self.shocks.append((first, first + timedelta(days=int(a["days"])), skus, float(a["multiplier"])))
+
+    def stage_order(self, at: datetime, a: dict[str, Any], n: int) -> None:
+        """An outlet order placed now (spec 6 create_order), due `due_in_hours` from now; it is
+        allocated, picked and shipped by the normal flow, from 30 minutes after it arrives."""
+        outlet = next(o for o in self.outlets if o.code == a["customer"])
+        deadline = at + timedelta(hours=float(a["due_in_hours"]))
+        delivery = deadline.astimezone(self.tz).date()
+        lane = f"S-L{(int(outlet.code[3:]) % 20) + 1:02d}"
+        order = _Order(f"SO-{delivery:%Y%m%d}-{outlet.code}-S{n + 1}", outlet.code, delivery, deadline,
+                       deadline - timedelta(minutes=30), lane)  # fmt: skip
+        self.emit(
+            at,
+            "ORDER",
+            {
+                "order_no": order.order_no,
+                "customer": order.customer,
+                "delivery_date": delivery.isoformat(),
+                "dispatch_deadline": deadline.isoformat(),
+            },
+        )
+        for i, line in enumerate(a["lines"], start=1):
+            ln = _Line(f"{order.order_no}-{i:02d}", i, str(line["sku"]), int(line["qty"]))
+            order.lines.append(ln)
+            self.emit(at, "ORDER_LINE", {"external_id": ln.external_id, "order_no": order.order_no,
+                                         "line_no": i, "sku": ln.sku, "qty_ordered": ln.qty})  # fmt: skip
+        allocate_at = at + timedelta(minutes=30)
+        self.schedule(allocate_at, lambda: self.allocate(delivery, [order], allocate_at), order=50)
+
     def run(self) -> list[OutRecord]:
+        """The history up to the clock start, its tick markers and the load-complete marker."""
+        self._simulate(self.p.clock_start)
+        out = [
+            OutRecord(i, t, at, payload)
+            for i, (at, t, payload) in enumerate(self._timeline(self.p.clock_start), 1)
+        ]
+        out.append(OutRecord(len(out) + 1, "LOAD_COMPLETE", self.p.clock_start, {"records": len(out)}))
+        return out
+
+    def _simulate(self, until: datetime) -> None:
+        """Every event up to `until`, in time order. Each simulated day's schedule is generated at
+        that day's start from the seed and the state then, so the events up to any time T are the
+        same whatever later time the simulation runs to (jump equals play, simulator spec 5.2)."""
         self.slot_and_open()
+        for i, inp in enumerate(self.p.inputs):
+            self.schedule(inp.at, lambda x=inp, n=i: self.apply_input(x, n), order=5)
         d = self.history_start.date()
-        while d <= self.p.clock_start.date():
+        while d <= until.date():
             self.schedule(self.local(d, time(0, 0)), lambda day=d: self.day_start(day), order=0)
             d += timedelta(days=1)
         while self._events:
             at, _, _, action = heapq.heappop(self._events)
-            if at > self.p.clock_start:
+            if at > until:
                 break
             self._now = at
             action()
-        return self._sequence()
 
-    def _sequence(self) -> list[OutRecord]:
-        """Order records, keep those up to the clock start, add tick markers (spec 2.1)."""
-        ordered = sorted(
-            (r for r in self.records if r[0] <= self.p.clock_start), key=lambda r: (r[0], r[1], r[2])
-        )
-        out: list[OutRecord] = []
+    def _timeline(self, until: datetime) -> list[tuple[datetime, str, dict[str, Any]]]:
+        """Records up to `until` in emission order, with a tick marker every 15 simulated minutes
+        after the records it covers (spec 2.1): a tick at T follows every record at or before T."""
+        ordered = sorted((r for r in self.records if r[0] <= until), key=lambda r: (r[0], r[1], r[2]))
+        out: list[tuple[datetime, str, dict[str, Any]]] = []
         next_tick = self.history_start
         for at, _, _, rtype, payload in ordered:
             while at > next_tick:
-                out.append(OutRecord(len(out) + 1, "TICK", next_tick, {}))
+                out.append((next_tick, "TICK", {}))
                 next_tick += TICK
-            out.append(OutRecord(len(out) + 1, rtype, at, payload))
-        while next_tick <= self.p.clock_start:
-            out.append(OutRecord(len(out) + 1, "TICK", next_tick, {}))
+            out.append((at, rtype, payload))
+        while next_tick <= until:
+            out.append((next_tick, "TICK", {}))
             next_tick += TICK
-        out.append(OutRecord(len(out) + 1, "LOAD_COMPLETE", self.p.clock_start, {"records": len(out)}))
         return out
+
+
+class ShiftRefused(ValueError):
+    """A time shift outside the rules (simulator spec 5.2, FR-SIM-05): said to the user as is."""
+
+
+def extend(params: RunParams, after: datetime, until: datetime, first_seq: int) -> list[OutRecord]:
+    """The records of the period (after, until], numbered from `first_seq` (Slice 4 time shift).
+
+    The run is regenerated from its seed up to `until` (180 days take about a second) and only
+    the new period is returned, so a shift in one step and a shift in several steps give the same
+    records, and a restart of the simulator loses nothing.
+    """
+    sim = Simulation(params)
+    if until <= after:
+        raise ShiftRefused("Time only moves forward.")
+    if (until - sim.history_start) % TICK:
+        raise ShiftRefused("Time moves in steps of 15 minutes.")
+    if until.astimezone(sim.tz).date() > max(sim.calendar):
+        raise ShiftRefused(f"The business calendar ends on {max(sim.calendar):%d %B %Y}.")
+    sim._simulate(until)  # pyright: ignore[reportPrivateUsage]
+    period = [r for r in sim._timeline(until) if r[0] > after]  # pyright: ignore[reportPrivateUsage]
+    return [OutRecord(first_seq + i, t, at, payload) for i, (at, t, payload) in enumerate(period)]
 
 
 def generate(params: RunParams) -> list[OutRecord]:

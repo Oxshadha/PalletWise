@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 COMPOSE := docker compose --env-file infra/images.env --env-file .env -f infra/compose.yaml
 
-.PHONY: up down logs ps reset-data lint lint-py lint-web test test-unit test-integration test-policy evals evals-model contracts golden check-env
+.PHONY: up down logs ps reset-data lint lint-py lint-web test test-unit test-integration test-policy evals evals-model storyline contracts golden check-env
 
 check-env:
 	@test -f .env || { echo "Missing .env. Create it with: cp .env.example .env  (then replace every change-me value)"; exit 1; }
@@ -77,6 +77,10 @@ contracts:
 	uv run python scripts/export_openapi.py packages/contracts/openapi.json
 	pnpm --filter @palletwise/contracts generate
 	pnpm exec prettier --write packages/contracts/src/api.ts >/dev/null 2>&1 || true
+
+# The guided demo clicked through twice on the live stack, each run after a reset (Slice 4 step 6).
+storyline: check-env
+	uv run --with playwright python -m evals.storyline
 
 # Records the running stack's completed load as the golden hash for its seed, then copies the
 # file into the repository (review and commit it).

@@ -23,7 +23,7 @@ from palletwise.contracts.results import ResultEnvelope, ResultStatus
 from palletwise.db import layout_repo
 from palletwise.db.audit_repo import AuditEntry, AuditLog
 from palletwise.db.connection import Pool, tenant_session
-from palletwise.policy import PolicyClient, PolicyRequest, PolicyUser
+from palletwise.policy import Decision, PolicyClient, PolicyRequest, PolicyUser
 from palletwise.semantic import locations, map_state
 from palletwise.telemetry.tracing import current_trace_id, record_policy_decision, tracer
 from palletwise.tools.catalog import BIN_CODE_PATTERN
@@ -125,18 +125,10 @@ class MapStateOut(BaseModel):
     bins: list[BinStateOut]
 
 
-async def authorize_site(
-    principal: Principal,
-    site_id: UUID,
-    action: str,
-    reads: ReadServices,
-    scope: str = "inventory.read",
-    refusal: str = "You do not have permission to view this site.",
-) -> Response | None:
-    """None when allowed; otherwise the 404 or 403 response (site outside the session is 404)."""
-    trace_id = current_trace_id()
-    if not principal.may_see_site(site_id):
-        return problem(404, "NOT_FOUND", "Not found.", trace_id)
+async def policy_decision(
+    principal: Principal, site_id: UUID, action: str, reads: ReadServices, scope: str
+) -> Decision:
+    """The policy's answer for this user, site and scope, traced; nothing is audited here."""
     identity = principal.identity
     request = PolicyRequest(
         user=PolicyUser(
@@ -150,6 +142,23 @@ async def authorize_site(
     with tracer.start_as_current_span("policy.decision") as span:
         decision = await asyncio.to_thread(reads.policy.decide, request)
         record_policy_decision(span, action, scope, decision.allow, decision.reasons)
+    return decision
+
+
+async def authorize_site(
+    principal: Principal,
+    site_id: UUID,
+    action: str,
+    reads: ReadServices,
+    scope: str = "inventory.read",
+    refusal: str = "You do not have permission to view this site.",
+) -> Response | None:
+    """None when allowed; otherwise the 404 or 403 response (site outside the session is 404)."""
+    trace_id = current_trace_id()
+    if not principal.may_see_site(site_id):
+        return problem(404, "NOT_FOUND", "Not found.", trace_id)
+    identity = principal.identity
+    decision = await policy_decision(principal, site_id, action, reads, scope)
     if decision.allow:
         return None
     entry = AuditEntry(

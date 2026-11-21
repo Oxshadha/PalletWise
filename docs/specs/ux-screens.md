@@ -24,7 +24,7 @@ The Manager workspace as built in Slices 1 and 2: shell, warehouse map, copilot 
 | Brand | Logo and "PalletWise", top left |
 | View switch | Pill toggle **Warehouse** / **Copilot** / **Inbox** (Inbox from Slice 3, section 9a), top centre (behaviour per screen width in section 9). Activating it scrolls to or reveals the chosen panel and moves focus to that panel's heading. |
 | Search | Icon button (or `Ctrl`/`Cmd` + `K`); opens a command box that finds SKUs, bins and orders as you type (after a 200 ms pause) and runs the matching fast-path question in the copilot. The input is a combobox over a listbox: arrow keys move, `Enter` chooses, `Escape` or a click outside closes and returns focus to the icon. Each result shows its kind (Product, Location, Order), code and name, zone or outlet; with no match it says so. Built in Slice 3 step 6. |
-| Notifications | Bell with a dot for new exceptions. Slice 4; hidden before. |
+| Notifications | Bell with a dot for new exceptions (9b). |
 | Profile | Avatar menu: name, role, site, theme choice (Light, Dark, System), sign out |
 | Data status | When the site is not `READY`, a banner explains it (`LOADING`, `REBUILDING`, `FAILED`) and the copilot input is disabled with the same text |
 
@@ -189,6 +189,18 @@ Per slice-3-acceptance D4: a third item **Inbox** in the view switch. The inbox 
 | Live | The list refetches when the site stream reports `exceptions` or `data_status`: a new exception appears and a cleared one leaves without a reload |
 | States | Loading; data not ready ("Exceptions appear when the warehouse data has loaded."); empty ("Nothing needs attention right now."); failed, with trace id and Try again |
 
+## 9b. Simulation controls and guided demo (Slice 4)
+
+Per slice-4-acceptance D2, D3, D6 and D8. Shown below the page heading, only when `GET .../simulation` reports `can_control` (the viewer holds `simulation.control`, decided by the policy) on a `SIMULATED` site; a real site or another viewer sees none of it.
+
+| Element | Content and behaviour |
+|---|---|
+| Time bar | "Simulated time" and the site time; **+1 hour**, **+4 hours**, **+1 day**, **+1 week**, **Next morning** (06:00 on the next operating day, from the API), **Choose a time** (a site-local date and time on the 15-minute grid, after the current time); **Demo**; **Reset**. |
+| Confirmation | Every action shows a confirmation in the bar before it is sent ("Move time forward 4 hours? ..."); the confirm button takes focus, **Cancel** sends nothing. Reset says what it discards: every order, movement, exception and acknowledgement since the start, every time shift and scenario. |
+| Progress | While an operation runs, a polite live region says "Moving time to (site time)", "Running the scenario: (title)" or "Resetting: ..." and the buttons wait; it ends only when a state read after the request shows the result (the ingested clock reached the target, or the site is READY again), so nothing partial is presented as done (D5, D9). A refusal (busy, outside the calendar) shows the API's message. |
+| Guided demo | **Demo** opens a panel over the workspace's right side: "Guided demo, step n of 8", the step's title and what to show, its setup button (confirmed like the bar's actions), its prompts as chips that ask the copilot, and **Back** and **Next**. The steps come from the storyline file (`storyline.json`), so later slices add their steps there. The step is remembered per browser. |
+| Bell | In the header for every viewer of the site. A dot when the inbox lists exceptions this browser has not shown in the inbox; showing the inbox clears it; a first visit counts what is there as seen. "Seen" is the set of exception ids, kept per browser (D8). The accessible name says how many are new. |
+
 ## 10. Decisions
 
 | # | Decision | Status |
@@ -215,3 +227,4 @@ Per slice-3-acceptance D4: a third item **Inbox** in the view switch. The inbox 
 | 2026-11-21 | Slice 3 step 4: section 9a, the exceptions inbox, as approved in slice-3-acceptance D4; the view switch gains Inbox. |
 | 2026-11-21 | Slice 3 step 5: section 6a, today's brief in the copilot panel (product owner choice Q1 a). |
 | 2026-11-21 | Slice 3 step 6: the search command box as built (section 2). |
+| 2026-11-21 | Slice 4 step 5: section 9b (time bar, confirmations, progress, guided demo, bell). The 3D scene renders on demand (`frameloop="demand"`); in the 2D plan a highlighted zone's mark carries the zone's name in place of its plain label, so the two no longer overlap. |
