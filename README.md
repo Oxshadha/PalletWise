@@ -29,7 +29,7 @@ docker compose --env-file infra/images.env --env-file .env -f infra/compose.yaml
 With `make` installed, `make setup` and `make up` do the same.
 
 Open **http://localhost:8080**. The sign-in page shows two demo account cards, **Manager** and
-**Admin**: click one to fill in the form, then sign in. The passwords are the random ones that
+**Admin**: click one to fill in the form (the password is filled, never shown), then sign in. The passwords are the random ones that
 setup wrote into `.env` (`KC_DEV_MANAGER_PASSWORD`, `KC_DEV_ADMIN_PASSWORD`). They are generated
 on your machine and never committed.
 
@@ -60,6 +60,10 @@ the copilot still answers the suggested and known questions with template wordin
    - *Show me items that have not moved in the last 30 days.* Dead stock lights up.
    - Follow-ups use the previous answer: *Of those, which are in zone B?*
 3. Switch **Heatmap** on: racks are coloured by units picked in the last 7 days, in 3D and 2D.
+   The focus button beside 3D and 2D gives the map its whole panel; drag the bar between the
+   map and the copilot to resize them, or click **Copilot** in the top bar to hide it.
+   Ask by voice with the microphone in the question box (the words appear as you speak), and
+   press **Listen** on an answer to hear it read aloud.
 4. Open **Demo**: the guided storyline adds a large outlet order and moves time forward 4 hours,
    then a week. The inbox, the map and the brief change live, with no reload. **Reset** returns to
    the seed.
@@ -117,6 +121,26 @@ refused for it.
 - **`gq` schema:** read-only governed views for the governed SQL tier.
 - **The seed is deterministic.** The same seed always produces the same data; its dataset hash is
   checked against `services/simulator/golden/` on every load.
+
+### Connecting a third-party WMS
+
+PalletWise integrates through a **connector**, not through endpoints that the WMS must call. It
+works in three layers, and only the first is written per WMS:
+
+| Layer | Per WMS? | What it does |
+|---|---|---|
+| **Adapter** | Yes, one per WMS product | Reads the WMS the way that WMS allows: its REST or OData API, webhooks, change data capture on its database, or scheduled exports. Maps its codes, units, locations and statuses to PalletWise's canonical records. |
+| **Connector contract** | No, fixed | `pull(after_sequence, limit)` returns the next records in order; `submit_task(task, idempotency_key)` and `get_task_result(key)` send approved work back; `health()` reports status. Records are master data, orders, allocations, movements, task results and time markers, each with a sequence number, the source system and the WMS's own id. |
+| **Connector worker and ingest** | No, fixed | Applies records strictly in order, in batches, as `pw_ingest`, through invariant-keeping database functions. Ingest is idempotent on natural keys, so a replay creates nothing twice, and the cursor commits with each batch. |
+
+Above the connector nothing changes: the semantic layer, the copilot, the map and the inbox work
+as they are. The adapter holds the only WMS credentials, read only except for task submission.
+The warehouse layout (zones, racks, bins and their positions for the 3D map) comes in as master
+data, or from a one-time layout file when the WMS does not hold coordinates.
+
+Today the one adapter is the simulator (`services/simulator`), which feeds PalletWise through
+exactly this contract (`docs/specs/simulator.md` section 2). A real WMS adapter is the next
+integration step; it does not need changes to the core.
 
 ## Security model
 
@@ -199,6 +223,9 @@ Evidence per slice (evaluation reports, performance, browser checks) is in
 - Proposals and task execution, the full admin panel (users, settings) and audit sealing are
   specified but not built.
 - Play, pause and clock speeds are not built; time moves by explicit shifts.
+- Voice uses the browser's own speech services. In Chrome and Edge, speech recognition is done by
+  the browser vendor's online service; Firefox has no speech recognition, so the microphone is
+  hidden there.
 - On an 8 GB laptop the full stack runs close to its memory limit; close other applications for a
   live demo.
 

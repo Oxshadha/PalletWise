@@ -1,6 +1,6 @@
 # Slice 5: Acceptance Criteria
 
-**Status:** Draft for product owner approval, 2026-11-21
+**Status:** Approved; closed 2026-11-21 with the tier off (model gate failed, see docs/quality/slice-5-evidence.md)
 **Goal:** The copilot answers ad-hoc questions about the warehouse data that its tools and query language cannot express, with a governed, read-only SQL tier used only as a last resort (ADR 0002, accepted). Security and correctness are equal: nothing outside the governed views is reachable, and a query that would compute a wrong number is refused, never answered.
 
 This document is a plan against the approved specifications and ADR 0002. It does not redefine them. Where a decision below refines a spec, the spec gets a change-log entry when the work lands.
@@ -100,3 +100,5 @@ This document is a plan against the approved specifications and ADR 0002. It doe
 | Date | Change |
 |---|---|
 | 2026-11-21 | Draft for approval, from ADR 0002 (accepted) |
+| 2026-11-21 | Approved by the product owner |
+| 2026-11-21 | Closed: steps 1 to 4 met; the model gate failed four times (best governed.correct 0.73 against 0.90), so the tier stays off and step 6's governed storyline step waits for a pass (product owner decision) |
