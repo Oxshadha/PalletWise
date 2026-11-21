@@ -38,6 +38,7 @@ from palletwise.api.security import CurrentPrincipal, auth_service
 from palletwise.auth.oidc import IdentityProviderUnavailable
 from palletwise.auth.principal import Principal
 from palletwise.auth.service import AuthService, DelegationRefused, SessionEnded
+from palletwise.contracts.results import ExceptionType
 from palletwise.db import status_repo
 from palletwise.db.agent_repo import AgentRecord, AgentRegistry
 from palletwise.db.audit_repo import AuditEntry, AuditLog
@@ -88,6 +89,9 @@ class PageContext(Strict):
 
     selected_bin: str | None = Field(default=None, pattern=BIN_CODE_PATTERN)
     selected_zone: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9-]{0,31}$")
+    # "Ask the copilot" from the inbox (slice-3-acceptance step 4): which exception is open.
+    selected_exception_id: UUID | None = None
+    selected_exception_type: ExceptionType | None = None
 
 
 class RunIn(Strict):
@@ -361,7 +365,9 @@ async def start_run(body: RunIn, principal: CurrentPrincipal, svc: Services, aut
             agent.max_steps,
         ),
         history=_history(history),
-        page_context=body.page_context.model_dump(exclude_none=True) if body.page_context else None,
+        page_context=(
+            body.page_context.model_dump(mode="json", exclude_none=True) if body.page_context else None
+        ),
         suggestion=Suggestion(body.suggestion.label, body.suggestion.tool, dict(body.suggestion.arguments))
         if body.suggestion
         else None,

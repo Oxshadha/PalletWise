@@ -140,6 +140,7 @@ A full event outbox with replayable payloads is not built: payload-free hints re
 - Every step's criteria pass; engineering baseline 8.1 is met.
 - Unit and integration tests, the deterministic eval gate, lint and CI pass.
 - A live browser check on the reference site: the inbox ranks and explains, acknowledgement works, a data change shows on the map and inbox within 2 seconds, the brief appears once per day, search finds SKUs, bins and orders.
+- The browser check also covers (product owner review of step 4): choosing exception A then B shows only B; Ask the copilot hands the map to the new answer when its result arrives; an exception resolving while chosen clears its layer; switching Warehouse, Inbox and Copilot while an answer streams loses nothing; 1920 by 1080 and 1366 by 768; keyboard and touch. Step 7: `get_open_exceptions` checks that a page-context exception belongs to the caller's tenant and site, and never trusts the id.
 - Code review and security review at the end of the slice; findings fixed or recorded.
 
 ## 5. Change log

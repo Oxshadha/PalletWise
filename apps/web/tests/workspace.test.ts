@@ -137,3 +137,64 @@ describe("run events", () => {
     ).toHaveLength(1);
   });
 });
+
+describe("an inbox exception on the map (slice-3-acceptance step 4)", () => {
+  const zone = "00000000-0000-7000-8000-0000000000z1";
+  const chosen = {
+    id: "x1",
+    highlights: [
+      { target_type: "bin", target_id: BIN_B, reason: "capacity", severity: "critical" },
+      { target_type: "zone", target_id: zone, reason: "capacity", severity: "critical" },
+    ],
+  } as const;
+  const show: WorkspaceAction = {
+    type: "show-exception",
+    exception: { id: chosen.id, highlights: [...chosen.highlights] },
+  };
+
+  it("shows exactly the exception's highlights in place of the answer's", () => {
+    const state = run([...ask("one", [BIN_A]), show]);
+    expect(activeHighlights(state)).toEqual(chosen.highlights);
+  });
+
+  it("a new answer or showing an answer takes the map back", () => {
+    expect(activeHighlights(run([show, ...ask("two", [BIN_A])])).map((h) => h.target_id)).toEqual([
+      BIN_A,
+    ]);
+    const shown = run([...ask("one", [BIN_A]), show, { type: "show-answer", id: "one" }]);
+    expect(shown.selectedException).toBeNull();
+    expect(activeHighlights(shown).map((h) => h.target_id)).toEqual([BIN_A]);
+  });
+
+  it("follows the inbox: new highlights while it lasts, nothing once it has resolved", () => {
+    const moved = run([
+      show,
+      {
+        type: "exceptions-refreshed",
+        exceptions: [{ id: "x1", highlights: [chosen.highlights[0]] }],
+      },
+    ]);
+    expect(activeHighlights(moved)).toEqual([chosen.highlights[0]]);
+    const gone = run([show, { type: "exceptions-refreshed", exceptions: [] }]);
+    expect(gone.selectedException).toBeNull();
+    expect(activeHighlights(gone)).toEqual([]);
+  });
+
+  it("choosing another exception shows only the other one's highlights", () => {
+    const other: WorkspaceAction = {
+      type: "show-exception",
+      exception: {
+        id: "x2",
+        highlights: [
+          { target_type: "bin", target_id: BIN_A, reason: "low_stock", severity: "warning" },
+        ],
+      },
+    };
+    expect(activeHighlights(run([show, other])).map((h) => h.target_id)).toEqual([BIN_A]);
+  });
+
+  it("choosing it again hides it, and clearing hides the layer", () => {
+    expect(activeHighlights(run([show, { type: "hide-exception" }]))).toEqual([]);
+    expect(activeHighlights(run([show, { type: "clear-highlights" }]))).toEqual([]);
+  });
+});

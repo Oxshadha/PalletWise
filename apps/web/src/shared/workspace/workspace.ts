@@ -7,7 +7,7 @@
  * The map draws exactly the active answer's highlights (FR-MAP-04). Nothing here calculates
  * business values: answers hold what the API sent.
  */
-import type { Highlight, ResultEnvelope, RunRecord } from "../api/client";
+import type { Highlight, PageContext, ResultEnvelope, RunRecord } from "../api/client";
 import type { RunEvent, Suggestion } from "../api/runStream";
 
 export type AnswerStatus = "streaming" | "done" | "error" | "cancelled";
@@ -36,13 +36,21 @@ export interface Answer {
 
 export interface PendingQuestion {
   question: string;
-  pageContext?: { selected_bin?: string; selected_zone?: string };
+  pageContext?: PageContext;
   suggestion?: Suggestion;
+}
+
+/** An exception chosen in the inbox, with the highlights the API sent for it. */
+export interface SelectedException {
+  id: string;
+  highlights: Highlight[];
 }
 
 export interface WorkspaceState {
   answers: Answer[];
   activeAnswerId: string | null;
+  /** The inbox exception shown on the map; its highlights replace the answer's while chosen. */
+  selectedException: SelectedException | null;
   highlightsVisible: boolean;
   selectedBinId: string | null;
   view: "3d" | "2d";
@@ -54,6 +62,7 @@ export interface WorkspaceState {
 export const initialWorkspace: WorkspaceState = {
   answers: [],
   activeAnswerId: null,
+  selectedException: null,
   highlightsVisible: true,
   selectedBinId: null,
   view: "3d",
@@ -69,6 +78,9 @@ export type WorkspaceAction =
   | { type: "answer-cancelled"; id: string }
   | { type: "stream-interrupted"; id: string }
   | { type: "show-answer"; id: string }
+  | { type: "show-exception"; exception: SelectedException }
+  | { type: "hide-exception" }
+  | { type: "exceptions-refreshed"; exceptions: SelectedException[] }
   | { type: "clear-highlights" }
   | { type: "select-bin"; binId: string | null }
   | { type: "set-view"; view: "3d" | "2d" }
@@ -183,7 +195,12 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
       const next = update(state, action.id, (a) => applyEvent(a, action.event));
       // The newest answer's highlights become active as soon as its result arrives.
       if (action.event.type === "pw.result") {
-        return { ...next, activeAnswerId: action.id, highlightsVisible: true };
+        return {
+          ...next,
+          activeAnswerId: action.id,
+          selectedException: null,
+          highlightsVisible: true,
+        };
       }
       return next;
     }
@@ -214,7 +231,23 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
           : a,
       );
     case "show-answer":
-      return { ...state, activeAnswerId: action.id, highlightsVisible: true };
+      return {
+        ...state,
+        activeAnswerId: action.id,
+        selectedException: null,
+        highlightsVisible: true,
+      };
+    case "show-exception":
+      return { ...state, selectedException: action.exception, highlightsVisible: true };
+    case "hide-exception":
+      return { ...state, selectedException: null };
+    case "exceptions-refreshed": {
+      // The chosen exception follows the inbox: new highlights, or none once it has resolved.
+      const chosen = state.selectedException;
+      if (!chosen) return state;
+      const current = action.exceptions.find((e) => e.id === chosen.id) ?? null;
+      return { ...state, selectedException: current };
+    }
     case "clear-highlights":
       return { ...state, highlightsVisible: false };
     case "select-bin":
@@ -241,13 +274,19 @@ export function activeAnswer(state: WorkspaceState): Answer | null {
   return state.answers.find((a) => a.id === state.activeAnswerId) ?? null;
 }
 
-/** Exactly the active answer's highlights, once per target (FR-MAP-04). */
+/**
+ * Exactly the active layer's highlights, once per target (FR-MAP-04): the chosen inbox exception,
+ * otherwise the active answer.
+ */
 export function activeHighlights(state: WorkspaceState): Highlight[] {
+  if (!state.highlightsVisible) return [];
   const answer = activeAnswer(state);
-  if (!answer || !state.highlightsVisible) return [];
+  const sets = state.selectedException
+    ? [state.selectedException.highlights]
+    : (answer?.results.map((r) => r.highlights) ?? []);
   const seen = new Map<string, Highlight>();
-  for (const result of answer.results) {
-    for (const highlight of result.highlights) {
+  for (const highlights of sets) {
+    for (const highlight of highlights) {
       seen.set(`${highlight.target_type}:${highlight.target_id}`, highlight);
     }
   }

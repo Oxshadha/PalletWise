@@ -3,6 +3,7 @@ import "./app.css";
 import { useEffect, useState } from "react";
 
 import { CopilotPanel } from "../features/copilot/CopilotPanel";
+import { InboxPanel } from "../features/inbox/InboxPanel";
 import { MapPanel } from "../features/map/MapPanel";
 import {
   fetchMe,
@@ -51,7 +52,16 @@ const THEMES: { value: ThemeChoice; label: string }[] = [
   { value: "system", label: "System" },
 ];
 
-type Panel = "warehouse" | "copilot";
+type Panel = "warehouse" | "copilot" | "inbox";
+
+const PANEL_HEADING: Record<Panel, string> = {
+  warehouse: "pw-warehouse-title",
+  copilot: "pw-copilot-title",
+  inbox: "pw-inbox-title",
+};
+
+/** Below this width one panel shows at a time (UX spec 9, app.css). */
+const ONE_PANEL = "(max-width: 1199px)";
 
 function signInError(): string | null {
   const reason = new URLSearchParams(window.location.search).get("auth_error");
@@ -122,7 +132,10 @@ function ProfileMenu({ me, siteName }: { me: Me; siteName: string | null }) {
   );
 }
 
-/** Workspace shell (UX spec 2, 9): the warehouse and the copilot, nothing added to fill space. */
+/**
+ * Workspace shell (UX spec 2, 9): the warehouse beside the copilot or the inbox (D4), nothing
+ * added to fill space.
+ */
 export function App() {
   const [authError] = useState(signInError);
   const [me, setMe] = useState<Me | null>(null);
@@ -173,9 +186,7 @@ export function App() {
     setPanel(next);
     // Reveal the panel and move focus to its heading (UX spec 2).
     window.requestAnimationFrame(() => {
-      const heading = document.getElementById(
-        next === "warehouse" ? "pw-warehouse-title" : "pw-copilot-title",
-      );
+      const heading = document.getElementById(PANEL_HEADING[next]);
       heading?.scrollIntoView({ block: "nearest" });
       heading?.focus();
     });
@@ -214,6 +225,15 @@ export function App() {
               }}
             >
               <Icon name="chat" size={16} /> Copilot
+            </button>
+            <button
+              type="button"
+              aria-pressed={panel === "inbox"}
+              onClick={() => {
+                choosePanel("inbox");
+              }}
+            >
+              <Icon name="inbox" size={16} /> Inbox
             </button>
           </nav>
         )}
@@ -268,6 +288,15 @@ export function App() {
           <main className="pw-workspace" data-panel={panel}>
             <MapPanel />
             <CopilotPanel notReadyText={notReady} />
+            <InboxPanel
+              onAskCopilot={() => {
+                choosePanel("copilot");
+              }}
+              onShowOnMap={() => {
+                // Beside the map on wide screens; on narrow ones, show the map.
+                if (window.matchMedia(ONE_PANEL).matches) choosePanel("warehouse");
+              }}
+            />
           </main>
         </WorkspaceProvider>
       )}

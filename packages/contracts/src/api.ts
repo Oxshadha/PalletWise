@@ -659,6 +659,10 @@ export interface components {
         PageContext: {
             /** Selected Bin */
             selected_bin?: string | null;
+            /** Selected Exception Id */
+            selected_exception_id?: string | null;
+            /** Selected Exception Type */
+            selected_exception_type?: ("STOCKOUT_RISK" | "DELAYED_ORDER" | "LOW_STOCK" | "DEAD_STOCK" | "SLOW_IN_PRIME" | "CAPACITY_HOTSPOT" | "FESTIVAL_SHORTAGE") | null;
             /** Selected Zone */
             selected_zone?: string | null;
         };

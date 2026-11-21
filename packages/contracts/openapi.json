@@ -869,6 +869,38 @@
             ],
             "title": "Selected Bin"
           },
+          "selected_exception_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Exception Id"
+          },
+          "selected_exception_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "STOCKOUT_RISK",
+                  "DELAYED_ORDER",
+                  "LOW_STOCK",
+                  "DEAD_STOCK",
+                  "SLOW_IN_PRIME",
+                  "CAPACITY_HOTSPOT",
+                  "FESTIVAL_SHORTAGE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Exception Type"
+          },
           "selected_zone": {
             "anyOf": [
               {
