@@ -361,10 +361,15 @@ export interface paths {
         put?: never;
         /**
          * Reset Simulation
-         * @description Discards the site's simulation run and rebuilds it from the seed (simulator spec 7.1). The
-         *     simulator ends the old run first, under the run's lock, so a reset during a shift or scenario is
-         *     refused as busy before anything changes (D9). Then one transaction resets PalletWise's side and
-         *     audits it; the simulation admin service loads the new run as at the first load.
+         * @description Discards the site's simulation run and rebuilds it from the seed (simulator spec 7.1).
+         *
+         *     A key that already reset the site is answered from that reset, without touching the simulator.
+         *     A site still loading is refused first. The simulator then ends the old run under the run's lock,
+         *     so a reset during a shift or scenario is refused as busy before anything changes (D9); a run it
+         *     does not know is nothing to end (reset is how a lost simulator database is recovered). One
+         *     transaction resets PalletWise's side and audits it; if that is refused or fails, the simulator
+         *     run is resumed, so the two sides never disagree. The simulation admin service then loads the new
+         *     run as at the first load.
          */
         post: operations["reset_simulation_api_sites__site_id__simulation_reset_post"];
         delete?: never;

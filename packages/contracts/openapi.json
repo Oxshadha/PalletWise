@@ -2985,7 +2985,7 @@
     },
     "/api/sites/{site_id}/simulation/reset": {
       "post": {
-        "description": "Discards the site's simulation run and rebuilds it from the seed (simulator spec 7.1). The\nsimulator ends the old run first, under the run's lock, so a reset during a shift or scenario is\nrefused as busy before anything changes (D9). Then one transaction resets PalletWise's side and\naudits it; the simulation admin service loads the new run as at the first load.",
+        "description": "Discards the site's simulation run and rebuilds it from the seed (simulator spec 7.1).\n\nA key that already reset the site is answered from that reset, without touching the simulator.\nA site still loading is refused first. The simulator then ends the old run under the run's lock,\nso a reset during a shift or scenario is refused as busy before anything changes (D9); a run it\ndoes not know is nothing to end (reset is how a lost simulator database is recovered). One\ntransaction resets PalletWise's side and audits it; if that is refused or fails, the simulator\nrun is resumed, so the two sides never disagree. The simulation admin service then loads the new\nrun as at the first load.",
         "operationId": "reset_simulation_api_sites__site_id__simulation_reset_post",
         "parameters": [
           {
