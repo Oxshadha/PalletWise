@@ -126,9 +126,9 @@ decline, never an approximate number.
 ### 6. The answer: labelled, grounded, shown
 
 - The result envelope is marked `source: governed_query`. The answer card says "Answered with a
-  custom query", shows the rows, the normalized query that actually ran under "How it was
-  computed", the data time, and whether the rows were truncated. It is never presented as a
-  standard metric.
+  custom query" and shows the rows, the data time and whether the rows were truncated, so it is
+  never mistaken for a standard metric. Users do not see the SQL; the normalized query is kept in
+  the audit record and the trace, where the Admin can inspect it.
 - The existing output checks apply unchanged: numeric grounding (agent spec 6.1), named entities,
   dashes. A governed answer whose text fails them falls back to a plain table of the rows.
 - Highlights only for rows that carry a bin, zone or product id from the views.
@@ -138,8 +138,10 @@ decline, never an approximate number.
 
 ### 7. Evaluation and enablement
 
-The tier is off by default and switched on per tenant by the Admin (agent registry flag, rechecked
-on every call like the kill switch), only for a configuration that passed this gate:
+The tier is on by default for every tenant and the Admin can switch it off (and on again) per
+tenant: an agent registry flag, rechecked on every call like the kill switch, set through an Admin
+API endpoint under `admin.agents.manage` in Slice 5 and a toggle in the admin panel in Slice 7.
+"On" takes effect only for a configuration that passed this gate:
 
 | Gate | Threshold |
 |---|---|
@@ -180,9 +182,12 @@ tested configuration cannot silently become an untested one.
 
 ## Product owner decisions (2026-11-21)
 
-1. Off by default; the Admin enables it per tenant, and only for a configuration whose gate passed
-   (section 7).
-2. Every user sees the normalized query that ran, with the rows, data time and truncation.
+1. On by default; the Admin can switch it off per tenant (an API endpoint now, the admin panel in
+   Slice 7). It runs only for a configuration whose gate passed (section 7). Revised by the product
+   owner from "off by default".
+2. Users do not see the SQL. The answer card is labelled as a custom query, with the rows, data
+   time and truncation; the Admin inspects the normalized query in the audit record and the trace.
+   Revised by the product owner from "shown to every user".
 3. The first `gq` views as listed in section 3; customers by code and name only.
 4. Initial limits: 2 seconds, 200 rows, 20 columns, plus 256 KB of response.
 
