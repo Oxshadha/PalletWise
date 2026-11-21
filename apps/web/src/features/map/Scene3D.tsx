@@ -105,7 +105,14 @@ export function Scene3D(props: Props) {
       />
       <Racking layout={props.layout} colors={props.colors} />
       <StatePlates {...props} />
-      {props.heat && <HeatFloor layout={props.layout} heat={props.heat} colors={props.colors} />}
+      {props.heat && (
+        <HeatFloor
+          layout={props.layout}
+          heat={props.heat}
+          onHand={props.onHand}
+          colors={props.colors}
+        />
+      )}
       <Stock {...props} />
       <ZoneOutlines {...props} />
       <HitTargets {...props} />
@@ -607,16 +614,19 @@ function StatePlate({
 }
 
 /**
- * The activity heatmap: a floor tile under each rack footprint, from the surface colour to the
- * accent by the footprint's busiest location (picks in the last 7 days).
+ * The activity heatmap: a plate on top of each rack footprint (where the racks cannot hide it),
+ * from the soft accent to the critical colour by the footprint's busiest location (picks in the
+ * last 7 days).
  */
 function HeatFloor({
   layout,
   heat,
+  onHand,
   colors,
 }: {
   layout: Layout;
   heat: Map<string, number>;
+  onHand: Map<string, number>;
   colors: SceneColors;
 }) {
   const cells = useMemo(() => {
@@ -625,7 +635,9 @@ function HeatFloor({
       const value = heat.get(bin.id) ?? 0;
       const key = `${String(bin.x)}:${String(bin.y)}`;
       const found = byFootprint.get(key);
-      if (!found || value > found.value) byFootprint.set(key, { bin, value });
+      // The plate sits on the highest shelf; its colour is the busiest location below it.
+      const top = !found || slotBase(bin) > slotBase(found.bin) ? bin : found.bin;
+      byFootprint.set(key, { bin: top, value: Math.max(value, found?.value ?? 0) });
     }
     return [...byFootprint.values()].filter((c) => c.value > 0);
   }, [layout, heat]);
@@ -634,11 +646,13 @@ function HeatFloor({
     (dummy, i) => {
       const cell = cells[i];
       if (!cell) return;
-      dummy.position.set(cell.bin.x, 0.02, cell.bin.y);
+      const stocked = (onHand.get(cell.bin.id) ?? 0) > 0;
+      const top = stocked ? 0.14 + Math.min(cell.bin.height_m * 0.62, 1.4) + 0.02 : 0.02;
+      dummy.position.set(cell.bin.x, slotBase(cell.bin) + top, cell.bin.y);
       dummy.rotation.set(-Math.PI / 2, 0, 0);
-      dummy.scale.set(cell.bin.width_m * 1.05, cell.bin.depth_m * 1.05, 1);
+      dummy.scale.set(cell.bin.width_m, cell.bin.depth_m, 1);
     },
-    [cells, colors],
+    [cells, colors, onHand],
     (i) =>
       new Color(colors["--pw-color-accent-soft"]).lerp(
         new Color(colors["--pw-color-status-critical"]),

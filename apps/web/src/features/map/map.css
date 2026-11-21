@@ -619,7 +619,7 @@
 }
 
 /* Activity heatmap (2D plan cells; the 3D scene colours floor tiles). */
-.pw-plan-bin[data-heat] {
+.pw-plan .pw-plan-bin[data-heat] {
   fill: color-mix(
     in oklab,
     var(--pw-color-status-critical) var(--pw-heat),
@@ -633,7 +633,7 @@
 
 .pw-heat-legend {
   position: absolute;
-  bottom: var(--pw-space-3);
+  top: var(--pw-space-3);
   left: var(--pw-space-3);
   z-index: 2;
   display: flex;
