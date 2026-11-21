@@ -229,6 +229,14 @@ describe("guided demo (D6)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByRole("heading", { name: "Find anything" })).toBeTruthy();
+
+    // A reset starts the story again at step 1.
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Reset the simulation" }));
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("heading", { name: "Start of shift" })).toBeTruthy();
   });
 });
 

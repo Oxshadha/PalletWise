@@ -6,7 +6,7 @@ import type { ShiftBy } from "../../shared/api/client";
 import { formatSiteTime, isoToSiteLocal, siteLocalToIso } from "../../shared/format";
 import { Icon } from "../../shared/ui/Icon";
 import { useWorkspace } from "../../shared/workspace/WorkspaceContext";
-import { DemoPanel, type DemoSetup } from "./DemoPanel";
+import { DemoPanel, type DemoSetup, storeStep } from "./DemoPanel";
 import { type Move, type Operation, useSimulation } from "./useSimulation";
 
 const STEPS: { by: Exclude<ShiftBy, "next_morning">; label: string; words: string }[] = [
@@ -57,6 +57,8 @@ export function SimulationControls({ onAsked }: { onAsked: () => void }) {
   const [pending, setPending] = useState<Pending | null>(null);
   const [picking, setPicking] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false);
+  // A reset starts the story again: the demo goes back to its first step.
+  const [demoRun, setDemoRun] = useState(0);
 
   if (!simulation?.can_control || simulation.mode !== "SIMULATED") return null;
   const zone = simulation.time_zone;
@@ -161,7 +163,11 @@ export function SimulationControls({ onAsked }: { onAsked: () => void }) {
                 question: RESET_TEXT,
                 confirm: "Reset the simulation",
                 danger: true,
-                act: reset,
+                act: () => {
+                  storeStep(0);
+                  setDemoRun((n) => n + 1);
+                  return reset();
+                },
               });
             }}
           >
@@ -229,6 +235,7 @@ export function SimulationControls({ onAsked }: { onAsked: () => void }) {
 
       {demoOpen && (
         <DemoPanel
+          key={demoRun}
           disabled={!idle}
           onSetup={setup}
           onAsk={onAsk}

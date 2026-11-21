@@ -31,7 +31,7 @@ function storedStep(): number {
   }
 }
 
-function storeStep(n: number): void {
+export function storeStep(n: number): void {
   try {
     window.localStorage.setItem(STORED_STEP, String(n));
   } catch {
