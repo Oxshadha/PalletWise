@@ -124,23 +124,40 @@ refused for it.
 
 ### Connecting a third-party WMS
 
-PalletWise integrates through a **connector**, not through endpoints that the WMS must call. It
-works in three layers, and only the first is written per WMS:
+**Design.** PalletWise never depends on a WMS's database or API directly. Every WMS is
+translated into PalletWise's own canonical model at the edge (an anti-corruption layer), so the
+semantic layer, the copilot, the map and the inbox never change when the WMS does.
 
-| Layer | Per WMS? | What it does |
+| Layer | Written per WMS? | Responsibility |
 |---|---|---|
-| **Adapter** | Yes, one per WMS product | Reads the WMS the way that WMS allows: its REST or OData API, webhooks, change data capture on its database, or scheduled exports. Maps its codes, units, locations and statuses to PalletWise's canonical records. |
-| **Connector contract** | No, fixed | `pull(after_sequence, limit)` returns the next records in order; `submit_task(task, idempotency_key)` and `get_task_result(key)` send approved work back; `health()` reports status. Records are master data, orders, allocations, movements, task results and time markers, each with a sequence number, the source system and the WMS's own id. |
-| **Connector worker and ingest** | No, fixed | Applies records strictly in order, in batches, as `pw_ingest`, through invariant-keeping database functions. Ingest is idempotent on natural keys, so a replay creates nothing twice, and the cursor commits with each batch. |
+| Adapter | Yes | Reads the WMS the way it allows (REST or OData API, webhooks, change data capture, scheduled exports) and maps its codes, units, statuses and locations to canonical records |
+| Connector contract | No | `pull(after_sequence, limit)`, `submit_task(task, idempotency_key)`, `get_task_result(key)`, `health()`; every record carries a sequence number, its type, the source system and the WMS's own id |
+| Connector worker and ingest | No | Applies records strictly in order and in batches as `pw_ingest`, through invariant-keeping database functions; idempotent on natural keys, so a replay creates nothing twice |
 
-Above the connector nothing changes: the semantic layer, the copilot, the map and the inbox work
-as they are. The adapter holds the only WMS credentials, read only except for task submission.
-The warehouse layout (zones, racks, bins and their positions for the 3D map) comes in as master
-data, or from a one-time layout file when the WMS does not hold coordinates.
+**Why this way.**
+- Ordered, idempotent records survive retries, restarts and replays without double counting.
+- Least privilege: the adapter holds the only WMS credentials; `pw_ingest` can write only through
+  the ingest functions.
+- Write-back is explicit: approved tasks go back through `submit_task` with an idempotency key,
+  and PalletWise treats a task as done only when its result record arrives.
 
-Today the one adapter is the simulator (`services/simulator`), which feeds PalletWise through
-exactly this contract (`docs/specs/simulator.md` section 2). A real WMS adapter is the next
-integration step; it does not need changes to the core.
+**What exists today.** The contract and the worker exist; the one adapter is the simulator
+(`services/simulator`, `docs/specs/simulator.md` section 2), which reaches PalletWise only
+through this path, exactly as a real WMS would. The worker currently reads the simulator's outbox
+directly.
+
+**Next steps for production integrations** (each a planned slice with its own ADR):
+1. A `WmsConnector` plugin interface, registered by source system and configured per site, so the
+   worker runs any adapter instead of reading one outbox.
+2. Two ingestion modes: pull (the adapter polls the WMS or reads its change feed) and push (a
+   signed inbound endpoint such as `POST /api/connectors/{id}/records` with HMAC and idempotency
+   keys, for webhooks and integration platforms).
+3. Declarative mapping files per WMS (codes, units, statuses, location codes), so a common WMS
+   needs configuration rather than code.
+4. A published, versioned record schema and a conformance test suite every adapter must pass.
+5. Operations: a dead-letter queue for rejected records, periodic snapshot reconciliation to catch
+   drift, backfill, and a layout import (CSV or CAD) for 3D positions when the WMS has no
+   coordinates.
 
 ## Security model
 
