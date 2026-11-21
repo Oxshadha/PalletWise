@@ -177,6 +177,14 @@ def _lookup(metrics: dict[str, Any], path: str) -> Any:
 # The daily brief's wording (slice-3-acceptance step 7, facts gate): every item present, no
 # model sentence ungrounded, and the model's wording used for at least half of the items it was
 # asked to word (below that the checks reject it so often that the brief is mostly templates).
+# The governed query tier (ADR 0002 section 7), on the governed set; the adversarial SQL and the
+# semantically invalid SQL are gated deterministically by tests/unit/test_governed_guard.py.
+GOVERNED_GATES: tuple[Gate, ...] = (
+    Gate("quality", "governed.correct", ">=", 0.90),
+    Gate("quality", "governed.routing_kept", ">=", 0.95),
+    Gate("quality", "governed.invalid_refused", ">=", 1.0),
+)
+
 BRIEF_GATES: tuple[Gate, ...] = (
     Gate("quality", "brief.items", "==", 4),
     Gate("quality", "brief.ungrounded", "==", 0),

@@ -7,11 +7,12 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 from evals.cases import load_set
 from evals.configs import named
 from evals.environment import standalone
-from evals.measure import BRIEF_GATES, check_gates, combined_status
+from evals.measure import BRIEF_GATES, GOVERNED_GATES, check_gates, combined_status
 from evals.runner import (
     REPORTS_DIR,
     TOOL_NAMES,
@@ -91,6 +92,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if not failed else 1
         llm = LlmSettings()
         configs = named(args.compare.split(",") if args.compare else [args.config])
+        governed_fingerprint = _evaluate_governed(env) if "governed" in names else None
         # A provider per configuration: each API runs on its own event loop (runner.compare).
         compared = compare(
             env, cases, lambda: build_provider(LlmSettings()), configs, runs=args.runs, lookup=every_case
@@ -104,6 +106,9 @@ def main(argv: list[str] | None = None) -> int:
         for entry in entries:
             entry.metrics.update(brief)
             entry.gates += check_gates(entry.metrics, BRIEF_GATES)
+            if governed_fingerprint is not None:
+                entry.metrics["governed"]["fingerprint"] = governed_fingerprint
+                entry.gates += check_gates(entry.metrics, GOVERNED_GATES)
             invalid = entry.status.split("; ")[0] + "; " if entry.status.startswith("invalid") else ""
             entry.status = invalid + combined_status(entry.gates)
         paths = write_model_report(
@@ -116,8 +121,46 @@ def main(argv: list[str] | None = None) -> int:
         )
         for name, entry in zip(config_names(configs), entries, strict=True):
             print(f"model gate [{name}]: {entry.status.upper()}")
+        if governed_fingerprint is not None and all(e.status.startswith("pass") for e in entries):
+            _record_governed_pass(governed_fingerprint, str(paths[1]))
+            print(f"governed gate passed for {governed_fingerprint}: review semantic/governed_gate.json")
         print(f"Report: {paths[1]}")
         return 0 if all(e.status.startswith("pass") for e in entries) else 1
+
+
+class _Any(set[str]):
+    """Contains every fingerprint: the configuration under evaluation may run its governed queries."""
+
+    def __contains__(self, _item: object) -> bool:
+        return True
+
+
+def _evaluate_governed(env: Any) -> str:
+    """During this run only, in this process, the configuration under test counts as evaluated, so
+    the governed tier runs and can be measured. Returns its fingerprint for the report."""
+    from palletwise.db.connection import role_pool
+    from palletwise.governed import tool as governed
+
+    row = env.superuser.execute(
+        "SELECT primary_model, prompt_version FROM pw.agent WHERE tenant_id = %s AND id = 'copilot'",
+        (env.tenant,),
+    ).fetchone()
+    with role_pool("PW_QUERY_READ", max_size=2).connection() as conn:
+        found = governed.fingerprint(conn, row[0], row[1])
+    governed.passed_fingerprints = _Any  # type: ignore[assignment]
+    return found
+
+
+def _record_governed_pass(fingerprint: str, report: str) -> None:
+    """A passed gate adds its configuration to semantic/governed_gate.json for review (D3)."""
+    import json
+
+    from palletwise.governed import tool as governed
+
+    data = json.loads(governed.GATE_FILE.read_text(encoding="utf-8"))
+    if fingerprint not in {e["fingerprint"] for e in data["passed"]}:
+        data["passed"].append({"fingerprint": fingerprint, "report": report})
+        governed.GATE_FILE.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

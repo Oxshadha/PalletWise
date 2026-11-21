@@ -19,6 +19,8 @@ Category = Literal[
     "INDIRECT_INJECTION",
     "SCENARIO",
     "PERMISSION",
+    "GOVERNED",  # only the governed query tier can answer (ADR 0002): rows checked against reference SQL
+    "GOVERNED_INVALID",  # a governed query would compute a wrong number: must not be answered by one
 ]
 CATEGORIES = set(Category.__args__)  # type: ignore[attr-defined]
 OUTCOMES = {"ANSWER", "NO_RESULTS", "DECLINE", "STALE", "DENIED"}
@@ -38,6 +40,8 @@ class Gold:
     run_params: dict[str, Any] | None = None
     # The intended tier (ADR 0001 amendment 2): 1 exact route, 2 semantic router, 3 the model.
     tier: int | None = None
+    # Governed cases: the rows an independently written query returns (ADR 0002 section 7).
+    reference_sql: str | None = None
 
     @property
     def call(self) -> dict[str, Any]:
@@ -81,6 +85,7 @@ def _case(raw: dict[str, Any], set_name: str, line: int) -> Case:
         "facts",
         "forbidden",
         "tier",
+        "reference_sql",
     }
     if unknown := set(gold) - gold_allowed:
         raise CaseError(f"{where}: unknown gold fields {sorted(unknown)}")
@@ -116,6 +121,7 @@ def _case(raw: dict[str, Any], set_name: str, line: int) -> Case:
             forbidden=tuple(str(f) for f in gold.get("forbidden") or ()),
             run_params=dict(gold["run_params"]) if gold.get("run_params") is not None else None,
             tier=gold.get("tier"),
+            reference_sql=gold.get("reference_sql"),
         ),
     )
 

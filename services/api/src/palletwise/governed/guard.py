@@ -388,9 +388,11 @@ def _aggregate(node: ast.FuncCall, name: str, scope: Scope) -> None:
     if name == "count":
         if node.agg_distinct:
             arg = _column(node.args[0], scope) if node.args else None
-            if arg is None or arg[1].kind not in ("key", "ref"):
+            if arg is None or arg[1].kind == "measure":
                 raise Refused(
-                    "count", "count(DISTINCT ...) counts a key or a reference, for example an order id."
+                    "count",
+                    "count(DISTINCT ...) counts identifiers or attributes, for example order ids or"
+                    " customer codes, never measure values.",
                 )
         return
     columns = [c for c in (_column(n, scope) for n in _own_columns(node.args)) if c]
