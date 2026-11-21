@@ -294,8 +294,12 @@ SLICE_3_TOOLS = (GET_ORDER_STATUS, GET_OPEN_EXCEPTIONS)
 
 
 def v1_tools() -> ToolRegistry:
-    from palletwise.governed.tool import RUN_GOVERNED_QUERY  # the last-resort tier (ADR 0002)
+    from palletwise.governed import tool as governed  # the last-resort tier (ADR 0002)
 
-    return ToolRegistry(
-        [FIND_PRODUCT_LOCATIONS, GET_BIN_CONTENTS, *SLICE_2_TOOLS, *SLICE_3_TOOLS, RUN_GOVERNED_QUERY]
-    )
+    tools = [FIND_PRODUCT_LOCATIONS, GET_BIN_CONTENTS, *SLICE_2_TOOLS, *SLICE_3_TOOLS]
+    # Offered to the model only once a configuration has passed its gate: until then the copilot
+    # works exactly as without the tier (an untested tool would still cost every question its
+    # description; found by the governed gate on ee15759). Each call rechecks the fingerprint.
+    if governed.passed_fingerprints():
+        tools.append(governed.RUN_GOVERNED_QUERY)
+    return ToolRegistry(tools)

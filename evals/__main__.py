@@ -74,6 +74,8 @@ def main(argv: list[str] | None = None) -> int:
         ]
         hashes["selection"] = "tier3-only"
 
+    if "governed" in names:
+        _mark_evaluated()  # before the copilot is built, so its registry offers the governed tool
     with standalone() as env:
         if args.write_golden:
             for path in write_golden(env, cases):
@@ -135,9 +137,16 @@ class _Any(set[str]):
         return True
 
 
-def _evaluate_governed(env: Any) -> str:
+def _mark_evaluated() -> None:
     """During this run only, in this process, the configuration under test counts as evaluated, so
-    the governed tier runs and can be measured. Returns its fingerprint for the report."""
+    the governed tier is offered and runs and can be measured."""
+    from palletwise.governed import tool as governed
+
+    governed.passed_fingerprints = _Any  # type: ignore[assignment]
+
+
+def _evaluate_governed(env: Any) -> str:
+    """The fingerprint of the configuration under test, for the report."""
     from palletwise.db.connection import role_pool
     from palletwise.governed import tool as governed
 
@@ -147,7 +156,6 @@ def _evaluate_governed(env: Any) -> str:
     ).fetchone()
     with role_pool("PW_QUERY_READ", max_size=2).connection() as conn:
         found = governed.fingerprint(conn, row[0], row[1])
-    governed.passed_fingerprints = _Any  # type: ignore[assignment]
     return found
 
 

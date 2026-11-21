@@ -58,7 +58,7 @@ MODEL_ROWS = 20  # rows of a result shown to the model; the UI shows all of them
 # max_tokens caps thinking and answer together (verified on gemini-3.8-flash), so it is also the
 # upper bound used for the budget reservation. Thinking stays low: answers are short and grounded
 # in tool results, and low thinking measured over ten times fewer output tokens with the same answer.
-DEFAULT_MAX_OUTPUT = 1_024
+DEFAULT_MAX_OUTPUT = 2_048  # a governed query and its thinking need more than 1,024 (ee15759)
 WORDING_SETTINGS: ModelSettings = {"temperature": 0.1, "max_tokens": 400, "thinking": "low"}
 AGENT_SETTINGS: ModelSettings = {"temperature": 0.1, "max_tokens": DEFAULT_MAX_OUTPUT, "thinking": "low"}
 

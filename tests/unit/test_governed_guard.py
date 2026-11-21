@@ -141,3 +141,14 @@ def test_refusals_say_why_in_words() -> None:
     with pytest.raises(Refused) as refused:
         check("SELECT sum(unit_value) FROM gq.products")
     assert refused.value.rule == "non_additive" and "cannot be aggregated with sum" in str(refused.value)
+
+
+def test_the_tool_is_offered_only_after_a_passed_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Until a configuration passes, the copilot works exactly as without the governed tier."""
+    from palletwise.governed import tool as governed
+    from palletwise.tools.catalog import v1_tools
+
+    monkeypatch.setattr(governed, "passed_fingerprints", set)
+    assert v1_tools().get("run_governed_query") is None
+    monkeypatch.setattr(governed, "passed_fingerprints", lambda: {"x"})
+    assert v1_tools().get("run_governed_query") is not None

@@ -18,7 +18,7 @@ from palletwise.governed import tool as governed
 from palletwise.policy import PolicyClient
 from palletwise.settings import PolicySettings
 from palletwise.tools.catalog import v1_tools
-from palletwise.tools.executor import Outcome, RunContext, ToolExecutor
+from palletwise.tools.executor import Outcome, RunContext, ToolExecutor, ToolRegistry
 
 pytestmark = pytest.mark.integration
 
@@ -32,8 +32,15 @@ VALID = (
 @pytest.fixture
 def executor(opa_url: str) -> ToolExecutor:
     app = role_pool("PW_APP")
+    # The tool itself is under test: registered whether or not a configuration has passed yet
+    # (the catalog offers it to the model only after a pass; the per-call check is tested here).
+    registry = (
+        v1_tools()
+        if governed.passed_fingerprints()
+        else ToolRegistry([*v1_tools(), governed.RUN_GOVERNED_QUERY])
+    )
     return ToolExecutor(
-        v1_tools(), AgentRegistry(app), PolicyClient(PolicySettings(url=opa_url)), AuditLog(app),
+        registry, AgentRegistry(app), PolicyClient(PolicySettings(url=opa_url)), AuditLog(app),
         role_pool("PW_AGENT_READ"), RateLimiter(app),
     )  # fmt: skip
 
