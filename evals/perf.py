@@ -41,6 +41,8 @@ def _load_env() -> None:
     os.environ["PW_DB_NAME"] = "palletwise"
     os.environ.setdefault("PW_AGENT_READ_USER", "pw_agent_read")
     os.environ.setdefault("PW_MIGRATOR_USER", "pw_migrator")
+    os.environ.setdefault("PW_EVALUATOR_USER", "pw_evaluator")
+    os.environ.setdefault("PW_BRIEF_USER", "pw_brief")
 
 
 def _pct(values: list[float], q: float) -> float:
@@ -415,7 +417,8 @@ def main(argv: list[str] | None = None) -> int:
                 ).fetchall()
             )
 
-        for row, (_, _, fn, ref) in zip(results, calls, strict=True):
+        # The timed Slice 3 extras come after the calls and have no reference query.
+        for row, (_, _, fn, ref) in zip(results[: len(calls)], calls, strict=True):
             if not ref or row["verdict"] == "error":
                 continue
             with tenant_session(read, TENANT, read_snapshot=True) as conn:
