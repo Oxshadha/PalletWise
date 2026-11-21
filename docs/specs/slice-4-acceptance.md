@@ -1,94 +1,111 @@
 # Slice 4: Acceptance Criteria
 
-**Status:** Draft for product owner approval
-**Goal:** The demo runs itself: time moves at a chosen speed, the warehouse lives (orders arrive, picks happen, stock moves, exceptions open and resolve), scenarios stage a story on demand, and the Admin controls it all from the screen. Today the clock stands still at the clock start; Slice 4 makes it move.
+**Status:** Draft for product owner approval (revised 2026-11-21 after the product owner's direction: a clickable guided demo with time shift, not a running clock)
+**Goal:** Every feature can be shown to a client live, by the presenter's own clicks, in one guided story. The only thing the presenter cannot do in a real warehouse is wait hours or days; Slice 4 adds **time shift**: move the simulated warehouse forward on demand, with everything that happens in that period really generated, ingested and recalculated.
 
 This document is a plan against the approved specifications. It does not redefine them. Where a decision below refines a spec, the spec gets a change-log entry when the work lands.
 
 | Spec | What Slice 4 implements from it |
 |---|---|
-| Requirements (approved) | FR-SIM-04 (play, pause, speed, jump, reset), FR-SIM-05 (calendar bounds), FR-SIM-06 (scenarios), FR-SIM-07 (guided tour, Should), FR-SIM-09 (consistent clock), the notification bell (UX spec 2) |
-| Simulator (approved) | 5.2 live operation, 5.3 determinism with the input log, 6 scenarios, 7 admin controls, 7.1 reset on both sides, the section 9 tests for these |
-| Canonical warehouse model (approved) | 7.4 `reset_simulated_site()`, tick markers driving `site_clock` |
-| Identity and access (approved) | `admin.simulation.control` (Admin only) |
-| UX screens (approved) | Notification bell (row 27); a short section for the simulation controls when this slice starts |
+| Requirements (approved) | FR-SIM-04 (jump forward and reset; play, pause and speed are deferred, D2), FR-SIM-05 (calendar bounds), FR-SIM-06 (scenarios), FR-SIM-07 (guided tour), FR-SIM-09 (consistent clock), the notification bell (UX spec 2) |
+| Simulator (approved) | 5.2 per-day schedules and jump, 5.3 determinism with the input log, 6 scenarios, 7 admin controls (jump, run scenario, reset), 7.1 reset on both sides, the section 9 tests for these |
+| Canonical warehouse model (approved) | 7.4 `reset_simulated_site()`, tick markers driving `site_clock`; `site_clock.mode` tells a simulated site |
+| Identity and access (approved) | A new scope `simulation.control` (D3) |
+| UX screens (approved) | Notification bell (row 27); sections for the time shift bar and the guided demo |
 
 ## 1. Scope
 
 **In scope**
 
-- Live operation in the simulator: each simulated day's schedule generated at its start from the seed and the input log, events emitted as time passes, tick markers moving the PalletWise clock (simulator 5.2).
-- Controls: play, pause, speed 1x, 10x and 60x, jump forward within the calendar, run a scenario, reset. Admin only, confirmed in the UI and audited.
-- Scenarios as YAML files with preconditions and expectations: `monsoon_slowdown`, `dead_stock_in_prime`, `outlet_window_at_risk` and `festival_rush` (see D3 for the parts that wait for later slices).
-- Reset on both sides (simulator 7.1): a clean new run from the seed, the site `REBUILDING` then `READY`, never partial data shown as ready.
-- Screen: site time and speed for everyone; the simulation controls for the Admin; the notification bell; the guided tour from a scenario's tour lines.
+- **Time shift:** +1 hour, +4 hours, +1 day, +1 week, or a chosen date and time, forward only and within the calendar. The simulator generates every event of the skipped period (orders, allocations, picks, shipments, receipts, replenishments, tick markers) with the same generator as the history; the connector ingests them in order; the exception engine, the live stream and the brief react as they would to a real WMS.
+- **Scenarios:** YAML files that stage a situation through the simulator's input log (for example a large early outlet order, slower deliveries): `outlet_window_at_risk`, `monsoon_slowdown`, `dead_stock_in_prime`, `festival_rush`.
+- **Guided demo:** one built-in storyline (section 2.1) that walks through every feature built so far; each step may run a scenario event or a time shift, then shows what to click or ask. The presenter does every click.
+- **Reset:** back to the clean start from the seed for the next demo (simulator 7.1).
+- **Notification bell** for new exceptions.
 - Carried from Slice 3: the 3D scene renders on demand instead of continuously; the 2D plan's overlapping zone label.
 
 **Out of scope (later slices)**
 
 | Item | Slice |
 |---|---|
+| Play, pause and speeds (a clock that runs by itself) | later, if wanted (D2) |
 | Governed SQL fallback tool (ADR first) | 5 |
-| Proposals and task execution by the simulator (`submit_task`, the after-execution part of `outlet_window_at_risk`) | 6 |
+| Proposals and task execution by the simulator; the after-execution part of `outlet_window_at_risk` | 6 |
 | `FESTIVAL_SHORTAGE` and the festival question (the expectation of `festival_rush`) | 6 |
-| Admin panel: users, agent registry, settings editor, usage, unanswered questions | 7 |
+| Admin panel | 7 |
 | Audit viewer and sealing, release hardening | 8 |
+
+**Constraint: the demo is the real product.** No demo path writes to PalletWise tables. Every change comes from the simulator through the outbox and the connector, exactly as from a real WMS; every click goes through the normal API, OPA, roles and audit. Reset is the only way back, and it rebuilds from the seed through the same ingestion; data is never edited by hand.
 
 ## 2. Decisions
 
 | # | Decision | Why |
 |---|---|---|
-| D1 | The simulator owns the tick loop and its state. Admin commands go browser to API (OPA `admin.simulation.control`, audit, CSRF) to the simulator's internal control endpoint; PalletWise never moves its own clock, which follows tick markers only | Simulator decision 10 and FR-SIM-01: the simulator is a data source like any WMS; one clock, driven by ingested data |
-| D2 | After a simulator restart, its state is rebuilt from the seed, the input log and the last emitted time, and it comes back **paused** at that time | A restart never jumps time or replays events twice; the Admin chooses when to continue |
-| D3 | All four scenario files are written now. `outlet_window_at_risk` checks its exception now and its after-execution expectation in Slice 6; `festival_rush` applies its events now and its `FESTIVAL_SHORTAGE` expectation is checked in Slice 6 | The demo can stage every story now; no expectation is faked before its feature exists |
-| D4 | Until the Admin panel (Slice 7), the controls are a compact simulation bar under the page title, shown to the Admin only. Everyone sees the site time and "paused" or "running at 60x" | The demo needs the controls now; the full Admin panel stays one coherent slice |
-| D5 | The bell shows a dot when exceptions opened since the viewer last opened the inbox; "last seen" is kept per viewer in the browser | UX spec row 27; a per-viewer convenience, not shared state |
-| D6 | The guided tour shows a scenario's tour lines as suggestion chips that run through the copilot like any suggestion; it can be left at any step | FR-SIM-07; no new answer path |
-| D7 | Live speed target: at 60x the PalletWise clock stays within 5 simulated minutes of the simulator, and a change reaches the screen within 2 seconds (NFR-PERF-05) | The demo is shown at 60x; ingestion and the exception engine must keep up |
+| D1 | The simulator owns time. A time shift is a command from the browser through the API (OPA, audit, CSRF) to the simulator's internal control endpoint; the simulator generates and emits the period; PalletWise's clock moves only when it ingests the tick markers | Simulator decision 10 and FR-SIM-01: the simulator is a data source like any WMS; one clock, driven by ingested data |
+| D2 | Time is paused unless shifted. Play, pause and the 1x, 10x and 60x speeds are not built now | The product owner demos by clicking through flows; a running clock adds nothing to that and would change the screen under the presenter |
+| D3 | Product owner revision of FR-SIM-04 and the identity scope table: a new scope `simulation.control` (time shift, run a scenario step) for the Manager and the Admin, refused by the API unless `site_clock.mode = SIMULATED`; reset keeps `admin.simulation.control` (Admin only) because it discards the run | The demo runs from one Manager screen with no switching of accounts; shifting simulated time changes only simulated data, and a real site has no simulator to control |
+| D4 | After a simulator restart, its state is rebuilt from the seed, the input log and the last emitted time | A restart never moves time or emits an event twice |
+| D5 | A time shift is applied in batches; the site stays readable meanwhile and the screen shows "moving time to (date)" until the clock reaches the target | A week is thousands of records; the presenter sees progress, never half a state presented as current |
+| D6 | The guided demo is a storyline file (section 2.1), shown in a step panel opened by a **Demo** button for holders of `simulation.control`. A step's setup runs only when the presenter clicks it, and it is confirmed and audited like any action. Later slices add their steps to the same file | One place shows every feature; it grows with the product |
+| D7 | All four scenario files are written now; expectations that need a later feature (task execution, `FESTIVAL_SHORTAGE`) are checked in Slice 6, never faked | The demo can stage every story now |
+| D8 | The bell shows a dot when exceptions opened since the viewer last opened the inbox; "last seen" is kept per viewer in the browser | UX spec row 27; a per-viewer convenience |
+
+### 2.1 The guided demo storyline (first version)
+
+| Step | Setup the step runs (when clicked) | What the presenter shows |
+|---|---|---|
+| 1. Start of shift | (reset is a separate Admin action) | The daily brief; the inbox ranked with "why it is ranked here"; the map highlights |
+| 2. Find anything | none | Search a SKU, a bin and an order; the copilot answers with the map |
+| 3. A big outlet order arrives | Scenario event: a large order due this afternoon (`outlet_window_at_risk`) | The stockout risk appears in the inbox and on the map without a reload |
+| 4. Investigate | none | Ask the copilot about the exception; the order's status; acknowledge it |
+| 5. Time passes | Time shift +4 hours | Picks and shipments happened; the order is late; exceptions change and resolve |
+| 6. Next morning | Time shift to the next operating day 06:00 | A new daily brief; yesterday's throughput against the average |
+| 7. The festival approaches | Time shift +1 week | Demand ramps; low stock rises; days of cover fall |
+| 8. Ask anything | none | Flexible questions through the query language; an honest decline when out of scope |
 
 ## 3. Acceptance criteria by step
 
-### Step 1: Live operation
+### Step 1: Time shift in the simulator
 
-- The simulator continues the run after the clock start, day by day, with the same generator as the history; events and tick markers go to the outbox in sequence.
-- Tests (simulator 9): jump equals play (state after jumping to T equals state after playing to T); tick markers move `site_clock` only when applied, never ahead of applied events; the same seed and input log give the same state; demand is 0 on non-operating days.
+- The simulator continues the run past the clock start, day by day, with the history generator (schedules generated at the start of each simulated day); a shift emits all events up to the target, with tick markers, in batches.
+- Forward only and within the calendar (FR-SIM-05); refused with a message otherwise.
+- Tests (simulator 9): a shift to T gives the same state as shifting in smaller steps to T; tick markers move `site_clock` only when applied, never ahead of applied events; the same seed and input log give the same state; demand is 0 on non-operating days; old-run records are skipped.
 
-### Step 2: Controls
+### Step 2: Controls through the API
 
-- `POST /api/sites/{id}/simulation/{play|pause|speed|jump}` and `GET .../simulation` (status for every reader of the site). Admin only for commands, OPA scope `admin.simulation.control`, audited with before and after, CSRF checked.
-- Jump forward only, within the calendar (FR-SIM-05); refused with a message otherwise. A jump emits the skipped period's events in batches; the site stays readable meanwhile.
-- Tests: a Manager is refused (403, audited); jump backward and beyond the calendar are refused; speed changes take effect on the next tick.
+- `POST /api/sites/{id}/simulation/shift` (by a duration or to a time) and `POST .../simulation/scenario` with `simulation.control`; `POST .../simulation/reset` with `admin.simulation.control`; `GET .../simulation` (state, target, progress) for every reader of the site. OPA, audit with before and after, CSRF, `Idempotency-Key`.
+- Refused on a site whose clock mode is not `SIMULATED`.
+- Tests: the Manager may shift and run a scenario but not reset; any control on a real site is refused; a repeated request with the same key shifts once; backward and beyond-calendar shifts are refused.
 
 ### Step 3: Scenarios
 
-- Scenario files in `simulator/scenarios/`, the closed list of event types, preconditions checked first (refused with the reason, never run at another time), events applied from the current simulated time and recorded in the input log.
-- Expectations run by the evaluation suite against a fresh environment: `monsoon_slowdown` (rising `LOW_STOCK`, falling days of cover), `dead_stock_in_prime` (the six anchors), `outlet_window_at_risk` (a fixable `STOCKOUT_RISK` for SKU-214 within 90 minutes).
-- Tests: preconditions refuse; the same seed and input log reproduce the state; golden highlights per dataset version.
+- Scenario files in `simulator/scenarios/`, the closed list of event types, preconditions checked first (refused with the reason), events applied from the current simulated time and recorded in the input log.
+- Expectations run by the evaluation suite: `dead_stock_in_prime` (the six anchors), `outlet_window_at_risk` (a fixable `STOCKOUT_RISK` for SKU-214 within 90 simulated minutes), `monsoon_slowdown` (rising `LOW_STOCK`).
+- Tests: preconditions refuse; the same seed and input log reproduce the state.
 
 ### Step 4: Reset
 
-- Reset on both sides exactly as simulator 7.1: site `REBUILDING`, old-run data and stream records skipped, new run from the seed, dataset hash checked, then `READY`; a failure leaves the site `FAILED`, never `READY`. Open exceptions resolve as `SIMULATION_RESET`; the day gets a new brief (Slice 3).
+- Exactly as simulator 7.1: site `REBUILDING`, new run from the seed through the normal ingestion, dataset hash checked, then `READY`; a failure leaves `FAILED`, never `READY`. Open exceptions resolve as `SIMULATION_RESET`; the day gets a new brief.
 - Tests: a failure during regeneration leaves `FAILED`; old-run records are skipped; the screen shows "data is being rebuilt" and recovers without a reload.
 
 ### Step 5: Screens
 
-- Simulation bar for the Admin: play or pause, speed, jump to a date and time, run scenario (with its title and preconditions), reset; every action asks for confirmation and shows the result. Site time and run state for everyone.
-- Notification bell with a dot for new exceptions; opening it lists them and leads to the inbox.
-- Guided tour from a running scenario's tour lines.
-- 3D scene renders on demand; the zone label no longer overlaps.
-- Tests: the Admin sees the bar, the Manager does not; confirmations; the bell's dot appears for a new exception and clears when seen; no em or en dashes.
+- Time shift bar for holders of `simulation.control` on a simulated site: the site time, the shift buttons, a date picker, progress while shifting; reset for the Admin only. Every action confirmed.
+- Guided demo panel: steps of section 2.1 in order, Next and Back, each step's setup on click, its prompts as suggestion chips that run through the copilot.
+- Notification bell; the 3D scene renders on demand; the zone label no longer overlaps.
+- Tests: the Manager sees the bar and the demo without reset; the Admin sees reset; confirmations; the bell's dot appears for a new exception and clears when seen; no em or en dashes.
 
 ### Step 6: Quality
 
-- Performance (D7): at 60x for 10 real minutes, the PalletWise clock lag and the change-to-screen time are measured and within target; the exception engine keeps up.
+- Performance: a 1-day and a 1-week shift on the reference site complete and reach `READY` screens within measured targets set from the first measurement and recorded; the exception engine keeps up.
 - Evals: the scenario expectations of step 3 pass; the existing gates stay green.
-- Live browser check: play at 60x and watch orders, the map and the inbox move; run `outlet_window_at_risk` and see its exception open; reset and see the site rebuild; the bell and the tour.
+- Live browser check: the whole storyline of section 2.1, clicked through end to end, then reset and run again; evidence file like Slice 3's.
 
 ## 4. Definition of done
 
 - Every step's criteria pass; engineering baseline 8.1 is met.
 - Unit and integration tests, the deterministic eval gate, lint and CI pass.
-- The live browser check of step 6, recorded in an evidence file like Slice 3's.
+- The storyline runs end to end twice (before and after a reset) with the same results.
 - Code review and security review at the end of the slice; findings fixed or recorded.
 
 ## 5. Change log
@@ -96,3 +113,4 @@ This document is a plan against the approved specifications. It does not redefin
 | Date | Change |
 |---|---|
 | 2026-11-21 | Draft for product owner approval |
+| 2026-11-21 | Revised after the product owner's direction: a clickable guided demo with time shift instead of a running clock (D2, D5, D6, 2.1); the Manager controls the simulation on simulated sites, reset stays Admin (D3); the demo is the real product, with no demo-only write paths |
