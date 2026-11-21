@@ -1,6 +1,6 @@
 import "./app.css";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AdminPanel } from "../features/admin/AdminPanel";
 import { CopilotPanel } from "../features/copilot/CopilotPanel";
@@ -28,6 +28,7 @@ import { useSiteChanges } from "../shared/api/siteEvents";
 import { formatSiteTime, siteDate } from "../shared/format";
 import { Icon } from "../shared/ui/Icon";
 import { WorkspaceProvider } from "../shared/workspace/WorkspaceContext";
+import { Splitter } from "./Splitter";
 import { SignIn } from "./SignIn";
 
 /** Data status text (UX spec 2); the copilot input shows the same text while not READY. */
@@ -58,6 +59,7 @@ const THEMES: { value: ThemeChoice; label: string }[] = [
 ];
 
 type Panel = "warehouse" | "copilot" | "inbox" | "admin";
+type Side = "copilot" | "inbox";
 
 const PANEL_HEADING: Record<Panel, string> = {
   warehouse: "pw-warehouse-title",
@@ -68,6 +70,11 @@ const PANEL_HEADING: Record<Panel, string> = {
 
 /** Below this width one panel shows at a time (UX spec 9, app.css). */
 const ONE_PANEL = "(max-width: 1199px)";
+
+/** True below the two-panel width; false where media queries are not available. */
+function narrowScreen(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia(ONE_PANEL).matches;
+}
 
 function signInError(): string | null {
   const reason = new URLSearchParams(window.location.search).get("auth_error");
@@ -148,6 +155,23 @@ export function App() {
   const [site, setSite] = useState<SiteStatus | null>(null);
   const [unreachable, setUnreachable] = useState(false);
   const [panel, setPanel] = useState<Panel>("warehouse");
+  // Wide screens: the map and one side panel (copilot or inbox), each switched on or off from the
+  // view switch; at least one stays visible. Narrow screens show `panel` alone.
+  const [showMap, setShowMap] = useState(true);
+  const [side, setSide] = useState<Side | null>("copilot");
+  const [wide, setWide] = useState(() => !narrowScreen());
+  const workspace = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(ONE_PANEL);
+    const update = () => {
+      setWide(!query.matches);
+    };
+    query.addEventListener("change", update);
+    return () => {
+      query.removeEventListener("change", update);
+    };
+  }, []);
 
   useEffect(() => {
     if (authError) return;
@@ -191,12 +215,35 @@ export function App() {
 
   const choosePanel = (next: Panel) => {
     setPanel(next);
+    if (next === "warehouse") setShowMap(true);
+    if (next === "copilot" || next === "inbox") setSide(next);
     // Reveal the panel and move focus to its heading (UX spec 2).
     window.requestAnimationFrame(() => {
       const heading = document.getElementById(PANEL_HEADING[next]);
       heading?.scrollIntoView({ block: "nearest" });
       heading?.focus();
     });
+  };
+
+  /** A view switch click: on wide screens it shows or hides that panel (never the last one). */
+  const toggle = (target: Exclude<Panel, "admin">) => {
+    if (!wide || panel === "admin") {
+      choosePanel(target);
+      return;
+    }
+    if (target === "warehouse") {
+      if (showMap && side) setShowMap(false);
+      else choosePanel("warehouse");
+    } else if (side === target && showMap) {
+      setSide(null);
+    } else {
+      choosePanel(target);
+    }
+  };
+  const shown = (target: Exclude<Panel, "admin">): boolean => {
+    if (panel === "admin") return false;
+    if (!wide) return panel === target;
+    return target === "warehouse" ? showMap : side === target;
   };
 
   const siteInfo = me?.sites[0] ?? null;
@@ -220,27 +267,27 @@ export function App() {
           <nav className="pw-nav" aria-label="Show panel">
             <button
               type="button"
-              aria-pressed={panel === "warehouse"}
+              aria-pressed={shown("warehouse")}
               onClick={() => {
-                choosePanel("warehouse");
+                toggle("warehouse");
               }}
             >
               <Icon name="map" size={16} /> Warehouse
             </button>
             <button
               type="button"
-              aria-pressed={panel === "copilot"}
+              aria-pressed={shown("copilot")}
               onClick={() => {
-                choosePanel("copilot");
+                toggle("copilot");
               }}
             >
               <Icon name="chat" size={16} /> Copilot
             </button>
             <button
               type="button"
-              aria-pressed={panel === "inbox"}
+              aria-pressed={shown("inbox")}
               onClick={() => {
-                choosePanel("inbox");
+                toggle("inbox");
               }}
             >
               <Icon name="inbox" size={16} /> Inbox
@@ -324,8 +371,15 @@ export function App() {
       {me && siteInfo && panel === "admin" && <AdminPanel />}
 
       {me && siteInfo && panel !== "admin" && (
-        <main className="pw-workspace" data-panel={panel}>
+        <main
+          ref={workspace}
+          className="pw-workspace"
+          data-panel={panel}
+          data-map={showMap ? "on" : "off"}
+          data-side={side ?? "none"}
+        >
           <MapPanel />
+          <Splitter workspace={workspace} />
           <CopilotPanel
             notReadyText={notReady}
             onOpenInbox={() => {
@@ -338,7 +392,7 @@ export function App() {
             }}
             onShowOnMap={() => {
               // Beside the map on wide screens; on narrow ones, show the map.
-              if (window.matchMedia(ONE_PANEL).matches) choosePanel("warehouse");
+              if (narrowScreen()) choosePanel("warehouse");
             }}
           />
         </main>

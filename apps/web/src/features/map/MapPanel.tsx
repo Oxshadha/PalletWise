@@ -72,6 +72,8 @@ export function MapPanel() {
   const states = useMemo(() => statesById(mapState), [mapState]);
   // The activity heatmap: picks in the last 7 site days per location (semantic layer).
   const [heatOn, setHeatOn] = useState(false);
+  // Focus: the map alone in its panel (lists and figures hidden); the copilot stays beside it.
+  const [focused, setFocused] = useState(false);
   const heat = useMemo(() => (heatOn ? heatById(mapState) : null), [heatOn, mapState]);
   const onHand = useMemo(() => onHandById(mapState), [mapState]);
   const answer = activeHighlights(state);
@@ -136,7 +138,11 @@ export function MapPanel() {
   }, [highlights, bins]);
 
   return (
-    <section className="pw-panel pw-map-panel" aria-labelledby="pw-warehouse-title">
+    <section
+      className="pw-panel pw-map-panel"
+      aria-labelledby="pw-warehouse-title"
+      data-focus={focused ? "" : undefined}
+    >
       <header className="pw-panel-header">
         <div>
           <h2 id="pw-warehouse-title" tabIndex={-1}>
@@ -174,6 +180,18 @@ export function MapPanel() {
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          className="pw-icon-button pw-focus-toggle"
+          aria-pressed={focused}
+          aria-label={focused ? "Show the map details" : "Focus the map"}
+          title={focused ? "Show the map details" : "Focus the map"}
+          onClick={() => {
+            setFocused((on) => !on);
+          }}
+        >
+          <Icon name={focused ? "collapse" : "expand"} size={16} />
+        </button>
       </header>
 
       {!webgl && (

@@ -60,9 +60,16 @@ a {
 
 .pw-panel-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
-  gap: var(--pw-space-4);
+  gap: var(--pw-space-3) var(--pw-space-4);
+}
+
+/* A narrow panel: the title keeps one line and the actions move under it. */
+.pw-panel-header > :first-child {
+  flex: 1 1 14rem;
+  min-width: 0;
 }
 
 .pw-panel-header h2 {

@@ -1,6 +1,7 @@
 import {
   Activity,
   ArrowRight,
+  ArrowUp,
   Bell,
   Check,
   ChevronDown,
@@ -17,7 +18,10 @@ import {
   type LucideIcon,
   Map,
   MapPin,
+  Maximize2,
   MessageSquareText,
+  Mic,
+  Minimize2,
   Minus,
   OctagonAlert,
   Plus,
@@ -30,6 +34,8 @@ import {
   ThumbsDown,
   ThumbsUp,
   TriangleAlert,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 
@@ -37,6 +43,8 @@ import {
  * Decorative: always hidden from assistive technology; the control carries the accessible name. */
 const ICONS = {
   map: Map,
+  expand: Maximize2,
+  collapse: Minimize2,
   chat: MessageSquareText,
   history: History,
   plus: Plus,
@@ -48,6 +56,10 @@ const ICONS = {
   stop: Square,
   pin: MapPin,
   arrow: ArrowRight,
+  "arrow-up": ArrowUp,
+  mic: Mic,
+  speak: Volume2,
+  "speak-stop": VolumeX,
   bell: Bell,
   "rotate-left": RotateCcw,
   "rotate-right": RotateCw,

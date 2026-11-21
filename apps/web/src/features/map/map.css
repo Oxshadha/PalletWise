@@ -685,3 +685,15 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* Focus: the map alone in its panel. Zones, highlighted list, figures and the subtitle step aside;
+   the map keeps every control, and the copilot beside it stays as it is. */
+.pw-map-panel[data-focus] .pw-map-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pw-map-panel[data-focus] .pw-map-side,
+.pw-map-panel[data-focus] .pw-figures,
+.pw-map-panel[data-focus] .pw-panel-header .pw-muted {
+  display: none;
+}

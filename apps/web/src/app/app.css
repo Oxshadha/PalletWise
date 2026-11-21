@@ -142,51 +142,86 @@
   max-width: 36rem;
 }
 
-/* Both panels side by side; balanced from 1600 px (UX spec 9). */
+/* The map and one side panel (copilot or inbox) side by side, split by a draggable bar
+   (UX spec 9). The view switch shows or hides either; both stay mounted, so an answer in
+   progress keeps streaming while hidden. */
 .pw-workspace {
   display: grid;
-  grid-template-columns: minmax(560px, 1.55fr) minmax(380px, 1fr);
-  gap: var(--pw-space-5);
+  grid-template-columns: minmax(480px, var(--pw-split, 58%)) 1.5rem minmax(360px, 1fr);
   flex: 1;
   min-height: 0;
   padding: 0 var(--pw-space-8) var(--pw-space-6);
 }
 
-/* 1200 to 1599 px: the selected panel gets 55 percent, never below its minimum. */
-@media (max-width: 1599px) {
-  .pw-workspace[data-panel="warehouse"] {
-    grid-template-columns: minmax(560px, 55fr) minmax(380px, 45fr);
-  }
-
-  .pw-workspace[data-panel="copilot"] {
-    grid-template-columns: minmax(560px, 45fr) minmax(380px, 55fr);
-  }
-
-  .pw-workspace[data-panel="inbox"] {
-    grid-template-columns: minmax(560px, 55fr) minmax(380px, 45fr);
-  }
+.pw-workspace[data-map="off"],
+.pw-workspace[data-side="none"] {
+  grid-template-columns: minmax(0, 1fr);
 }
 
-/* The copilot and the inbox share the column beside the map (D4); both stay mounted, so an
-   answer in progress keeps streaming while the inbox is shown. */
-.pw-workspace[data-panel="inbox"] .pw-copilot,
-.pw-workspace:not([data-panel="inbox"]) .pw-inbox {
+.pw-workspace[data-map="off"] .pw-map-panel,
+.pw-workspace[data-map="off"] .pw-splitter,
+.pw-workspace[data-side="none"] .pw-splitter,
+.pw-workspace:not([data-side="copilot"]) .pw-copilot,
+.pw-workspace:not([data-side="inbox"]) .pw-inbox {
   display: none;
 }
 
-/* Below 1200 px: one panel at a time; the view switch toggles between them. */
+.pw-splitter {
+  display: grid;
+  place-items: center;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: var(--pw-radius-sm);
+}
+
+.pw-splitter span {
+  width: 4px;
+  height: 3rem;
+  border-radius: 2px;
+  background: var(--pw-color-text-muted);
+  opacity: 0.35;
+  transition:
+    background 0.15s,
+    height 0.15s;
+}
+
+.pw-splitter:hover span,
+.pw-splitter:focus-visible span,
+.pw-resizing .pw-splitter span {
+  height: 5rem;
+  background: var(--pw-color-accent);
+  opacity: 1;
+}
+
+.pw-splitter:focus-visible {
+  outline: 2px solid var(--pw-color-accent);
+  outline-offset: 2px;
+}
+
+body.pw-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* Below 1200 px: one panel at a time; the view switch chooses it. */
 @media (max-width: 1199px) {
   .pw-workspace,
-  .pw-workspace[data-panel="warehouse"],
-  .pw-workspace[data-panel="copilot"],
-  .pw-workspace[data-panel="inbox"] {
+  .pw-workspace[data-map="off"],
+  .pw-workspace[data-side="none"] {
     grid-template-columns: minmax(0, 1fr);
+    gap: var(--pw-space-5);
   }
 
+  .pw-workspace .pw-splitter,
   .pw-workspace[data-panel="warehouse"] .pw-copilot,
+  .pw-workspace[data-panel="warehouse"] .pw-inbox,
   .pw-workspace[data-panel="copilot"] .pw-map-panel,
   .pw-workspace[data-panel="inbox"] .pw-map-panel {
     display: none;
+  }
+
+  .pw-workspace[data-panel="warehouse"] .pw-map-panel {
+    display: flex;
   }
 }
 
