@@ -403,33 +403,43 @@ def model(
     return compare(env, cases, providers, [config or RuntimeConfig()], runs)[0][1]
 
 
+BRIEF_SAMPLES = 3  # one brief is one model call: judge the wording over several, not one draw
+
+
 def brief_wording(env: EvalEnv, providers: Callable[[], LLMProvider]) -> dict[str, Any]:
-    """The daily brief worded by the real model (slice-3-acceptance step 7): how many items, how
-    many of those with results the model worded, and whether any model sentence is ungrounded
-    against its own stored item (the runtime rejects those; this checks that it did)."""
+    """The daily brief worded by the real model (slice-3-acceptance step 7), generated
+    BRIEF_SAMPLES times (the stored brief is removed between samples): how many items, the share of
+    items with results the model worded across samples, and whether any model sentence is
+    ungrounded against its own stored item (the runtime rejects those; this checks that it did)."""
     from palletwise.agent.guardrails import grounding_problems
 
+    samples: list[dict[str, Any]] = []
     with env.api(providers(), config=PRODUCTION_RUNTIME) as api:
         api.sign_in("warehouse_manager")
-        response = api.client.get(f"/api/sites/{env.site}/brief")
-    if response.status_code != 200:
-        return {
-            "brief": {"items": 0, "ungrounded": None, "model_share": None, "status": response.status_code}
-        }
-    items = response.json()["items"]
-    asked = [i for i in items if i["result"]["status"] == "OK"]
+        for _ in range(BRIEF_SAMPLES):
+            env.superuser.execute("DELETE FROM pw.daily_brief WHERE site_id = %s", (env.site,))
+            response = api.client.get(f"/api/sites/{env.site}/brief")
+            if response.status_code != 200:
+                return {"brief": {"items": 0, "ungrounded": None, "model_share": None,
+                                  "status": response.status_code}}  # fmt: skip
+            samples.append(response.json())
+    asked = [i for b in samples for i in b["items"] if i["result"]["status"] == "OK"]
     worded = [i for i in asked if i["text_source"] == "model"]
     ungrounded = sum(
         1 for i in worded if grounding_problems(i["text"], [ResultEnvelope.model_validate(i["result"])], "")
     )
     return {
         "brief": {
-            "items": len(items),
+            "items": min(len(b["items"]) for b in samples),
+            "samples": len(samples),
             "asked": len(asked),
             "model_worded": len(worded),
             "model_share": round(len(worded) / len(asked), 3) if asked else None,
             "ungrounded": ungrounded,
-            "sentences": {i["kind"]: {"source": i["text_source"], "text": i["text"]} for i in items},
+            "sentences": [
+                {i["kind"]: {"source": i["text_source"], "text": i["text"]} for i in b["items"]}
+                for b in samples
+            ],
         }
     }
 
