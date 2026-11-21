@@ -1,6 +1,6 @@
 # Slice 4: Acceptance Criteria
 
-**Status:** Draft for product owner approval (revised 2026-11-21 after the product owner's direction: a clickable guided demo with time shift, not a running clock)
+**Status:** Approved by the product owner on 2026-11-21 (with the review's concurrency rule (D9) and fixed shift limits (step 6); D8 kept per browser)
 **Goal:** Every feature can be shown to a client live, by the presenter's own clicks, in one guided story. The only thing the presenter cannot do in a real warehouse is wait hours or days; Slice 4 adds **time shift**: move the simulated warehouse forward on demand, with everything that happens in that period really generated, ingested and recalculated.
 
 This document is a plan against the approved specifications. It does not redefine them. Where a decision below refines a spec, the spec gets a change-log entry when the work lands.
@@ -48,7 +48,8 @@ This document is a plan against the approved specifications. It does not redefin
 | D5 | A time shift is applied in batches; the site stays readable meanwhile and the screen shows "moving time to (date)" until the clock reaches the target | A week is thousands of records; the presenter sees progress, never half a state presented as current |
 | D6 | The guided demo is a storyline file (section 2.1), shown in a step panel opened by a **Demo** button for holders of `simulation.control`. A step's setup runs only when the presenter clicks it, and it is confirmed and audited like any action. Later slices add their steps to the same file | One place shows every feature; it grows with the product |
 | D7 | All four scenario files are written now; expectations that need a later feature (task execution, `FESTIVAL_SHORTAGE`) are checked in Slice 6, never faked | The demo can stage every story now |
-| D8 | The bell shows a dot when exceptions opened since the viewer last opened the inbox; "last seen" is kept per viewer in the browser | UX spec row 27; a per-viewer convenience |
+| D8 | The bell shows a dot when exceptions opened since the viewer last opened the inbox; "last seen" is kept per viewer in the browser | UX spec row 27; a per-viewer convenience. The review's server-side marker per user was not adopted: it only helps one user on several devices, which a demo does not have, and would add a table, a write path with its own role and an API for a cosmetic dot; it can be added if real use needs it |
+| D9 | One operation at a time per site: a time shift, a scenario step or a reset holds the simulator's lock for the site; a second request waits briefly, then is refused as busy. The same `Idempotency-Key` never applies an operation twice. Screens and the copilot always show a complete earlier moment during a shift, because the clock moves only with ingested tick markers, which follow every event before them | Product owner review: no shift, scenario or reset can interleave with another, and nothing partial is presented as current |
 
 ### 2.1 The guided demo storyline (first version)
 
@@ -75,7 +76,7 @@ This document is a plan against the approved specifications. It does not redefin
 
 - `POST /api/sites/{id}/simulation/shift` (by a duration or to a time) and `POST .../simulation/scenario` with `simulation.control`; `POST .../simulation/reset` with `admin.simulation.control`; `GET .../simulation` (state, target, progress) for every reader of the site. OPA, audit with before and after, CSRF, `Idempotency-Key`.
 - Refused on a site whose clock mode is not `SIMULATED`.
-- Tests: the Manager may shift and run a scenario but not reset; any control on a real site is refused; a repeated request with the same key shifts once; backward and beyond-calendar shifts are refused.
+- Tests: the Manager may shift and run a scenario but not reset; any control on a real site is refused; a repeated request with the same key shifts once; backward and beyond-calendar shifts are refused; a scenario or reset while a shift runs is refused as busy (D9).
 
 ### Step 3: Scenarios
 
@@ -97,7 +98,7 @@ This document is a plan against the approved specifications. It does not redefin
 
 ### Step 6: Quality
 
-- Performance: a 1-day and a 1-week shift on the reference site complete and reach `READY` screens within measured targets set from the first measurement and recorded; the exception engine keeps up.
+- Performance on the reference site, limits agreed before measuring (product owner review): a 1-day shift fully applied, with the screens updated, in at most 30 seconds; a 1-week shift in at most 3 minutes; an applied change reaches the screen within 2 seconds (NFR-PERF-05). Total duration and screen latency are recorded per shift; throughput, ingestion lag and recalculation time are broken down only if a limit is missed. The continuous-clock 60x test is not required (D2).
 - Evals: the scenario expectations of step 3 pass; the existing gates stay green.
 - Live browser check: the whole storyline of section 2.1, clicked through end to end, then reset and run again; evidence file like Slice 3's.
 
@@ -114,3 +115,4 @@ This document is a plan against the approved specifications. It does not redefin
 |---|---|
 | 2026-11-21 | Draft for product owner approval |
 | 2026-11-21 | Revised after the product owner's direction: a clickable guided demo with time shift instead of a running clock (D2, D5, D6, 2.1); the Manager controls the simulation on simulated sites, reset stays Admin (D3); the demo is the real product, with no demo-only write paths |
+| 2026-11-21 | Approved after the product owner's review: D9 (one operation at a time per site, idempotent, nothing partial shown) and fixed shift limits (1 day within 30 s, 1 week within 3 min, 2 s to screen); D8 kept per browser, with reason |
