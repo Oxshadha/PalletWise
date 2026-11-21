@@ -61,6 +61,7 @@ interface Props {
   command: CameraCommand;
   colors: SceneColors;
   onSelect: (binId: string) => void;
+  heat?: Map<string, number> | null; // pick activity 0 to 1 per location; null when the heatmap is off
 }
 
 export function Scene3D(props: Props) {
@@ -104,6 +105,7 @@ export function Scene3D(props: Props) {
       />
       <Racking layout={props.layout} colors={props.colors} />
       <StatePlates {...props} />
+      {props.heat && <HeatFloor layout={props.layout} heat={props.heat} colors={props.colors} />}
       <Stock {...props} />
       <ZoneOutlines {...props} />
       <HitTargets {...props} />
@@ -275,6 +277,7 @@ function useInstances(
   count: number,
   place: (dummy: Object3D, index: number) => void,
   deps: unknown[],
+  paint?: (index: number) => Color, // per-instance colour (the heatmap)
 ) {
   const mesh = useRef<InstancedMesh>(null);
   useLayoutEffect(() => {
@@ -287,6 +290,10 @@ function useInstances(
       target.setMatrixAt(i, dummy.matrix);
     }
     target.instanceMatrix.needsUpdate = true;
+    if (paint) {
+      for (let i = 0; i < count; i += 1) target.setColorAt(i, paint(i));
+      if (target.instanceColor) target.instanceColor.needsUpdate = true;
+    }
     target.computeBoundingSphere();
     // place is recreated on every render; the listed inputs decide when the matrices change
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -595,6 +602,54 @@ function StatePlate({
     <instancedMesh ref={mesh} args={[undefined, undefined, bins.length]} raycast={() => null}>
       <planeGeometry args={[1, 1]} />
       <meshBasicMaterial map={texture} transparent depthWrite={false} />
+    </instancedMesh>
+  );
+}
+
+/**
+ * The activity heatmap: a floor tile under each rack footprint, from the surface colour to the
+ * accent by the footprint's busiest location (picks in the last 7 days).
+ */
+function HeatFloor({
+  layout,
+  heat,
+  colors,
+}: {
+  layout: Layout;
+  heat: Map<string, number>;
+  colors: SceneColors;
+}) {
+  const cells = useMemo(() => {
+    const byFootprint = new Map<string, { bin: LayoutBin; value: number }>();
+    for (const bin of layout.bins) {
+      const value = heat.get(bin.id) ?? 0;
+      const key = `${String(bin.x)}:${String(bin.y)}`;
+      const found = byFootprint.get(key);
+      if (!found || value > found.value) byFootprint.set(key, { bin, value });
+    }
+    return [...byFootprint.values()].filter((c) => c.value > 0);
+  }, [layout, heat]);
+  const mesh = useInstances(
+    cells.length,
+    (dummy, i) => {
+      const cell = cells[i];
+      if (!cell) return;
+      dummy.position.set(cell.bin.x, 0.02, cell.bin.y);
+      dummy.rotation.set(-Math.PI / 2, 0, 0);
+      dummy.scale.set(cell.bin.width_m * 1.05, cell.bin.depth_m * 1.05, 1);
+    },
+    [cells, colors],
+    (i) =>
+      new Color(colors["--pw-color-accent-soft"]).lerp(
+        new Color(colors["--pw-color-status-critical"]),
+        cells[i]?.value ?? 0,
+      ),
+  );
+  if (cells.length === 0) return null;
+  return (
+    <instancedMesh ref={mesh} args={[undefined, undefined, cells.length]} raycast={() => null}>
+      <planeGeometry args={[1, 1]} />
+      <meshBasicMaterial transparent opacity={0.85} depthWrite={false} />
     </instancedMesh>
   );
 }

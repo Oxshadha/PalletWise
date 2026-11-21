@@ -617,3 +617,71 @@
 .pw-zone-tag[hidden] {
   display: none;
 }
+
+/* Activity heatmap (2D plan cells; the 3D scene colours floor tiles). */
+.pw-plan-bin[data-heat] {
+  fill: color-mix(
+    in oklab,
+    var(--pw-color-status-critical) var(--pw-heat),
+    var(--pw-color-accent-soft)
+  );
+}
+
+.pw-heat-toggle {
+  margin-left: auto;
+}
+
+.pw-heat-legend {
+  position: absolute;
+  bottom: var(--pw-space-3);
+  left: var(--pw-space-3);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--pw-space-2);
+  padding: var(--pw-space-1) var(--pw-space-3);
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-glass);
+  font-size: var(--pw-font-size-xs);
+  backdrop-filter: blur(var(--pw-blur-glass));
+}
+
+.pw-heat-scale {
+  width: 5rem;
+  height: 0.5rem;
+  border-radius: var(--pw-radius-pill);
+  background: linear-gradient(
+    to right,
+    var(--pw-color-accent-soft),
+    var(--pw-color-status-critical)
+  );
+}
+
+/* The site at a glance, under the map (the assignment's wireframe). */
+.pw-figures {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--pw-space-3);
+  margin: 0;
+  padding: var(--pw-space-3) 0 0;
+  border-top: 1px solid var(--pw-color-border);
+  list-style: none;
+}
+
+.pw-figures li {
+  display: grid;
+  gap: 0.125rem;
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-figures strong {
+  font-size: var(--pw-font-size-lg);
+  font-weight: var(--pw-font-weight-heading);
+}
+
+@media (max-width: 599px) {
+  .pw-figures {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

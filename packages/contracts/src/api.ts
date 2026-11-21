@@ -730,6 +730,8 @@ export interface components {
             bin_id: string;
             /** On Hand */
             on_hand: number;
+            /** Picked 7D */
+            picked_7d: number;
             /**
              * State
              * @enum {string}
@@ -1041,6 +1043,8 @@ export interface components {
         };
         /** MapStateOut */
         MapStateOut: {
+            /** Active Zones */
+            active_zones: number;
             /**
              * As Of
              * Format: date-time
@@ -1050,8 +1054,14 @@ export interface components {
             bins: components["schemas"]["BinStateOut"][];
             /** Data As Of */
             data_as_of: string | null;
+            /** Open Exceptions */
+            open_exceptions: number;
+            /** Stocked Locations */
+            stocked_locations: number;
             /** Time Zone */
             time_zone: string;
+            /** Total Units */
+            total_units: number;
         };
         /** MeOut */
         MeOut: {

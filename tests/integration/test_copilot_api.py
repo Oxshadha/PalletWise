@@ -541,6 +541,23 @@ def test_bin_details_use_the_same_definition_as_the_copilot(env: Env) -> None:
     assert env.client.get(f"/api/sites/{env.site.site}/bins/bad%20code").status_code == 422
 
 
+def test_map_state_carries_pick_activity_and_the_site_figures(env: Env) -> None:
+    """The activity heatmap and the figures strip: computed in the semantic layer, consistent with
+    the per-bin data and the database."""
+    env.sign_in()
+    state = env.client.get(f"/api/sites/{env.site.site}/map-state").json()
+    assert any(b["picked_7d"] > 0 for b in state["bins"])
+    assert state["total_units"] == sum(b["on_hand"] for b in state["bins"])
+    assert state["stocked_locations"] == sum(1 for b in state["bins"] if b["on_hand"] > 0)
+    picks = env.db.execute(
+        "SELECT coalesce(sum(qty), 0) FROM pw.movement WHERE site_id = %s AND movement_type = 'PICK'"
+        " AND occurred_at > %s::timestamptz - interval '7 days' AND occurred_at <= %s::timestamptz",
+        (env.site.site, state["as_of"], state["as_of"]),
+    ).fetchone()
+    assert picks is not None and sum(b["picked_7d"] for b in state["bins"]) == picks[0]
+    assert 0 < state["active_zones"] <= 6 and state["open_exceptions"] >= 0
+
+
 def test_map_endpoints_are_site_scoped_and_fail_closed(env: Env) -> None:
     env.sign_in()
     other = uuid4()

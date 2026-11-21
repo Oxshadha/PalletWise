@@ -436,6 +436,10 @@
             "title": "On Hand",
             "type": "integer"
           },
+          "picked_7d": {
+            "title": "Picked 7D",
+            "type": "integer"
+          },
           "state": {
             "enum": [
               "NORMAL",
@@ -450,7 +454,8 @@
         "required": [
           "bin_id",
           "state",
-          "on_hand"
+          "on_hand",
+          "picked_7d"
         ],
         "title": "BinStateOut",
         "type": "object"
@@ -1232,6 +1237,10 @@
       },
       "MapStateOut": {
         "properties": {
+          "active_zones": {
+            "title": "Active Zones",
+            "type": "integer"
+          },
           "as_of": {
             "format": "date-time",
             "title": "As Of",
@@ -1256,16 +1265,32 @@
             ],
             "title": "Data As Of"
           },
+          "open_exceptions": {
+            "title": "Open Exceptions",
+            "type": "integer"
+          },
+          "stocked_locations": {
+            "title": "Stocked Locations",
+            "type": "integer"
+          },
           "time_zone": {
             "title": "Time Zone",
             "type": "string"
+          },
+          "total_units": {
+            "title": "Total Units",
+            "type": "integer"
           }
         },
         "required": [
           "as_of",
           "time_zone",
           "data_as_of",
-          "bins"
+          "bins",
+          "total_units",
+          "stocked_locations",
+          "active_zones",
+          "open_exceptions"
         ],
         "title": "MapStateOut",
         "type": "object"
