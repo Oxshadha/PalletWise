@@ -29,6 +29,7 @@ import {
 
 import type { Highlight, Layout, LayoutBin } from "../../shared/api/client";
 import { type BinState, type Bounds, prefersReducedMotion, siteBounds } from "./geometry";
+import { Scenery } from "./Scenery";
 import type { CameraCommand } from "./MapPanel";
 import type { SceneColors } from "./useTokenColors";
 
@@ -104,6 +105,7 @@ export function Scene3D(props: Props) {
         marked={new Set(props.zoneHighlights.map((h) => h.target_id))}
       />
       <Racking layout={props.layout} colors={props.colors} />
+      <Scenery layout={props.layout} site={site} colors={props.colors} />
       <StatePlates {...props} />
       {props.heat && (
         <HeatFloor
@@ -125,7 +127,13 @@ export function Scene3D(props: Props) {
         far={8}
         resolution={1024}
       />
-      <CameraRig mode={props.mode} focus={props.focus} command={props.command} site={site} />
+      {/* The overview includes the yard beside the docks (Scenery). */}
+      <CameraRig
+        mode={props.mode}
+        focus={props.focus}
+        command={props.command}
+        site={{ ...site, maxX: site.maxX + 12 }}
+      />
     </Canvas>
   );
 }
