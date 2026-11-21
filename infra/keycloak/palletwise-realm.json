@@ -1,7 +1,7 @@
 {
   "realm": "palletwise",
   "enabled": true,
-  "displayName": "PalletWise (development)",
+  "displayName": "PalletWise",
   "sslRequired": "external",
   "registrationAllowed": false,
   "roles": {
@@ -260,5 +260,6 @@
   "defaultDefaultClientScopes": [
     "basic"
   ],
-  "defaultOptionalClientScopes": []
+  "defaultOptionalClientScopes": [],
+  "loginTheme": "palletwise"
 }

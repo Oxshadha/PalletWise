@@ -95,3 +95,137 @@
 .pw-admin-trace {
   font-size: var(--pw-font-size-xs);
 }
+
+/* Overview: metric tiles, chart cards. */
+.pw-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--pw-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pw-metric {
+  display: flex;
+  align-items: center;
+  gap: var(--pw-space-3);
+  padding: var(--pw-space-3) var(--pw-space-4);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-md);
+  background: var(--pw-color-surface);
+}
+
+.pw-metric-icon {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--pw-radius-sm);
+  background: color-mix(in oklab, var(--pw-color-accent) 12%, transparent);
+  color: var(--pw-color-accent-text);
+}
+
+.pw-metric-text {
+  display: grid;
+  gap: 0.125rem;
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-metric-text strong {
+  font-size: var(--pw-font-size-lg);
+  font-weight: var(--pw-font-weight-heading);
+}
+
+.pw-metric-note {
+  color: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-xs);
+}
+
+.pw-admin-cards {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) minmax(20rem, 2fr);
+  gap: var(--pw-space-3);
+}
+
+@media (max-width: 899px) {
+  .pw-admin-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pw-admin-card {
+  display: grid;
+  align-content: start;
+  gap: var(--pw-space-3);
+  padding: var(--pw-space-4);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-md);
+  background: var(--pw-color-surface);
+}
+
+.pw-admin-card h3 {
+  margin: 0;
+}
+
+.pw-donut {
+  justify-self: center;
+  width: 10rem;
+  height: 10rem;
+}
+
+.pw-donut circle {
+  fill: none;
+  stroke-width: 14;
+}
+
+.pw-donut-track {
+  stroke: color-mix(in oklab, var(--pw-color-accent) 12%, transparent);
+}
+
+.pw-donut-value {
+  stroke: var(--pw-color-accent);
+  stroke-linecap: round;
+}
+
+.pw-donut-figure {
+  fill: var(--pw-color-text-primary);
+  font-size: var(--pw-font-size-lg);
+  font-weight: var(--pw-font-weight-heading);
+}
+
+.pw-donut-label {
+  fill: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-xs);
+}
+
+.pw-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: var(--pw-space-1);
+  height: 7rem;
+}
+
+.pw-bar {
+  display: flex;
+  flex: 1;
+  max-width: 2.5rem;
+  align-items: flex-end;
+  height: 100%;
+  border-radius: var(--pw-radius-sm);
+  background: color-mix(in oklab, var(--pw-color-accent) 10%, transparent);
+}
+
+.pw-bar-fill {
+  width: 100%;
+  min-height: 2px;
+  border-radius: var(--pw-radius-sm);
+  background: var(--pw-color-accent);
+}
+
+.pw-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pw-space-1);
+}

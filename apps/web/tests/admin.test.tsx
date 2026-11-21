@@ -11,6 +11,7 @@ let agent: AdminAgent = {
   prompt_version: "v2",
   daily_token_budget: 2000000,
   used_tokens_today: 1234,
+  governed_query_enabled: true,
 };
 const setAgentStatus = vi.fn((status: "ACTIVE" | "SUSPENDED") => {
   agent = { ...agent, status };
@@ -62,12 +63,11 @@ describe("admin panel", () => {
   it("suspends the copilot only after a confirmation", async () => {
     render(<AdminPanel />);
     expect(await screen.findByText("Active")).toBeTruthy();
+    expect(screen.getByRole("img", { name: /used today/u })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Suspend the copilot" }));
     expect(setAgentStatus).not.toHaveBeenCalled();
     await act(async () => {
-      fireEvent.click(
-        screen.getAllByRole("button", { name: "Suspend the copilot" })[0] as HTMLElement,
-      );
+      fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
       await Promise.resolve();
     });
     expect(setAgentStatus).toHaveBeenCalledWith("SUSPENDED");

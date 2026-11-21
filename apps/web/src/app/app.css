@@ -213,7 +213,7 @@
   gap: var(--pw-space-2);
 }
 
-/* Sign-in screen: one centred glass card. */
+/* Sign-in screen: a split card, the floor routes beside the sign-in. */
 .pw-signin {
   display: grid;
   place-items: center;
@@ -222,17 +222,61 @@
 }
 
 .pw-signin-card {
-  width: min(26rem, 100%);
-  align-items: center;
-  gap: var(--pw-space-3);
-  padding: var(--pw-space-8) var(--pw-space-6);
-  text-align: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: min(56rem, 100%);
+  min-height: 34rem;
+  overflow: hidden;
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-lg);
+  background: var(--pw-color-surface);
   box-shadow: var(--pw-shadow-popover);
+  animation: pw-signin-in 0.5s ease-out;
 }
 
-.pw-signin-card h1,
-.pw-signin-card p {
+@keyframes pw-signin-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pw-signin-card {
+    animation: none;
+  }
+}
+
+.pw-signin-art {
+  position: relative;
+  overflow: hidden;
+  border-right: 1px solid var(--pw-color-border);
+  background:
+    radial-gradient(40rem 30rem at 30% 20%, var(--pw-color-canvas-glow), transparent 70%),
+    var(--pw-color-background);
+}
+
+.pw-signin-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.pw-signin-brand {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: var(--pw-space-3);
+  height: 100%;
+  padding: var(--pw-space-8);
+  text-align: center;
+}
+
+.pw-signin-brand p {
   margin: 0;
+  max-width: 20rem;
 }
 
 .pw-signin-logo {
@@ -240,11 +284,61 @@
   height: 3.5rem;
 }
 
+.pw-signin-name {
+  color: var(--pw-color-accent-text);
+  font-family: var(--pw-font-family-display);
+  font-size: var(--pw-font-size-2xl);
+  font-weight: var(--pw-font-weight-light);
+}
+
+.pw-signin-form {
+  display: grid;
+  align-content: center;
+  gap: var(--pw-space-3);
+  padding: var(--pw-space-12) var(--pw-space-8);
+}
+
+.pw-signin-form h1,
+.pw-signin-form p {
+  margin: 0;
+}
+
 .pw-signin-error {
   color: var(--pw-color-status-critical);
 }
 
 .pw-signin-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pw-space-2);
   width: 100%;
-  margin-top: var(--pw-space-2);
+  margin-top: var(--pw-space-4);
+  padding: var(--pw-space-3) var(--pw-space-4);
+  border-radius: var(--pw-radius-md);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.pw-signin-button:hover {
+  box-shadow: var(--pw-shadow-card);
+  transform: translateY(-1px);
+}
+
+.pw-signin-note {
+  color: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-sm);
+}
+
+@media (max-width: 767px) {
+  .pw-signin-card {
+    grid-template-columns: 1fr;
+  }
+
+  .pw-signin-art {
+    min-height: 12rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--pw-color-border);
+  }
 }

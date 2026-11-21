@@ -24,7 +24,7 @@ describe("sign-in screen", () => {
   it("shows the sign-in screen without a session, and signs in only when asked", async () => {
     render(<App />);
     const button = await screen.findByRole("button", { name: "Sign in" });
-    expect(screen.getByRole("heading", { name: "PalletWise" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeTruthy();
     expect(signIn).not.toHaveBeenCalled();
     button.click();
     expect(signIn).toHaveBeenCalledOnce();

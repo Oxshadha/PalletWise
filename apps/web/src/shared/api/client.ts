@@ -215,6 +215,17 @@ export async function setAgentStatus(status: "ACTIVE" | "SUSPENDED"): Promise<vo
   if (!response.ok) throw await problemFrom(response);
 }
 
+/** Custom queries on or off for the organisation (ADR 0002); they also need a passed gate. */
+export async function setGovernedQuery(enabled: boolean): Promise<void> {
+  const response = await fetch("/api/admin/agent/governed-query", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...once() },
+    body: JSON.stringify({ enabled }),
+  });
+  if (response.status === 401) throw new SignedOut();
+  if (!response.ok) throw await problemFrom(response);
+}
+
 export const fetchUsage = (days: number, signal?: AbortSignal) =>
   getJson<UsageRow[]>(`/api/admin/usage?days=${String(days)}`, signal);
 

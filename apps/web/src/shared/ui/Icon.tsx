@@ -1,9 +1,14 @@
 import {
+  Activity,
   ArrowRight,
   Bell,
   Check,
   ChevronDown,
   ChevronUp,
+  CircleHelp,
+  Coins,
+  DatabaseZap,
+  Gauge,
   History,
   Inbox,
   Info,
@@ -18,6 +23,7 @@ import {
   Plus,
   RotateCcw,
   RotateCw,
+  ScrollText,
   Search,
   SendHorizontal,
   Square,
@@ -55,6 +61,12 @@ const ICONS = {
   warning: TriangleAlert,
   critical: OctagonAlert,
   search: Search,
+  activity: Activity,
+  coins: Coins,
+  gauge: Gauge,
+  help: CircleHelp,
+  query: DatabaseZap,
+  log: ScrollText,
 } as const satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

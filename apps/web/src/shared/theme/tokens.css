@@ -10,6 +10,8 @@
 
 /* Inter Variable with the optical size axis: the display cut at large sizes, every weight. */
 @import "@fontsource-variable/inter/opsz.css";
+/* Google Sans Flex Variable for body text (product owner, 2026-11-21); self-hosted, OFL-1.1. */
+@import "@fontsource-variable/google-sans-flex/index.css";
 
 :root {
   /* ---- Brand palette (product owner) */
@@ -58,7 +60,11 @@
   --pw-color-status-success: #15803d;
 
   /* ---- Typography: light display type for titles and numbers, quiet small labels */
-  --pw-font-family: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pw-font-family:
+    "Google Sans Flex Variable", "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Headings keep Inter's light display cut. */
+  --pw-font-family-display:
+    "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --pw-font-weight-light: 300;
   --pw-font-weight-body: 400;
   --pw-font-weight-navigation: 500;

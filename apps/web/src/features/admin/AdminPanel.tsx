@@ -12,17 +12,20 @@ import {
   fetchUnanswered,
   fetchUsage,
   setAgentStatus,
+  setGovernedQuery,
   SignedOut,
   signIn,
   type UnansweredRow,
   type UsageRow,
 } from "../../shared/api/client";
 import { formatNumber } from "../../shared/format";
+import { Badge, type BadgeTone } from "../../shared/ui/Badge";
+import { Icon, type IconName } from "../../shared/ui/Icon";
 
-type Tab = "copilot" | "usage" | "unanswered" | "audit";
+type Tab = "overview" | "usage" | "unanswered" | "audit";
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "copilot", label: "Copilot" },
+  { id: "overview", label: "Overview" },
   { id: "usage", label: "Usage and cost" },
   { id: "unanswered", label: "Unanswered questions" },
   { id: "audit", label: "Audit log" },
@@ -73,62 +76,224 @@ function Failed({ message }: { message: string }) {
   );
 }
 
-function CopilotTab() {
-  const { data, error, reload } = useLoad<AdminAgent>(fetchAdminAgent);
-  const [confirming, setConfirming] = useState(false);
+function outcomeTone(value: string | null | undefined): BadgeTone {
+  const v = (value ?? "").toUpperCase();
+  if (["OK", "ALLOW", "ANSWER", "CHANGED", "SHIFTED", "STAGED", "RESET", "RAN"].includes(v))
+    return "success";
+  if (["DENY", "DENIED", "ERROR", "FAILED", "REFUSED"].includes(v)) return "critical";
+  if (["DECLINE", "BUSY", "VALIDATION_FAILED", "RATE_LIMITED", "NO_RESULTS", "MIXED"].includes(v))
+    return "warning";
+  return "neutral";
+}
+
+function Metric({
+  icon,
+  label,
+  value,
+  note,
+}: {
+  icon: IconName;
+  label: string;
+  value: string;
+  note?: string;
+}) {
+  return (
+    <li className="pw-metric">
+      <span className="pw-metric-icon">
+        <Icon name={icon} size={20} />
+      </span>
+      <span className="pw-metric-text">
+        <span className="pw-muted">{label}</span>
+        <strong>{value}</strong>
+        {note && <span className="pw-metric-note">{note}</span>}
+      </span>
+    </li>
+  );
+}
+
+/** A donut of one share (0 to 1), with the figure in its centre. */
+function Donut({ share, label, value }: { share: number; label: string; value: string }) {
+  const r = 52;
+  const length = 2 * Math.PI * r;
+  const filled = Math.max(0, Math.min(1, share)) * length;
+  return (
+    <svg className="pw-donut" viewBox="0 0 140 140" role="img" aria-label={`${label}: ${value}`}>
+      <circle cx="70" cy="70" r={r} className="pw-donut-track" />
+      <circle
+        cx="70"
+        cy="70"
+        r={r}
+        className="pw-donut-value"
+        strokeDasharray={`${String(filled)} ${String(length - filled)}`}
+        transform="rotate(-90 70 70)"
+      />
+      <text x="70" y="66" textAnchor="middle" className="pw-donut-figure">
+        {value}
+      </text>
+      <text x="70" y="86" textAnchor="middle" className="pw-donut-label">
+        {label}
+      </text>
+    </svg>
+  );
+}
+
+/** One bar per day, scaled to the largest; empty days keep their place. */
+function BarStrip({ days, label }: { days: { day: string; value: number }[]; label: string }) {
+  const top = Math.max(...days.map((d) => d.value), 0);
+  if (days.length === 0) return <p className="pw-muted">No model calls in this period.</p>;
+  return (
+    <div
+      className="pw-bars"
+      role="img"
+      aria-label={`${label}: ${days.map((d) => `${d.day} ${d.value.toFixed(4)}`).join(", ")}`}
+    >
+      {days.map((d) => (
+        <span key={d.day} className="pw-bar" title={`${d.day}: ${d.value.toFixed(4)} USD`}>
+          <span
+            className="pw-bar-fill"
+            style={{ height: `${String(top ? (d.value / top) * 100 : 0)}%` }}
+          />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Estimated cost per day, from the days the API returned (oldest first). */
+function costPerDay(rows: UsageRow[]): { day: string; value: number }[] {
+  const byDay = new Map<string, number>();
+  for (const r of rows) byDay.set(r.day, (byDay.get(r.day) ?? 0) + r.cost_estimated);
+  return [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, value]) => ({ day, value }));
+}
+
+function OverviewTab() {
+  const agentState = useLoad<AdminAgent>(fetchAdminAgent);
+  const usageLoad = useCallback((signal: AbortSignal) => fetchUsage(14, signal), []);
+  const usage = useLoad<UsageRow[]>(usageLoad);
+  const weekLoad = useCallback((signal: AbortSignal) => fetchUsage(7, signal), []);
+  const week = useLoad<UsageRow[]>(weekLoad).data ?? [];
+  const unansweredLoad = useCallback((signal: AbortSignal) => fetchUnanswered(30, signal), []);
+  const unanswered = useLoad<UnansweredRow[]>(unansweredLoad);
+  const [confirming, setConfirming] = useState<"status" | "governed" | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  if (error) return <Failed message={error} />;
+  const data = agentState.data;
+  if (agentState.error) return <Failed message={agentState.error} />;
   if (!data) return <p className="pw-muted">Loading.</p>;
   const active = data.status === "ACTIVE";
-  const change = async () => {
-    setConfirming(false);
+  const calls = week.reduce((n, r) => n + r.calls, 0);
+  const cost = week.reduce((n, r) => n + r.cost_estimated, 0);
+  const share = data.daily_token_budget ? data.used_tokens_today / data.daily_token_budget : 0;
+  const unansweredCount = (unanswered.data ?? []).reduce((n, r) => n + r.times, 0);
+
+  const act = async (change: () => Promise<void>) => {
+    setConfirming(null);
     try {
-      await setAgentStatus(active ? "SUSPENDED" : "ACTIVE");
+      await change();
       setProblem(null);
-      reload();
+      agentState.reload();
     } catch (e: unknown) {
       setProblem(e instanceof ApiProblem ? e.message : "The change could not be made.");
     }
   };
+
   return (
     <div className="pw-admin-section">
-      <dl className="pw-admin-facts">
-        <dt>Status</dt>
-        <dd>
-          <strong className={active ? "pw-admin-ok" : "pw-admin-off"}>
-            {active ? "Active" : "Suspended"}
-          </strong>
-        </dd>
-        <dt>Agent</dt>
-        <dd>
-          {data.id}, version {data.version}
-        </dd>
-        <dt>Model</dt>
-        <dd>{data.primary_model}</dd>
-        <dt>Prompt version</dt>
-        <dd>{data.prompt_version}</dd>
-        <dt>Tokens used today</dt>
-        <dd>
-          {formatNumber(data.used_tokens_today)} of {formatNumber(data.daily_token_budget)}
-        </dd>
-      </dl>
-      <p className="pw-muted">
-        {active
-          ? "Suspending stops every new copilot question at once, suggested questions included. The map, inbox and brief numbers keep working."
-          : "The copilot is suspended: every question is refused with a clear message."}
-      </p>
-      {confirming ? (
-        <div className="pw-confirm" role="alertdialog" aria-label="Confirm">
-          <p>
-            {active
-              ? "Suspend the copilot for everyone in your organisation?"
-              : "Resume the copilot?"}
+      <ul className="pw-metrics">
+        <Metric
+          icon="gauge"
+          label="Tokens used today"
+          value={formatNumber(data.used_tokens_today)}
+          note={`of ${formatNumber(data.daily_token_budget)}`}
+        />
+        <Metric icon="activity" label="Model calls, 7 days" value={formatNumber(calls)} />
+        <Metric icon="coins" label="Estimated cost, 7 days" value={`${cost.toFixed(4)} USD`} />
+        <Metric icon="help" label="Unanswered, 30 days" value={formatNumber(unansweredCount)} />
+      </ul>
+
+      <div className="pw-admin-cards">
+        <section className="pw-admin-card" aria-labelledby="pw-budget-title">
+          <h3 id="pw-budget-title">Daily token budget</h3>
+          <Donut share={share} label="used today" value={`${String(Math.round(share * 100))}%`} />
+        </section>
+        <section className="pw-admin-card" aria-labelledby="pw-cost-title">
+          <h3 id="pw-cost-title">Estimated cost per day</h3>
+          <p className="pw-muted">
+            Last 14 days, in USD; provider-reported tokens times the configured prices.
           </p>
+          <BarStrip days={costPerDay(usage.data ?? [])} label="Estimated cost per day" />
+        </section>
+      </div>
+
+      <section className="pw-admin-card" aria-labelledby="pw-controls-title">
+        <h3 id="pw-controls-title">Copilot</h3>
+        <dl className="pw-admin-facts">
+          <dt>Status</dt>
+          <dd>
+            <Badge tone={active ? "success" : "critical"}>{active ? "Active" : "Suspended"}</Badge>
+          </dd>
+          <dt>Custom queries</dt>
+          <dd>
+            <Badge tone={data.governed_query_enabled ? "info" : "neutral"}>
+              {data.governed_query_enabled ? "On" : "Off"}
+            </Badge>
+          </dd>
+          <dt>Agent</dt>
+          <dd>
+            {data.id}, version {data.version}
+          </dd>
+          <dt>Model</dt>
+          <dd>{data.primary_model}</dd>
+          <dt>Prompt version</dt>
+          <dd>{data.prompt_version}</dd>
+        </dl>
+        {confirming ? (
+          <div className="pw-confirm" role="alertdialog" aria-label="Confirm">
+            <p>
+              {confirming === "status"
+                ? active
+                  ? "Suspend the copilot for everyone in your organisation?"
+                  : "Resume the copilot?"
+                : data.governed_query_enabled
+                  ? "Switch custom queries off? The copilot then answers only with its tools."
+                  : "Switch custom queries on? They run only for a configuration that passed its evaluation."}
+            </p>
+            <div className="pw-admin-actions">
+              <button
+                type="button"
+                className={
+                  confirming === "status" && active ? "pw-button pw-danger-fill" : "pw-button"
+                }
+                onClick={() =>
+                  void act(() =>
+                    confirming === "status"
+                      ? setAgentStatus(active ? "SUSPENDED" : "ACTIVE")
+                      : setGovernedQuery(!data.governed_query_enabled),
+                  )
+                }
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                className="pw-button-quiet"
+                onClick={() => {
+                  setConfirming(null);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
           <div className="pw-admin-actions">
             <button
               type="button"
-              className={active ? "pw-button pw-danger-fill" : "pw-button"}
-              onClick={() => void change()}
+              className={active ? "pw-button-quiet pw-danger" : "pw-button"}
+              onClick={() => {
+                setConfirming("status");
+              }}
             >
               {active ? "Suspend the copilot" : "Resume the copilot"}
             </button>
@@ -136,27 +301,17 @@ function CopilotTab() {
               type="button"
               className="pw-button-quiet"
               onClick={() => {
-                setConfirming(false);
+                setConfirming("governed");
               }}
             >
-              Cancel
+              {data.governed_query_enabled
+                ? "Switch custom queries off"
+                : "Switch custom queries on"}
             </button>
           </div>
-        </div>
-      ) : (
-        <div className="pw-admin-actions">
-          <button
-            type="button"
-            className={active ? "pw-button-quiet pw-danger" : "pw-button"}
-            onClick={() => {
-              setConfirming(true);
-            }}
-          >
-            {active ? "Suspend the copilot" : "Resume the copilot"}
-          </button>
-        </div>
-      )}
-      {problem && <Failed message={problem} />}
+        )}
+        {problem && <Failed message={problem} />}
+      </section>
     </div>
   );
 }
@@ -274,7 +429,13 @@ function UnansweredTab() {
                 <td>{r.question}</td>
                 <td className="pw-num">{formatNumber(r.times)}</td>
                 <td>{when(r.last_asked)}</td>
-                <td>{r.reasons.map((x) => x.toLowerCase().replaceAll("_", " ")).join(", ")}</td>
+                <td className="pw-badges">
+                  {r.reasons.map((x) => (
+                    <Badge key={x} tone={outcomeTone(x)}>
+                      {x.toLowerCase().replaceAll("_", " ")}
+                    </Badge>
+                  ))}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -376,8 +537,16 @@ function AuditTab() {
                     </td>
                     <td>{r.action}</td>
                     <td>{r.tool ?? ""}</td>
-                    <td>{r.decision?.toLowerCase() ?? ""}</td>
-                    <td>{r.outcome.toLowerCase()}</td>
+                    <td>
+                      {r.decision && (
+                        <Badge tone={outcomeTone(r.decision)}>{r.decision.toLowerCase()}</Badge>
+                      )}
+                    </td>
+                    <td>
+                      <Badge tone={outcomeTone(r.outcome)}>
+                        {r.outcome.toLowerCase().replaceAll("_", " ")}
+                      </Badge>
+                    </td>
                     <td className="pw-admin-trace">{r.trace_id.slice(0, 12)}</td>
                   </tr>
                 ))}
@@ -392,7 +561,7 @@ function AuditTab() {
 
 /** The admin panel core (FR-ADM-03, 05, 06, 07), for the Admin only. */
 export function AdminPanel() {
-  const [tab, setTab] = useState<Tab>("copilot");
+  const [tab, setTab] = useState<Tab>("overview");
   return (
     <main className="pw-admin pw-panel" aria-labelledby="pw-admin-title">
       <header className="pw-admin-head">
@@ -414,7 +583,7 @@ export function AdminPanel() {
           ))}
         </div>
       </header>
-      {tab === "copilot" && <CopilotTab />}
+      {tab === "overview" && <OverviewTab />}
       {tab === "usage" && <UsageTab />}
       {tab === "unanswered" && <UnansweredTab />}
       {tab === "audit" && <AuditTab />}

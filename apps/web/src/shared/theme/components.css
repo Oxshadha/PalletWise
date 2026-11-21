@@ -353,3 +353,42 @@ a {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Status chips (Badge). Tinted from the status tokens; both themes. */
+.pw-badge {
+  --pw-badge-color: var(--pw-color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pw-space-1);
+  padding: 0.125rem var(--pw-space-2);
+  border: 1px solid color-mix(in oklab, var(--pw-badge-color) 30%, transparent);
+  border-radius: var(--pw-radius-pill);
+  background: color-mix(in oklab, var(--pw-badge-color) 12%, transparent);
+  color: var(--pw-badge-color);
+  font-size: var(--pw-font-size-xs);
+  font-weight: var(--pw-font-weight-navigation);
+  white-space: nowrap;
+}
+
+.pw-badge-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: var(--pw-radius-pill);
+  background: currentcolor;
+}
+
+.pw-badge.is-success {
+  --pw-badge-color: var(--pw-color-status-success);
+}
+
+.pw-badge.is-warning {
+  --pw-badge-color: var(--pw-color-status-warning);
+}
+
+.pw-badge.is-critical {
+  --pw-badge-color: var(--pw-color-status-critical);
+}
+
+.pw-badge.is-info {
+  --pw-badge-color: var(--pw-color-status-info);
+}

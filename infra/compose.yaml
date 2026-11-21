@@ -224,12 +224,13 @@ services:
       - "127.0.0.1:${PW_KEYCLOAK_HOST_PORT:-8180}:8080"
     volumes:
       - ./keycloak/palletwise-realm.json:/opt/keycloak/data/import/palletwise-realm.json:ro
+      - ./keycloak/themes/palletwise:/opt/keycloak/themes/palletwise:ro
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q 'UP' <&3"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 120s  # Keycloak imports the realm on first start
+      start_period: 300s  # Keycloak imports the realm on first start; slow under memory pressure
       start_interval: 3s
 
   opa:

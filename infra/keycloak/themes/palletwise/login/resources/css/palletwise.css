@@ -1,0 +1,84 @@
+/* PalletWise look for Keycloak's login page: the product's font, colours and card (light). */
+
+@font-face {
+  font-family: "Google Sans Flex";
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url("../fonts/google-sans-flex-latin-wght-normal.woff2") format("woff2-variations");
+}
+
+:root {
+  --pw-accent: #0875ed;
+  --pw-accent-strong: #0662cc;
+  --pw-text: #092a66;
+  --pw-muted: #51648a;
+  --pw-border: #e3e9f2;
+  --pw-bg: #f7f9fc;
+  --keycloak-logo-url: url("../img/logo.png");
+  --keycloak-logo-height: 56px;
+  --keycloak-logo-width: 56px;
+  --keycloak-card-top-color: transparent;
+  --pf-v5-global--FontFamily--text: "Google Sans Flex", system-ui, sans-serif;
+  --pf-v5-global--FontFamily--heading: "Google Sans Flex", system-ui, sans-serif;
+  --pf-v5-global--primary-color--100: var(--pw-accent-strong);
+  --pf-v5-global--primary-color--200: var(--pw-accent);
+  --pf-v5-global--link--Color: var(--pw-accent-strong);
+  --pf-v5-global--Color--100: var(--pw-text);
+  --pf-v5-global--BorderRadius--sm: 10px;
+}
+
+.login-pf body,
+body {
+  background: radial-gradient(60rem 40rem at 70% 10%, rgb(8 117 237 / 0.08), transparent 70%),
+    var(--pw-bg);
+  font-family: "Google Sans Flex", system-ui, sans-serif;
+  color: var(--pw-text);
+}
+
+.pf-v5-c-login__main {
+  border: 1px solid var(--pw-border);
+  border-radius: 24px;
+  box-shadow: 0 16px 48px rgb(9 42 102 / 0.14);
+  overflow: hidden;
+}
+
+.pf-v5-c-login__main-header {
+  border-top: 0;
+}
+
+.pf-v5-c-title,
+#kc-page-title {
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.pf-v5-c-form-control {
+  border-radius: 10px;
+}
+
+.pf-v5-c-button.pf-m-primary {
+  border-radius: 10px;
+  background: var(--pw-accent-strong);
+  font-weight: 500;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pf-v5-c-button.pf-m-primary:hover {
+  background: var(--pw-accent);
+  box-shadow: 0 8px 24px rgb(8 117 237 / 0.2);
+  transform: translateY(-1px);
+}
+
+div.kc-logo-text {
+  margin-bottom: 8px;
+}
+
+#kc-header-wrapper,
+.pf-v5-c-login__header,
+.pf-v5-c-brand {
+  color: var(--pw-text);
+  font-family: "Google Sans Flex", system-ui, sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+}
