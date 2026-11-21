@@ -2,10 +2,14 @@
 SHELL := /bin/bash
 COMPOSE := docker compose --env-file infra/images.env --env-file .env -f infra/compose.yaml
 
-.PHONY: up down logs ps reset-data lint lint-py lint-web test test-unit test-integration test-policy evals evals-model storyline contracts golden check-env
+.PHONY: setup up down logs ps reset-data lint lint-py lint-web test test-unit test-integration test-policy evals evals-model storyline contracts golden check-env
+
+# First-time setup: .env with fresh secrets and the sign-in page's demo accounts.
+setup:
+	python3 scripts/setup.py
 
 check-env:
-	@test -f .env || { echo "Missing .env. Create it with: cp .env.example .env  (then replace every change-me value)"; exit 1; }
+	@test -f .env || { echo "Missing .env. Create it with: make setup  (or: python scripts/setup.py)"; exit 1; }
 	@! grep -q "change-me" .env || { echo ".env still contains change-me values. Replace them before starting."; exit 1; }
 	@! grep -qE '^GCP_SA_FILE=[^/]' .env || { echo "GCP_SA_FILE must be an absolute path (Compose resolves relative paths from infra/)."; exit 1; }
 
