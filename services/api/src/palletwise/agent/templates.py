@@ -162,7 +162,7 @@ def _order(result: ResultEnvelope) -> str:
     lines = [x for x in result.rows if x["line_no"] is not None]
     if r["status"] in ("SHIPPED", "CANCELLED"):
         state = "shipped" if r["status"] == "SHIPPED" else "cancelled"
-        timing = " after its deadline" if r["delayed"] else ""
+        timing = " late, after its deadline" if r["delayed"] else ""
         return f"Order {r['order_no']} for {r['customer_code']} was {state}{timing}."
     if r["delayed"]:
         timing = f"is delayed, {r['hours_late']} hours past its deadline"
@@ -182,7 +182,7 @@ def _order(result: ResultEnvelope) -> str:
 
 def _open_exceptions(result: ResultEnvelope) -> str:
     r = _first(result)
-    total = int(result.normalized_request["open_exceptions"])
+    total = int(r["open_total"])
     subject = _subject(str(r["subject"]))
     which = (
         f"{str(r['exception_type']).lower()} for {subject}" if subject else str(r["exception_type"]).lower()
@@ -353,13 +353,12 @@ def key_facts(tool: str, result: ResultEnvelope) -> tuple[str, ...]:
             else:
                 facts = [_how_many(result), str(r[result.columns[0].key])]
         case "get_open_exceptions":
-            facts = [str(r["score"])] + (
-                []
-                if result.normalized_request.get("exception_id")
-                else [str(result.normalized_request["open_exceptions"])]
-            )
+            one = result.normalized_request.get("exception_id")
+            facts = [str(r["score"])] + ([] if one else [str(r["open_total"])])
         case "get_order_status":
-            facts = [str(r["order_no"])] + (["delayed"] if r["delayed"] and r["status"] != "SHIPPED" else [])
+            # Lateness is a fact the wording must state: "delayed" while open, "late" once shipped.
+            late = ["late" if r["status"] == "SHIPPED" else "delayed"] if r["delayed"] else []
+            facts = [str(r["order_no"]), *late]
         case "brief_top_exceptions":
             facts = [str(result.normalized_request["open_exceptions"]), str(r["score"])]
         case "brief_throughput":

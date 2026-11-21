@@ -202,7 +202,6 @@ def open_exceptions(
         chosen = [(r, x) for r, x in ranked if exception_type is None or x.exception_type == exception_type]
     total = len(chosen)
     shown = chosen[:limit]
-    request["open_exceptions"] = total
     moment = read_moment(conn, site)
     how = semantic_model().explain("get_open_exceptions", as_of=moment.local_time)
     evidence = moment.evidence(STOCK_AND_DEMAND, how)
@@ -231,6 +230,8 @@ def open_exceptions(
             "urgency_normalized": x.components.get("urgency_normalized"),
             "value_normalized": x.components.get("value_normalized"),
             "order_nos": [o.order_no for o in x.orders],
+            # How many matched in all: a fact of the answer the model must see, not a parameter.
+            "open_total": total,
         }
         for rank, x in shown
     )

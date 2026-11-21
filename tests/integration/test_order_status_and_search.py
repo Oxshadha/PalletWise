@@ -110,7 +110,7 @@ def test_a_shipped_order_has_no_locations(run: Any, floor: Floor) -> None:
     f.line(shipped, floor.c, 4, allocated=4, picked=4)
     envelope = status(run, floor, shipped)
     assert envelope.highlights == () and envelope.rows[0]["delayed"] is True  # shipped after its deadline
-    assert template_answer("get_order_status", envelope).endswith("was shipped after its deadline.")
+    assert template_answer("get_order_status", envelope).endswith("was shipped late, after its deadline.")
 
 
 def test_an_unknown_or_another_tenants_order_is_not_found(

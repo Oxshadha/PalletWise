@@ -66,7 +66,8 @@ def test_the_copilot_sees_the_inbox_in_the_inbox_order(run: Any, site: FixtureSi
     envelope = ok(run(site, "get_open_exceptions", limit=20))
     assert [r["score"] for r in envelope.rows] == [x.score for x in expected]
     assert [r["rank"] for r in envelope.rows] == list(range(1, len(expected) + 1))
-    assert envelope.normalized_request["open_exceptions"] == len(expected)
+    assert all(r["open_total"] == len(expected) for r in envelope.rows)
+    assert "open_exceptions" not in envelope.normalized_request  # a fact of the answer, not a parameter
     # The components behind each score are the stored ones, not a second calculation.
     for row, x in zip(envelope.rows, expected, strict=True):
         assert (row["lines"], row["value_at_risk"]) == (x.components["lines"], x.components["value_at_risk"])
