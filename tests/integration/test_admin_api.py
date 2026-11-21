@@ -80,6 +80,7 @@ def test_csv_cells_cannot_start_a_formula() -> None:
     from palletwise.api.admin import _cell  # pyright: ignore[reportPrivateUsage]
 
     assert _cell("=HYPERLINK(1)") == "'=HYPERLINK(1)" and _cell("-5") == "'-5" and _cell("ok") == "ok"
+    assert _cell("\t=1") == "'\t=1" and _cell("\r=1") == "'\r=1"
 
 
 def test_the_admin_read_role_never_sees_answers_or_answered_runs(connect_as: Any, env: Env) -> None:

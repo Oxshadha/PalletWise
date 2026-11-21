@@ -183,6 +183,12 @@ def run(
             raise RequestRejected(
                 "The query took too long (2 seconds); narrow it.", {"verdict": "REFUSED", "rule": "timeout"}
             ) from exc
+        except psycopg.errors.DataError as exc:  # division by zero, a bad date: the query's own fault
+            reason = exc.diag.message_primary or "invalid data"
+            raise RequestRejected(
+                f"The query failed when it ran ({reason}); fix it once, else decline.",
+                {"verdict": "REFUSED", "rule": "runtime"},
+            ) from exc
 
 
 # ------------------------------------------------------------------ the tool

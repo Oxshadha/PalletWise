@@ -132,6 +132,15 @@ def test_the_limits_hold(
     assert slow.outcome is Outcome.VALIDATION_FAILED and "took too long" in str(slow.message)
 
 
+def test_a_runtime_error_is_a_refusal_the_model_can_fix(
+    executor: ToolExecutor, ready_site: Site, connect_as: Connect, evaluated: None
+) -> None:
+    run = run_of(ready_site)
+    result = call(executor, run, "SELECT count(*) / 0 AS n FROM gq.stock")
+    assert result.outcome is Outcome.VALIDATION_FAILED and "division by zero" in str(result.message)
+    assert audited(connect_as, ready_site, run)["parameters"]["rule"] == "runtime"
+
+
 def test_the_switch_and_the_scope_are_checked_per_call(
     executor: ToolExecutor, ready_site: Site, connect_as: Connect, evaluated: None
 ) -> None:

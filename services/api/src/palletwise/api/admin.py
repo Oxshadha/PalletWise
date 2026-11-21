@@ -271,7 +271,7 @@ async def export_audit(
     writer = csv.writer(out)
     writer.writerow(admin_repo.AUDIT_COLUMNS)
     for r in rows:
-        # A leading =, +, - or @ would be read as a formula by a spreadsheet: prefix a quote.
+        # A leading =, +, -, @, tab or CR would be read as a formula by a spreadsheet: prefix a quote.
         writer.writerow([_cell(r[c]) for c in admin_repo.AUDIT_COLUMNS])
     return Response(
         out.getvalue(),
@@ -282,4 +282,4 @@ async def export_audit(
 
 def _cell(value: Any) -> str:
     text = "" if value is None else str(value)
-    return "'" + text if text[:1] in ("=", "+", "-", "@") else text
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text

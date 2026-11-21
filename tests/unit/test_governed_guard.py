@@ -32,6 +32,7 @@ ADVERSARIAL = [
     "SELECT * INTO new_table FROM gq.stock",
     "COPY (SELECT * FROM gq.stock) TO '/tmp/x'",
     "SELECT on_hand::regclass FROM gq.stock",
+    "SELECT on_hand::public.text FROM gq.stock",
     "SELECT on_hand::text::regproc FROM gq.stock",
     "SELECT * FROM (SELECT * FROM gq.stock) s",
     "SELECT rank() OVER (ORDER BY on_hand) FROM gq.stock",

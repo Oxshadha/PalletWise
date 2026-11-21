@@ -199,8 +199,10 @@ def _allowed(node: Any) -> None:
             if op not in OPERATORS or len(node.name) > 1:
                 raise Refused("operator", f"The operator {op} is not allowed.")
     elif isinstance(node, ast.TypeCast):
-        name = node.typeName.names[-1].sval.lower()
-        if name not in TYPES or node.typeName.arrayBounds:
+        names = [n.sval.lower() for n in node.typeName.names]
+        name = names[-1]
+        qualified = len(names) > 1 and names[0] != "pg_catalog"
+        if name not in TYPES or qualified or node.typeName.arrayBounds:
             raise Refused("cast", f"Casting to {name} is not allowed.")
     elif isinstance(node, ast.MinMaxExpr):
         pass  # greatest and least
