@@ -28,6 +28,7 @@ TOOL_LABELS: dict[str, str] = {
     "get_delayed_orders": "Checking dispatch deadlines",
     "get_order_stockout_risks": "Comparing open orders with stock",
     "get_order_status": "Reading the order and its lines",
+    "run_governed_query": "Running a custom query",
     "get_open_exceptions": "Reading the exceptions inbox",
     "query_inventory": "Running the query on current data",
 }

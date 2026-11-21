@@ -271,14 +271,36 @@ def handle(ctx: ToolContext, params: GovernedQueryInput) -> ResultEnvelope:
     )
 
 
+def _catalog_text() -> str:
+    """The governed views as the model reads them: grain, key, columns, references, measure rules."""
+    lines: list[str] = []
+    for name, view in guard.catalog().items():
+        columns: list[str] = []
+        specs: dict[str, dict[str, Any]] = view["columns"]
+        for column, spec in specs.items():
+            note = spec["kind"]
+            if spec["kind"] == "ref":
+                note = f"ref to {spec['refers']}"
+            elif spec["kind"] == "measure":
+                note = f"measure {spec.get('unit')}, {'/'.join(spec.get('aggregates') or [])}"
+            columns.append(f"{column} ({note})")
+        key = ", ".join(view.get("key") or []) or "none"
+        lines.append(f"gq.{name}: {view['grain']}; key {key}; " + "; ".join(columns))
+    return "\n".join(lines)
+
+
 RUN_GOVERNED_QUERY = ToolSpec(
     name="run_governed_query",
     description=(
-        "Last resort, only when no other tool and no query_inventory request can express the question: "
-        "one read-only SELECT over the governed gq views. Join only as the catalog allows (a reference "
-        "to the joined view's key), aggregate measures only of the first view in FROM and only as each "
-        "measure allows, take the site's time from gq.site_now. A refused query says why; fix it once, "
-        "else decline. The answer is labelled as a custom query."
+        "LAST RESORT. Use only when no other tool and no query_inventory request can express the "  # noqa: S608 (prose)
+        "question. One read-only SELECT over these governed views (nothing else is reachable):\n"
+        f"{_catalog_text()}\n"
+        "Rules: JOIN a view only on its key, from a column that refers to it (many to one); sum or "
+        "avg only measures of the first view in FROM, only with the aggregates listed; never add "
+        "measures of different units; count(DISTINCT) only keys or references; no WITH, window "
+        "functions or subqueries in FROM; subqueries only in WHERE or HAVING; the site's time is "
+        "(SELECT as_of FROM gq.site_now), never now(). A refused query says why: fix it once, else "
+        "decline. The answer is labelled as a custom query."
     ),
     input_model=GovernedQueryInput,
     scope=SCOPE,

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { type ResultEnvelope, sendFeedback } from "../../shared/api/client";
 import type { Suggestion } from "../../shared/api/runStream";
 import { formatNumber, formatSiteTime } from "../../shared/format";
+import { Badge } from "../../shared/ui/Badge";
 import { Icon } from "../../shared/ui/Icon";
 import { type Answer, highlightCount } from "../../shared/workspace/workspace";
 
@@ -192,6 +193,12 @@ export function AnswerCard({
         )}
         {answer.outcome && OUTCOME_LABEL[answer.outcome] && (
           <p className="pw-outcome">{OUTCOME_LABEL[answer.outcome]}</p>
+        )}
+        {answer.results.some((r) => r.normalized_request["source"] === "governed_query") && (
+          // ADR 0002: a custom query's answer is never mistaken for a standard metric.
+          <p className="pw-outcome">
+            <Badge tone="info">Answered with a custom query</Badge>
+          </p>
         )}
         <div className="pw-answer-text" aria-live="polite">
           {shown ? (

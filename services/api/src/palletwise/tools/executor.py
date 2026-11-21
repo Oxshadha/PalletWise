@@ -277,8 +277,12 @@ class ToolExecutor:
             # The answer narrowed a previous result: the audit names that result (semantic spec 7.5).
             normalized = {**normalized, "working_set_from": output.normalized_request["working_set_from"]}
         if isinstance(output, ResultEnvelope) and "audit" in output.normalized_request:
-            # What the tool recorded about how it ran (the governed query's SQL, verdict, size).
+            # What the tool recorded about how it ran (the governed query's SQL, verdict, size)
+            # goes to the audit record only; the result the user and the model see never carries
+            # it (ADR 0002: users do not see the SQL).
             normalized = {**normalized, **output.normalized_request["audit"]}
+            kept = {k: v for k, v in output.normalized_request.items() if k != "audit"}
+            output = output.model_copy(update={"normalized_request": kept})
         return finish(Outcome.OK, agent=agent, parameters=normalized, decision=decision, output=output)
 
     def _decide(self, run: RunContext, spec: ToolSpec[Any, Any], agent: AgentRecord) -> Decision:

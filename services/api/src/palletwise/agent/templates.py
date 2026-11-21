@@ -12,7 +12,7 @@ from palletwise.contracts.results import Column, ResultEnvelope, ResultStatus
 
 MAX_LISTED = 3
 # In the wording cache key: bump when a template or a key fact changes meaning.
-TEMPLATES_VERSION = "templates.v6"
+TEMPLATES_VERSION = "templates.v7"
 
 
 def _plural(count: int, one: str, many: str) -> str:
@@ -287,6 +287,14 @@ def _query(result: ResultEnvelope) -> str:
     return f"{_how_many(result)} {_plural(n, one, many)} found, led by {listed}."
 
 
+def _governed(result: ResultEnvelope) -> str:
+    if not result.rows:
+        return "Answered with a custom query: it found no rows."
+    shown = " (the first ones; narrow the question to see the rest)" if result.truncated else ""
+    count = len(result.rows)
+    return f"Answered with a custom query: {count} {_plural(count, 'row', 'rows')}{shown}."
+
+
 TEMPLATES: dict[str, Callable[[ResultEnvelope], str]] = {
     "find_product_locations": _product_locations,
     "get_bin_contents": _bin_contents,
@@ -300,6 +308,7 @@ TEMPLATES: dict[str, Callable[[ResultEnvelope], str]] = {
     "get_order_stockout_risks": _stockout,
     "query_inventory": _query,
     "get_order_status": _order,
+    "run_governed_query": _governed,
     "get_open_exceptions": _open_exceptions,
     "brief_top_exceptions": _brief_exceptions,
     "brief_throughput": _brief_throughput,
