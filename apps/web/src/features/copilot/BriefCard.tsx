@@ -11,6 +11,7 @@ import {
 import type { Suggestion } from "../../shared/api/runStream";
 import { useSiteChanges } from "../../shared/api/siteEvents";
 import { formatSiteTime } from "../../shared/format";
+import { RichText } from "../../shared/ui/RichText";
 import { Icon } from "../../shared/ui/Icon";
 import { useWorkspace } from "../../shared/workspace/WorkspaceContext";
 import { ResultTable } from "./AnswerCard";
@@ -136,7 +137,9 @@ export function BriefCard({
           return (
             <li key={item.kind} className="pw-brief-item">
               <p className="pw-brief-title">{item.title}</p>
-              <p>{item.text}</p>
+              <div className="pw-brief-text">
+                <RichText text={item.text} />
+              </div>
               <p className="pw-muted pw-brief-why">{item.why}</p>
               <details className="pw-brief-details">
                 <summary>Details</summary>
