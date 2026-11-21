@@ -24,6 +24,7 @@ LOGIN_ROLES: tuple[str, ...] = (
     "pw_cache",
     "pw_brief",
     "pw_admin_read",
+    "pw_query_read",
     "sim_owner",
     "sim_outbox_reader",
 )
@@ -51,6 +52,10 @@ def bootstrap(conn: psycopg.Connection, database: str, passwords: Mapping[str, s
                     sql.Identifier(role), sql.Literal(passwords[role])
                 )
             )
+
+        # The governed query role resolves names only in the catalog and its views (ADR 0002
+        # section 2); the runner sets the same path per transaction as well.
+        cur.execute("ALTER ROLE pw_query_read SET search_path = pg_catalog, gq")
 
         # Migrations run as pw_migrator and switch to pw_owner with SET ROLE.
         cur.execute("GRANT pw_owner TO pw_migrator WITH INHERIT FALSE, SET TRUE")
