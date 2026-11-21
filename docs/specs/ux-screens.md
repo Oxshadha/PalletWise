@@ -105,6 +105,18 @@ Layering: fill and pattern, then badge, then outline, so all three remain readab
 | Old highlights | Can be shown again from a reopened answer, marked **"Historical: data as of ..."**, never presented as current state |
 | Site change | Shows that site's conversations |
 
+## 6a. Today's brief (Slice 3)
+
+Per slice-3-acceptance D6 and step 5: a card at the top of the copilot panel, above the conversation.
+
+| Element | Content and behaviour |
+|---|---|
+| Header | "Today's brief" and **Hide**. Hidden, it becomes a **Show today's brief** button; hidden is remembered for that site day only, so the next day's brief shows by itself. |
+| Items | In order: Top exceptions, Orders at risk today, Yesterday's throughput, Data freshness. Each has its title, one sentence, and why it is in the brief (muted). |
+| Actions | **Details** on every item: its stored rows and how they were computed. **Show on map** for an item with locations: exactly its highlights become the map's layer (FR-BRF-02). **Open the inbox** for the exceptions item: shows its locations and opens the inbox. The orders item's suggestion runs the copilot's fast-path answer for the same exact window (before midnight, site time). |
+| Footer | "As of (site time)." and either "Worded by the copilot from these numbers." or "Standard wording." |
+| Live | Refetched when the site clock or data status changes: the stored brief comes back unchanged during the day, and a new site day shows its new brief |
+
 ## 7. Answer card
 
 The unit of every answer (FR-COP-04).
@@ -201,3 +213,4 @@ Per slice-3-acceptance D4: a third item **Inbox** in the view switch. The inbox 
 | 2026-11-19 | Slice 1 step 6, second pass after product owner feedback: (1) The 3D map is a realistic model generated from layout data only: concrete floor with painted zone lines, low walls, dock doors and the office from site features, pallet racking (uprights, beams, wire decking) from racks, a pallet with cartons for every stocked location; nothing is invented. (2) Game-style camera: eased movement, zoom to the pointer, orbit and tilt, buttons and keys (arrows pan, Q and E rotate, Page Up and Page Down tilt, plus and minus zoom, 0 recenters); framing keeps the isometric angle and the user's rotation. (3) With WebGL, 2D is the same scene seen from straight above with panning only (one scene, two views, FR-MAP-02); the SVG plan is the fallback without WebGL. (4) Hover shows a tooltip with the code and units; click opens the location details. (5) Interaction principles taken from the taste-skill library: every control answers hover and press with a 1 px step, one ease-out curve without bounce, text people read at 16 px, nothing under 13 px. |
 | 2026-11-19 | Slice 2 design pass at the product owner's request, with the taste and stageshow skill rules that apply to an application: (1) No sparkle as AI decoration: the copilot header and the navigation use a chat icon. (2) One icon set (Lucide) at one stroke weight replaces hand-drawn glyphs. (3) Hierarchy: the answer leads; "Show on map" is a compact control with a map icon; evidence (freshness, how computed) sits below a hairline; suggestions are neutral chips; feedback is two icon buttons with accessible names "Helpful" and "Not helpful". The active answer is lifted by its shadow, not ringed. (4) Map side column: sections divided by space and a hairline instead of cards inside the panel; highlighted locations are plain rows with a severity bar, and a reason shared by every row is said once above the list. (5) 3D zone names are quiet tags at each zone's centre; a highlighted zone shows one tag with its code and name. (6) Camera controls are one glass rail at the bottom right. (7) The send button is neutral while there is nothing to send. |
 | 2026-11-21 | Slice 3 step 4: section 9a, the exceptions inbox, as approved in slice-3-acceptance D4; the view switch gains Inbox. |
+| 2026-11-21 | Slice 3 step 5: section 6a, today's brief in the copilot panel (product owner choice Q1 a). |

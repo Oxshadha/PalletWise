@@ -214,6 +214,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sites/{site_id}/brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Daily Brief */
+        get: operations["daily_brief_api_sites__site_id__brief_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sites/{site_id}/events": {
         parameters: {
             query?: never;
@@ -396,6 +413,65 @@ export interface components {
              * @enum {string}
              */
             state: "NORMAL" | "EMPTY" | "LOW_STOCK" | "OVER_CAPACITY";
+        };
+        /** BriefItemOut */
+        BriefItemOut: {
+            /** Highlights */
+            highlights: components["schemas"]["Highlight"][];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "top_exceptions" | "orders_at_risk_today" | "throughput" | "data_freshness";
+            link: components["schemas"]["BriefLinkOut"] | null;
+            result: components["schemas"]["ResultEnvelope"];
+            /** Text */
+            text: string;
+            /**
+             * Text Source
+             * @enum {string}
+             */
+            text_source: "model" | "template";
+            /** Title */
+            title: string;
+            /** Why */
+            why: string;
+        };
+        /** BriefLinkOut */
+        BriefLinkOut: {
+            suggestion?: components["schemas"]["SuggestionOut"] | null;
+            /**
+             * To
+             * @enum {string}
+             */
+            to: "inbox" | "copilot";
+        };
+        /** BriefOut */
+        BriefOut: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Business Date
+             * Format: date
+             */
+            business_date: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Items */
+            items: components["schemas"]["BriefItemOut"][];
+            /** Time Zone */
+            time_zone: string;
+            /**
+             * Wording Source
+             * @enum {string}
+             */
+            wording_source: "model" | "template" | "mixed";
         };
         /** Column */
         Column: {
@@ -1298,6 +1374,51 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    daily_brief_api_sites__site_id__brief_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefOut"];
+                };
+            };
+            /** @description FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description DATA_NOT_READY or BRIEF_PREPARING */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

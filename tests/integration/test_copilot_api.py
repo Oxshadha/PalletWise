@@ -12,7 +12,7 @@ import threading
 import time
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 from uuid import UUID, uuid4
@@ -1012,3 +1012,279 @@ def test_a_failed_audit_rolls_the_acknowledgement_back(env: Env) -> None:
         (target,),
     ).fetchone()
     assert events == (0,)
+
+
+# ---------------------------------------------------------------- Slice 3 step 5: daily brief
+
+
+def clear_briefs(env: Env) -> None:
+    env.db.execute("DELETE FROM pw.daily_brief_claim WHERE site_id = %s", (env.site.site,))
+    env.db.execute("DELETE FROM pw.daily_brief WHERE site_id = %s", (env.site.site,))
+
+
+def claims(env: Env) -> int:
+    row = env.db.execute(
+        "SELECT count(*) FROM pw.daily_brief_claim WHERE site_id = %s", (env.site.site,)
+    ).fetchone()
+    return row[0] if row else 0
+
+
+def put_claim(env: Env, expires: str) -> None:
+    """A claim held by another generator, its lease ending at `expires` from now."""
+    with env.db.transaction():
+        env.db.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
+        env.db.execute(
+            "INSERT INTO pw.daily_brief_claim (tenant_id, site_id, business_date, run_key, token, expires_at)"
+            " SELECT s.tenant_id, s.id, sem.business_date(s.id, c.sim_time),"
+            "        coalesce((SELECT r.id::text FROM pw.simulation_run r WHERE r.site_id = s.id"
+            "                   AND r.status = 'ACTIVE'), '-'), gen_random_uuid(), now() + %s::interval"
+            "   FROM pw.site s JOIN pw.site_clock c ON c.site_id = s.id WHERE s.id = %s",
+            (expires, env.site.site),
+        )
+
+
+def brief_rows(env: Env) -> int:
+    row = env.db.execute(
+        "SELECT count(*) FROM pw.daily_brief WHERE site_id = %s", (env.site.site,)
+    ).fetchone()
+    return row[0] if row else 0
+
+
+def brief_model(env: Env, calls: list[float], delay: float = 0.0) -> FunctionModel:
+    """Flash-Lite that words each item exactly as its template does, so every sentence is
+    grounded: the facts are read the way the brief reads them."""
+    from palletwise.agent.templates import template_answer
+    from palletwise.contracts.results import ResultStatus
+    from palletwise.semantic import brief as facts
+
+    def fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        calls.append(time.monotonic())
+        time.sleep(delay)
+        with tenant_session(role_pool("PW_AGENT_READ"), env.site.tenant, read_snapshot=True) as conn:
+            items = facts.brief_facts(conn, env.site.site).items
+        asked = [i for i in items if i.result.status is ResultStatus.OK]
+        lines = [f"{n}. {template_answer(i.result_name, i.result)}" for n, i in enumerate(asked, 1)]
+        return ModelResponse(parts=[TextPart("\n".join(lines))])
+
+    return FunctionModel(fn)
+
+
+def test_the_brief_is_made_once_a_day_and_read_by_managers_and_admins(env: Env) -> None:
+    from palletwise.agent.guardrails import grounding_problems
+    from palletwise.contracts.results import ResultEnvelope
+
+    evaluate(env)
+    clear_briefs(env)
+    calls: list[float] = []
+    env.models.models["gemini_flash_lite"] = brief_model(env, calls)
+    env.sign_in(subject="manager-brief")
+    inbox = env.client.get(f"/api/sites/{env.site.site}/exceptions").json()["exceptions"]
+    first = env.client.get(f"/api/sites/{env.site.site}/brief")
+    assert first.status_code == 200, first.text
+    body = first.json()
+    assert [i["kind"] for i in body["items"]] == [
+        "top_exceptions", "orders_at_risk_today", "throughput", "data_freshness",
+    ]  # fmt: skip
+    assert len(calls) == 1 and any(i["text_source"] == "model" for i in body["items"])
+    # The top three exceptions are the inbox's first three, with exactly their highlights.
+    top = body["items"][0]
+    assert inbox and [r["score"] for r in top["result"]["rows"]] == [x["score"] for x in inbox[:3]]
+    expected = {(h["target_type"], h["target_id"]) for x in inbox[:3] for h in x["highlights"]}
+    assert {(h["target_type"], h["target_id"]) for h in top["highlights"]} == expected
+    assert top["result"]["normalized_request"]["open_exceptions"] == len(inbox)
+    # Every number and identifier in the wording is in its own stored item (D6, FR-BRF-01).
+    for item in body["items"]:
+        result = ResultEnvelope.model_validate(item["result"])
+        assert grounding_problems(item["text"], [result], "") == [], item
+        assert item["highlights"] == item["result"]["highlights"]
+    # The same day: the stored brief, unchanged, with no model call; an Admin reads the same one.
+    assert env.client.get(f"/api/sites/{env.site.site}/brief").json() == body
+    env.sign_in(subject="admin-brief", role="admin")
+    assert env.client.get(f"/api/sites/{env.site.site}/brief").json() == body
+    assert len(calls) == 1 and brief_rows(env) == 1
+    links = {i["kind"]: i["link"] for i in body["items"]}
+    assert links["top_exceptions"] == {"to": "inbox", "suggestion": None}
+    assert links["orders_at_risk_today"]["suggestion"]["tool"] == "get_order_stockout_risks"
+    # Told apart from the copilot's usage, with the brief it was for (product owner review).
+    usage = env.db.execute(
+        "SELECT u.purpose, u.run_id FROM pw.model_usage u JOIN pw.daily_brief b ON b.id = u.brief_id"
+        " WHERE b.site_id = %s",
+        (env.site.site,),
+    ).fetchall()
+    assert usage == [("BRIEF", None)]
+
+
+def test_concurrent_first_requests_make_one_brief(env: Env) -> None:
+    clear_briefs(env)
+    calls: list[float] = []
+    env.models.models["gemini_flash_lite"] = brief_model(env, calls, delay=1.0)
+    env.sign_in(subject="manager-race")
+    bodies: list[dict[str, Any]] = []
+
+    def visit() -> None:
+        response = env.client.get(f"/api/sites/{env.site.site}/brief")
+        assert response.status_code == 200
+        bodies.append(response.json())
+
+    visitors = [threading.Thread(target=visit) for _ in range(2)]
+    for v in visitors:
+        v.start()
+    for v in visitors:
+        v.join(30)
+    assert len(bodies) == 2 and bodies[0] == bodies[1]
+    assert len(calls) == 1 and brief_rows(env) == 1
+
+
+def test_a_new_site_day_makes_a_new_brief(env: Env) -> None:
+    clear_briefs(env)
+    env.models.models.pop("gemini_flash_lite", None)
+    env.sign_in(subject="manager-days")
+    today = env.client.get(f"/api/sites/{env.site.site}/brief").json()["business_date"]
+    shift = "UPDATE pw.site_clock SET sim_time = sim_time + %s::interval WHERE site_id = %s"
+    with env.db.transaction():
+        env.db.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
+        env.db.execute(shift, ("1 day", env.site.site))
+    try:
+        tomorrow = env.client.get(f"/api/sites/{env.site.site}/brief").json()["business_date"]
+    finally:
+        with env.db.transaction():
+            env.db.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
+            env.db.execute(shift, ("-1 day", env.site.site))
+    assert date.fromisoformat(tomorrow) == date.fromisoformat(today) + timedelta(days=1)
+    assert brief_rows(env) == 2
+
+
+def test_a_suspended_copilot_or_spent_budget_gives_the_template_brief(env: Env) -> None:
+    calls: list[float] = []
+    env.models.models["gemini_flash_lite"] = brief_model(env, calls)
+    env.sign_in(subject="manager-template")
+    for change in ({"status": "SUSPENDED"}, {"daily_token_budget": 1}):
+        clear_briefs(env)
+        env.set_agent(**change)
+        body = env.client.get(f"/api/sites/{env.site.site}/brief").json()
+        assert body["wording_source"] == "template" and {i["text_source"] for i in body["items"]} == {
+            "template"
+        }
+        env.set_agent(status="ACTIVE", daily_token_budget=2_000_000)
+    assert calls == []
+
+
+def test_a_failed_generation_leaves_nothing_and_the_next_request_generates(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from palletwise.semantic import brief as facts
+
+    clear_briefs(env)
+    env.models.models.pop("gemini_flash_lite", None)
+    env.sign_in(subject="manager-crash")
+    real = facts.brief_facts
+
+    def crash(conn: Any, site: UUID) -> Any:
+        raise RuntimeError("the generator crashed")
+
+    monkeypatch.setattr(facts, "brief_facts", crash)
+    with pytest.raises(RuntimeError):
+        env.client.get(f"/api/sites/{env.site.site}/brief")
+    assert brief_rows(env) == 0 and claims(env) == 0  # nothing stored, the claim released at once
+    monkeypatch.setattr(facts, "brief_facts", real)
+    assert env.client.get(f"/api/sites/{env.site.site}/brief").status_code == 200
+    assert brief_rows(env) == 1
+
+
+def test_the_brief_needs_ready_data_and_a_site_in_the_session(env: Env, connect_session: Connect) -> None:
+    _, loading_site = provision_site(connect_session, tenant=env.site.tenant, site_code="LDB")
+    env.sign_in(sites=[env.site.site, loading_site])
+    refused = env.client.get(f"/api/sites/{loading_site}/brief")
+    assert refused.status_code == 503 and refused.json()["code"] == "DATA_NOT_READY"
+    assert env.client.get(f"/api/sites/{uuid4()}/brief").status_code == 404
+
+
+def test_a_stored_brief_is_never_changed(env: Env) -> None:
+    env.sign_in(subject="manager-immutable")
+    env.client.get(f"/api/sites/{env.site.site}/brief")
+    with (
+        pytest.raises(psycopg.errors.InsufficientPrivilege),
+        tenant_session(role_pool("PW_BRIEF"), env.site.tenant) as conn,
+    ):
+        conn.execute(
+            "UPDATE pw.daily_brief SET wording_source = 'model' WHERE site_id = %s", (env.site.site,)
+        )
+
+
+def test_no_database_transaction_is_held_while_the_model_words(env: Env) -> None:
+    clear_briefs(env)
+    open_during_call: list[int] = []
+
+    def fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        row = env.db.execute(
+            "SELECT count(*) FROM pg_stat_activity WHERE usename = 'pw_brief' AND xact_start IS NOT NULL"
+            " AND pid <> pg_backend_pid()"
+        ).fetchone()
+        open_during_call.append(row[0] if row else -1)
+        time.sleep(0.5)
+        return ModelResponse(parts=[TextPart("1. A sentence the checks will not accept.")])
+
+    env.models.models["gemini_flash_lite"] = FunctionModel(fn)
+    env.sign_in(subject="manager-slow")
+    assert env.client.get(f"/api/sites/{env.site.site}/brief").status_code == 200
+    # The claim was committed before the call: no pw_brief transaction waits on the model.
+    assert open_during_call and set(open_during_call) == {0}
+    assert claims(env) == 0 and brief_rows(env) == 1
+
+
+def test_an_expired_claim_is_taken_over_and_a_valid_one_is_waited_for(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from palletwise.api import brief
+
+    clear_briefs(env)
+    env.models.models.pop("gemini_flash_lite", None)
+    env.sign_in(subject="manager-lease")
+    put_claim(env, "-1 second")  # a generator that crashed: its lease ran out
+    assert env.client.get(f"/api/sites/{env.site.site}/brief").status_code == 200
+    assert brief_rows(env) == 1 and claims(env) == 0
+    clear_briefs(env)
+    put_claim(env, "1 minute")  # a generator still within its lease
+    monkeypatch.setattr(brief, "WAIT_SECONDS", 0.5)
+    waiting = env.client.get(f"/api/sites/{env.site.site}/brief")
+    assert waiting.status_code == 503 and waiting.json()["code"] == "BRIEF_PREPARING"
+    assert waiting.headers["retry-after"] == "2" and brief_rows(env) == 0
+    clear_briefs(env)
+
+
+def test_a_simulation_reset_gives_the_day_a_new_brief(env: Env) -> None:
+    clear_briefs(env)
+    env.models.models.pop("gemini_flash_lite", None)
+    env.sign_in(subject="manager-reset")
+    before = env.client.get(f"/api/sites/{env.site.site}/brief").json()
+    old = env.db.execute(
+        "SELECT id FROM pw.simulation_run WHERE site_id = %s AND status = 'ACTIVE'", (env.site.site,)
+    ).fetchone()
+    assert old is not None
+    new = uuid4()
+    with env.db.transaction():
+        env.db.execute(
+            "UPDATE pw.simulation_run SET status = 'ENDED', ended_at = now() WHERE id = %s", (old[0],)
+        )
+        env.db.execute(
+            "INSERT INTO pw.simulation_run (id, tenant_id, site_id, seed, dataset_version, history_start,"
+            " clock_start, status, started_at, started_by)"
+            " SELECT %s, tenant_id, site_id, seed + 1, dataset_version, history_start, clock_start, 'ACTIVE',"
+            " now(), 'test' FROM pw.simulation_run WHERE id = %s",
+            (new, old[0]),
+        )
+    try:
+        after = env.client.get(f"/api/sites/{env.site.site}/brief").json()
+        stored = env.db.execute(
+            "SELECT simulation_run_id FROM pw.daily_brief WHERE site_id = %s ORDER BY generated_at",
+            (env.site.site,),
+        ).fetchall()
+    finally:
+        with env.db.transaction():
+            env.db.execute("DELETE FROM pw.daily_brief WHERE simulation_run_id = %s", (new,))
+            env.db.execute("DELETE FROM pw.simulation_run WHERE id = %s", (new,))
+            env.db.execute(
+                "UPDATE pw.simulation_run SET status = 'ACTIVE', ended_at = NULL WHERE id = %s", (old[0],)
+            )
+    assert after["business_date"] == before["business_date"] and after != before
+    assert stored == [(old[0],), (new,)]  # the earlier run's brief is never served for the new run

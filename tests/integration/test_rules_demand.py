@@ -237,3 +237,60 @@ def test_the_cover_window_uses_site_local_dates_at_midnight(connect_as: Connect)
         floor.pick(edge, 900, floor.now - datetime.combine(today, time(0, 1), zone))  # today: out
     row = next(r for r in f.rows("days_of_cover", settings) if r["sku"] == "EDGE")
     assert row["window_demand"] == 57  # 7 + 50 only
+
+
+# ---------------------------------------------------------------- throughput (4.6, daily brief)
+
+
+def test_throughput_is_yesterday_against_the_seven_operating_days_before(connect_as: Connect) -> None:
+    floor = Floor(connect_as)
+    f, x = floor.f, floor.f.product("X")
+    region, zone = f.db.execute(
+        "SELECT region_code, time_zone FROM pw.site WHERE id = %s", (f.site,)
+    ).fetchone() or ("", "")
+    tz = ZoneInfo(zone)
+    today = floor.now.astimezone(tz).date()
+    operating = [
+        r[0]
+        for r in f.db.execute(
+            "SELECT date FROM pw.business_calendar WHERE region_code = %s AND is_operating AND date < %s"
+            " ORDER BY date DESC LIMIT 8",
+            (region, today),
+        ).fetchall()
+    ]
+    yesterday, baseline = operating[0], operating[1:]
+
+    def noon(day: date) -> datetime:
+        return datetime.combine(day, time(12), tz)
+
+    # Yesterday 30 units and 2 orders shipped; baseline day i: 10 + i units and 1 order shipped.
+    for _ in range(2):
+        f.order(status="SHIPPED", shipped_at=noon(yesterday))
+    for qty in (20, 10):
+        f.pick(x, qty, noon(yesterday), floor.bin(), floor.staging)
+    for i, day in enumerate(baseline):
+        f.pick(x, 10 + i, noon(day), floor.bin(), floor.staging)
+        f.order(status="SHIPPED", shipped_at=noon(day))
+    f.pick(x, 99, floor.now - timedelta(minutes=1), floor.bin(), floor.staging)  # today: not counted
+    older = f.db.execute(
+        "SELECT max(date) FROM pw.business_calendar WHERE region_code = %s AND is_operating AND date < %s",
+        (region, baseline[-1]),
+    ).fetchone()
+    assert older is not None
+    f.pick(x, 500, noon(older[0]), floor.bin(), floor.staging)  # before the baseline: not counted
+
+    from palletwise.db.connection import role_pool, tenant_session
+
+    with tenant_session(role_pool("PW_AGENT_READ"), f.tenant, read_snapshot=True) as conn:
+        cursor = conn.execute("SELECT * FROM sem.throughput(%s, %s)", (f.site, floor.now))
+        names = [c.name for c in cursor.description or ()]
+        row = dict(zip(names, cursor.fetchone() or (), strict=True))
+    avg_units = (Decimal(sum(10 + i for i in range(7))) / 7).quantize(Decimal("0.1"), ROUND_HALF_UP)  # 13.0
+    change = (100 * (30 - avg_units) / avg_units).quantize(Decimal("0.1"), ROUND_HALF_UP)  # 130.8
+    assert row == {
+        "yesterday": yesterday, "units_picked": 30, "orders_shipped": 2,
+        "baseline_from": baseline[-1], "baseline_to": baseline[0], "baseline_days": 7,
+        "avg_units_picked": avg_units, "avg_orders_shipped": Decimal("1.0"),
+        "units_change_pct": change, "units_direction": "above",
+        "orders_change_pct": Decimal("100.0"), "orders_direction": "above",
+    }  # fmt: skip

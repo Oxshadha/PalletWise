@@ -7,14 +7,22 @@ import type { Suggestion } from "../../shared/api/runStream";
 import { Icon } from "../../shared/ui/Icon";
 import { useWorkspace } from "../../shared/workspace/WorkspaceContext";
 import { AnswerCard } from "./AnswerCard";
+import { BriefCard, useBrief } from "./BriefCard";
 import { Composer } from "./Composer";
 import { HistoryMenu } from "./HistoryMenu";
 import { useCopilot } from "./useCopilot";
 
-/** Copilot panel (UX spec 6). */
-export function CopilotPanel({ notReadyText }: { notReadyText: string | null }) {
+/** Copilot panel (UX spec 6), with today's brief at the top (UX spec 6a). */
+export function CopilotPanel({
+  notReadyText,
+  onOpenInbox,
+}: {
+  notReadyText: string | null;
+  onOpenInbox: () => void;
+}) {
   const { state, dispatch, siteId } = useWorkspace();
   const { ask, stop, running } = useCopilot();
+  const brief = useBrief();
   const [starters, setStarters] = useState<Starter[]>([]);
   const end = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -87,6 +95,7 @@ export function CopilotPanel({ notReadyText }: { notReadyText: string | null }) 
       </header>
 
       <div className="pw-conversation" ref={list}>
+        {brief && <BriefCard brief={brief} onOpenInbox={onOpenInbox} onAsk={choose} />}
         {state.answers.length === 0 && (
           <div className="pw-empty-state">
             <p className="pw-greeting">How can I help with the warehouse today?</p>

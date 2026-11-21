@@ -156,6 +156,54 @@ def _stockout(result: ResultEnvelope) -> str:
     )
 
 
+def _subject(text: str) -> str:
+    """A subject in words; never one that carries instruction text found in data (FR-COP-12)."""
+    return "" if instruction_echo(text, "") else text
+
+
+def _brief_exceptions(result: ResultEnvelope) -> str:
+    r = _first(result)
+    total = int(result.normalized_request["open_exceptions"])
+    subject = _subject(str(r["subject"]))
+    which = (
+        f"{str(r['exception_type']).lower()} for {subject}" if subject else str(r["exception_type"]).lower()
+    )
+    return (
+        f"{total} {_plural(total, 'exception is', 'exceptions are')} open. The highest impact is the "
+        f"{which}, score {r['score']}."
+    )
+
+
+def _brief_throughput(result: ResultEnvelope) -> str:
+    r = _first(result)
+    days = result.normalized_request["baseline_operating_days"]
+    if not days:
+        units = f"{r['units_picked']} units were picked, with no earlier operating day to compare"
+    elif r["units_change_pct"] is None:
+        units = f"{r['units_picked']} units were picked, with none on the {days} operating days before"
+    elif r["units_direction"] == "level":
+        units = f"{r['units_picked']} units were picked, level with the average of {r['avg_units_picked']}"
+    else:
+        units = (
+            f"{r['units_picked']} units were picked, {r['units_change_pct']} percent {r['units_direction']} "
+            f"the average of {r['avg_units_picked']} over the {days} operating days before"
+        )
+    orders = f"{r['orders_shipped']} orders shipped against an average of {r['avg_orders_shipped']}"
+    return f"Yesterday {units}; {orders}."
+
+
+def _brief_freshness(result: ResultEnvelope) -> str:
+    r = _first(result)
+    if r["minutes_behind"] is None:
+        return f"{r['stream']} has never synced, so this brief may be incomplete."
+    if r["minutes_behind"] == 0:  # rows are oldest first: nothing is behind the site time
+        return "All data is up to date with the site time."
+    return (
+        f"The oldest data, {str(r['stream']).lower()}, synced {r['minutes_behind']} "
+        f"{_plural(int(r['minutes_behind']), 'minute', 'minutes')} before the site time."
+    )
+
+
 QUERY_NOUNS = {
     "product": ("product", "products"),
     "category": ("category", "categories"),
@@ -207,6 +255,9 @@ TEMPLATES: dict[str, Callable[[ResultEnvelope], str]] = {
     "get_delayed_orders": _delayed,
     "get_order_stockout_risks": _stockout,
     "query_inventory": _query,
+    "brief_top_exceptions": _brief_exceptions,
+    "brief_throughput": _brief_throughput,
+    "brief_data_freshness": _brief_freshness,
 }
 
 
@@ -259,6 +310,17 @@ def key_facts(tool: str, result: ResultEnvelope) -> tuple[str, ...]:
                 facts = [str(r[result.columns[0].key])] + ([str(r[measure.key])] if measure else [])
             else:
                 facts = [_how_many(result), str(r[result.columns[0].key])]
+        case "brief_top_exceptions":
+            facts = [str(result.normalized_request["open_exceptions"]), str(r["score"])]
+        case "brief_throughput":
+            # The change is a size and a direction: both must be stated, so "12.5 percent above"
+            # cannot stand for "12.5 percent below" (product owner review of step 5).
+            facts = [str(r["units_picked"]), str(r["orders_shipped"])]
+            if r["units_change_pct"] is not None and r["units_direction"] != "level":
+                facts.append(f"{r['units_change_pct']} percent {r['units_direction']}")
+        case "brief_data_freshness":
+            behind = r["minutes_behind"]
+            facts = [] if behind == 0 else [str(r["stream"]), *([str(behind)] if behind is not None else [])]
         case _:
             facts = []
     return tuple(f for f in facts if f and f != "None")

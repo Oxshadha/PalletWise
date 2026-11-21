@@ -197,10 +197,11 @@ class LedgerMeter:
 
     ledger: UsageLedger
     owner: Owner
-    run_id: UUID
+    run_id: UUID | None  # None for the daily brief's wording, which is not a copilot run
     agent: AgentRecord
     day: date
     cost: Decimal = Decimal(0)
+    brief_id: UUID | None = None  # the brief being worded (usage purpose BRIEF)
 
     def reserve(self, estimate: int) -> bool:
         return self.ledger.reserve(
@@ -232,6 +233,7 @@ class LedgerMeter:
                 outcome=call.outcome,
                 stage=call.stage,
                 usage_estimated=call.usage_estimated,
+                brief_id=self.brief_id,
             ),
         )
         return cost

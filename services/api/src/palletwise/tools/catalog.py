@@ -107,6 +107,18 @@ class GetOrderStockoutRisksInput(StrictInput):
         default=None, ge=1, le=168,
         description="Orders due within this many hours; omit to use the site setting (24 by default)",
     )  # fmt: skip
+    today: bool = Field(
+        default=False,
+        description="Only orders due before midnight, site time (overdue included); not with hours",
+    )
+
+    @model_validator(mode="after")
+    def one_window(self) -> Self:
+        if self.today and self.hours is not None:
+            raise ValueError("give hours or today, not both")
+        if self.today and self.view == "replenish_before_first_dispatch":
+            raise ValueError("today applies to the products and orders views")
+        return self
 
 
 def _rule_tool[I: BaseModel](
@@ -184,7 +196,7 @@ GET_ORDER_STOCKOUT_RISKS = _rule_tool(
     "affected orders ('which of today's orders are at risk'); view=replenish_before_first_dispatch "
     "lists what to replenish before today's next dispatch deadline.",
     GetOrderStockoutRisksInput, "orders.read",
-    lambda ctx, p: rules.order_stockout_risks(ctx.conn, ctx.site, p.view, p.hours),
+    lambda ctx, p: rules.order_stockout_risks(ctx.conn, ctx.site, p.view, p.hours, p.today),
 )  # fmt: skip
 
 

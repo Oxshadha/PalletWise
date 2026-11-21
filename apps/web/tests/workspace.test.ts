@@ -148,8 +148,8 @@ describe("an inbox exception on the map (slice-3-acceptance step 4)", () => {
     ],
   } as const;
   const show: WorkspaceAction = {
-    type: "show-exception",
-    exception: { id: chosen.id, highlights: [...chosen.highlights] },
+    type: "show-layer",
+    layer: { kind: "exception", id: chosen.id, highlights: [...chosen.highlights] },
   };
 
   it("shows exactly the exception's highlights in place of the answer's", () => {
@@ -162,7 +162,7 @@ describe("an inbox exception on the map (slice-3-acceptance step 4)", () => {
       BIN_A,
     ]);
     const shown = run([...ask("one", [BIN_A]), show, { type: "show-answer", id: "one" }]);
-    expect(shown.selectedException).toBeNull();
+    expect(shown.layer).toBeNull();
     expect(activeHighlights(shown).map((h) => h.target_id)).toEqual([BIN_A]);
   });
 
@@ -176,14 +176,15 @@ describe("an inbox exception on the map (slice-3-acceptance step 4)", () => {
     ]);
     expect(activeHighlights(moved)).toEqual([chosen.highlights[0]]);
     const gone = run([show, { type: "exceptions-refreshed", exceptions: [] }]);
-    expect(gone.selectedException).toBeNull();
+    expect(gone.layer).toBeNull();
     expect(activeHighlights(gone)).toEqual([]);
   });
 
   it("choosing another exception shows only the other one's highlights", () => {
     const other: WorkspaceAction = {
-      type: "show-exception",
-      exception: {
+      type: "show-layer",
+      layer: {
+        kind: "exception",
         id: "x2",
         highlights: [
           { target_type: "bin", target_id: BIN_A, reason: "low_stock", severity: "warning" },
@@ -193,8 +194,17 @@ describe("an inbox exception on the map (slice-3-acceptance step 4)", () => {
     expect(activeHighlights(run([show, other])).map((h) => h.target_id)).toEqual([BIN_A]);
   });
 
+  it("a brief item's layer is a snapshot the inbox leaves alone", () => {
+    const brief: WorkspaceAction = {
+      type: "show-layer",
+      layer: { kind: "brief", id: "top_exceptions", highlights: [...chosen.highlights] },
+    };
+    const kept = run([brief, { type: "exceptions-refreshed", exceptions: [] }]);
+    expect(activeHighlights(kept)).toEqual(chosen.highlights);
+  });
+
   it("choosing it again hides it, and clearing hides the layer", () => {
-    expect(activeHighlights(run([show, { type: "hide-exception" }]))).toEqual([]);
+    expect(activeHighlights(run([show, { type: "hide-layer" }]))).toEqual([]);
     expect(activeHighlights(run([show, { type: "clear-highlights" }]))).toEqual([]);
   });
 });

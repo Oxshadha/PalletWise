@@ -185,6 +185,148 @@
         "title": "BinStateOut",
         "type": "object"
       },
+      "BriefItemOut": {
+        "properties": {
+          "highlights": {
+            "items": {
+              "$ref": "#/components/schemas/Highlight"
+            },
+            "title": "Highlights",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "top_exceptions",
+              "orders_at_risk_today",
+              "throughput",
+              "data_freshness"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BriefLinkOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "$ref": "#/components/schemas/ResultEnvelope"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "text_source": {
+            "enum": [
+              "model",
+              "template"
+            ],
+            "title": "Text Source",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "text",
+          "text_source",
+          "why",
+          "link",
+          "highlights",
+          "result"
+        ],
+        "title": "BriefItemOut",
+        "type": "object"
+      },
+      "BriefLinkOut": {
+        "properties": {
+          "suggestion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SuggestionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to": {
+            "enum": [
+              "inbox",
+              "copilot"
+            ],
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to"
+        ],
+        "title": "BriefLinkOut",
+        "type": "object"
+      },
+      "BriefOut": {
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "business_date": {
+            "format": "date",
+            "title": "Business Date",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BriefItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          },
+          "wording_source": {
+            "enum": [
+              "model",
+              "template",
+              "mixed"
+            ],
+            "title": "Wording Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "business_date",
+          "as_of",
+          "time_zone",
+          "generated_at",
+          "wording_source",
+          "items"
+        ],
+        "title": "BriefOut",
+        "type": "object"
+      },
       "Column": {
         "additionalProperties": false,
         "properties": {
@@ -2076,6 +2218,55 @@
         "summary": "Bin Details",
         "tags": [
           "map"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/brief": {
+      "get": {
+        "operationId": "daily_brief_api_sites__site_id__brief_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "DATA_NOT_READY or BRIEF_PREPARING"
+          }
+        },
+        "summary": "Daily Brief",
+        "tags": [
+          "brief"
         ]
       }
     },

@@ -388,3 +388,80 @@
 .pw-swap {
   animation: pw-swap var(--pw-motion-enter) var(--pw-ease-enter) both;
 }
+
+/* Today's brief (UX spec 6a): a quiet card above the conversation. Tokens only. */
+.pw-brief {
+  display: grid;
+  gap: var(--pw-space-3);
+}
+
+.pw-brief-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pw-space-2);
+}
+
+.pw-brief-head h3 {
+  margin: 0;
+  font-size: var(--pw-font-size-md);
+  font-weight: var(--pw-font-weight-heading);
+}
+
+.pw-brief-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--pw-space-3);
+}
+
+.pw-brief-item {
+  display: grid;
+  gap: var(--pw-space-1);
+  padding-bottom: var(--pw-space-3);
+  border-bottom: 1px solid var(--pw-color-border);
+}
+
+.pw-brief-item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.pw-brief-item p {
+  margin: 0;
+}
+
+.pw-brief-title {
+  font-size: var(--pw-font-size-sm);
+  font-weight: var(--pw-font-weight-navigation);
+}
+
+.pw-brief-why,
+.pw-brief-foot {
+  font-size: var(--pw-font-size-xs);
+}
+
+.pw-brief-foot {
+  margin: 0;
+}
+
+.pw-brief-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pw-space-2);
+}
+
+.pw-brief-reopen {
+  align-self: flex-start;
+}
+
+.pw-brief-details summary {
+  cursor: pointer;
+  font-size: var(--pw-font-size-xs);
+}
+
+.pw-brief-details[open] {
+  display: grid;
+  gap: var(--pw-space-2);
+}

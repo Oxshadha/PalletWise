@@ -287,7 +287,12 @@ export function App() {
         <WorkspaceProvider me={me} siteId={siteInfo.id} dataReady={!notReady}>
           <main className="pw-workspace" data-panel={panel}>
             <MapPanel />
-            <CopilotPanel notReadyText={notReady} />
+            <CopilotPanel
+              notReadyText={notReady}
+              onOpenInbox={() => {
+                choosePanel("inbox");
+              }}
+            />
             <InboxPanel
               onAskCopilot={() => {
                 choosePanel("copilot");

@@ -86,7 +86,7 @@ class ModelCall:
 
     model: str
     region: str
-    purpose: Literal["WORDING", "AGENT", "CLASSIFIER"]
+    purpose: Literal["WORDING", "AGENT", "CLASSIFIER", "BRIEF"]  # BRIEF: the daily brief's wording
     input_tokens: int
     output_tokens: int
     cached_tokens: int
@@ -404,13 +404,13 @@ class MeteredModel(WrapperModel):
         self,
         resolved: ResolvedModel,
         meter: ModelMeter,
-        purpose: Literal["WORDING", "AGENT"],
+        purpose: Literal["WORDING", "AGENT", "BRIEF"],
         state: RunState,
     ):
         super().__init__(resolved.model)
         self._resolved = resolved
         self._meter = meter
-        self._purpose: Literal["WORDING", "AGENT"] = purpose
+        self._purpose: Literal["WORDING", "AGENT", "BRIEF"] = purpose
         self._state = state
 
     async def request(
@@ -497,11 +497,11 @@ class MeteredModel(WrapperModel):
         latency = round((clock.monotonic() - started) * 1000)
         return ModelCall(
             self._resolved.name, self._resolved.region, self._purpose, i, o, c, latency, outcome,
-            stage or ("WORDING" if self._purpose == "WORDING" else "UNKNOWN"), estimated,
+            stage or ("WORDING" if self._purpose in ("WORDING", "BRIEF") else "UNKNOWN"), estimated,
         )  # fmt: skip
 
     def _stage(self, response: ModelResponse) -> Stage:
-        if self._purpose == "WORDING":
+        if self._purpose in ("WORDING", "BRIEF"):
             return "WORDING"
         return "TOOL_CHOICE" if any(isinstance(p, ToolCallPart) for p in response.parts) else "ANSWER_TEXT"
 
@@ -611,6 +611,11 @@ class CopilotRuntime:
         self._provider = provider
         self._run_timeout = run_timeout
         self._tool_names = frozenset(t.name for t in registry)
+
+    @property
+    def provider(self) -> LLMProvider:
+        """The model provider, shared with the daily brief's wording (one per process)."""
+        return self._provider
 
     def agent_settings(self) -> ModelSettings:
         """The agent's model settings, with the configured thinking level (ADR 0001 change 4)."""

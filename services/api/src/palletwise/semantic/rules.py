@@ -7,6 +7,7 @@ by semantic spec 7.6, entities for the working set, and evidence with "how compu
 
 from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime, time, timedelta
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -600,17 +601,31 @@ def _pick_bins(conn: Connection, site: UUID, rows: list[Row]) -> tuple[tuple[Hig
     return distinct_highlights(targets, HighlightReason.STOCKOUT_RISK)
 
 
-def order_stockout_risks(conn: Connection, site: UUID, view: str, hours: int | None) -> ResultEnvelope:
-    request = {"view": view, "hours": hours}
+def _today_horizon(conn: Connection, moment: Moment) -> Decimal:
+    """Hours to just before the end of the site-local day (sem.today_horizon_hours)."""
+    row = query(
+        conn, "today_horizon", "SELECT sem.today_horizon_hours(%s, %s)", (moment.site, moment.as_of)
+    ).fetchone()
+    assert row is not None
+    return row[0]
+
+
+def order_stockout_risks(
+    conn: Connection, site: UUID, view: str, hours: int | None, today: bool = False
+) -> ResultEnvelope:
+    """`today`: orders due before midnight, site time, overdue included (exactly; the daily brief
+    and "at risk today" questions), in place of an hours window."""
+    request: dict[str, Any] = {"view": view, "hours": hours} | ({"today": True} if today else {})
 
     def shape(moment: Moment, explain: dict[str, str] | None) -> ResultEnvelope:
         args: tuple[Any, ...] = (site, moment.as_of, moment.settings_version_id)
+        horizon = _today_horizon(conn, moment) if today else hours
         risks, _ = _fetch(
-            conn, "stockout_risk", "SELECT * FROM sem.stockout_risk(%s, %s, %s, %s)", (*args, hours)
+            conn, "stockout_risk", "SELECT * FROM sem.stockout_risk(%s, %s, %s, %s)", (*args, horizon)
         )
         if view == "orders":
             rows, truncated = _fetch(
-                conn, "orders_at_risk", "SELECT * FROM sem.orders_at_risk(%s, %s, %s, %s)", (*args, hours)
+                conn, "orders_at_risk", "SELECT * FROM sem.orders_at_risk(%s, %s, %s, %s)", (*args, horizon)
             )
             columns, entities, base = (
                 RISK_ORDER_COLUMNS,
@@ -646,7 +661,9 @@ def order_stockout_risks(conn: Connection, site: UUID, view: str, hours: int | N
         )
 
     def explain(moment: Moment) -> dict[str, str]:
+        if today:
+            return {"window": "before midnight, site time"}
         horizon = str(hours) if hours is not None else _setting(conn, moment, "stockout_horizon_hours")
-        return {"hours": horizon}
+        return {"window": f"within {horizon} hours"}
 
     return _run(conn, site, "get_order_stockout_risks", request, STOCK_AND_DEMAND, explain, shape)

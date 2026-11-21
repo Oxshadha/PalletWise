@@ -177,16 +177,16 @@ export function InboxPanel({
   const { state, dispatch } = useWorkspace();
   const { load, reload } = useInbox();
   const list = useRef<HTMLOListElement>(null);
-  const chosen = state.selectedException?.id ?? null;
+  const chosen = state.layer?.kind === "exception" ? state.layer.id : null;
 
   const choose = (exception: InboxException) => {
     if (chosen === exception.id) {
-      dispatch({ type: "hide-exception" });
+      dispatch({ type: "hide-layer" });
       return;
     }
     dispatch({
-      type: "show-exception",
-      exception: { id: exception.id, highlights: exception.highlights },
+      type: "show-layer",
+      layer: { kind: "exception", id: exception.id, highlights: exception.highlights },
     });
     onShowOnMap();
   };

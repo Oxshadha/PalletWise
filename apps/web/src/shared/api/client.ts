@@ -17,6 +17,8 @@ export type PageContext = Schemas["PageContext"];
 export type Inbox = Schemas["ExceptionsOut"];
 export type InboxException = Schemas["ExceptionOut"];
 export type Acknowledgement = Schemas["AcknowledgementOut"];
+export type Brief = Schemas["BriefOut"];
+export type BriefItem = Schemas["BriefItemOut"];
 
 /** Thrown when the session is missing or has ended; the shell sends the user to sign in. */
 export class SignedOut extends Error {}
@@ -131,6 +133,10 @@ export const sendFeedback = (
     rating,
     comment: comment ?? null,
   });
+
+/** Today's brief for the site: generated on the first request of the site day, then stored. */
+export const fetchBrief = (siteId: string, signal?: AbortSignal) =>
+  getJson<Brief>(`${site(siteId)}/brief`, signal);
 
 export const fetchExceptions = (siteId: string, signal?: AbortSignal) =>
   getJson<Inbox>(`${site(siteId)}/exceptions`, signal);

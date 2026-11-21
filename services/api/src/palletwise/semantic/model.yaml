@@ -123,7 +123,7 @@ results:
   get_order_stockout_risks:
     measures: [shortfall]
     how_computed: >-
-      For each product, the units on open order lines due within {hours} hours (overdue lines
+      For each product, the units on open order lines due {window} (overdue lines
       included) that are not yet allocated, compared with the units available in its pick
       locations, at {as_of}. A product is at risk when the units due are more than the pick
       face holds. Replenishment fixes it when reserve stock covers the shortfall; otherwise it
@@ -133,6 +133,22 @@ results:
     measures: []
     how_computed: >-
       A query of {measures}{by}. Stock as of {as_of}.{period}{narrowed}
+  brief_top_exceptions:
+    measures: []
+    how_computed: >-
+      The open and acknowledged exceptions with the highest impact score at {as_of}, as the
+      inbox ranks them: order lines affected, hours until due and value at risk, each scaled
+      from 0 to 1 and weighted by the site settings.
+  brief_throughput:
+    measures: [demand_units]
+    how_computed: >-
+      Units picked and orders shipped on {yesterday}, the most recent operating day, compared
+      with the average of the 7 operating days before it.
+  brief_data_freshness:
+    measures: []
+    how_computed: >-
+      When each data stream last synced, and how many minutes that is behind the site time
+      {as_of}.
 
 # The query language catalogue (semantic spec 7.2 and 7.3). Every measure, dimension and filter
 # the DSL accepts is listed here; anything else is rejected. The compiler maps each name to one
