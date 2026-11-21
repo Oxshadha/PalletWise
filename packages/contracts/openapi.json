@@ -1717,6 +1717,10 @@
       },
       "SimulationOut": {
         "properties": {
+          "can_control": {
+            "title": "Can Control",
+            "type": "boolean"
+          },
           "data_status": {
             "title": "Data Status",
             "type": "string"
@@ -1781,7 +1785,8 @@
           "time_zone",
           "simulator_time",
           "shifting",
-          "next_morning"
+          "next_morning",
+          "can_control"
         ],
         "title": "SimulationOut",
         "type": "object"

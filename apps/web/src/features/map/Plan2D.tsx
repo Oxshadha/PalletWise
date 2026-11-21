@@ -65,6 +65,7 @@ export function Plan2D({
   ref,
 }: Props) {
   const site = siteBounds(layout);
+  const markedZones = new Set(zoneHighlights.map((h) => h.target_id));
   // The fitted view frames the highlights (or the site). Pan and zoom by the user apply on top of
   // it until the framing changes, for example when a new answer arrives.
   // Labels sit beside the markers, so framed highlights get a wider margin.
@@ -162,15 +163,18 @@ export function Plan2D({
             points={zone.outline.map(([x, y]) => `${String(x)},${String(y)}`).join(" ")}
             className="pw-plan-zone"
           />
-          {/* Map labels are sized in metres (scene geometry), so they scale with the plan. */}
-          <text
-            x={zone.outline[0]?.[0] ?? 0}
-            y={(zone.outline[0]?.[1] ?? 0) - 0.4}
-            className="pw-plan-label"
-            fontSize={PLAN_LABEL_METRES}
-          >
-            {zone.name}
-          </text>
+          {/* Map labels are sized in metres (scene geometry), so they scale with the plan. A
+              highlighted zone's mark carries the label instead, so the two never overlap. */}
+          {!markedZones.has(zone.id) && (
+            <text
+              x={zone.outline[0]?.[0] ?? 0}
+              y={(zone.outline[0]?.[1] ?? 0) - 0.4}
+              className="pw-plan-label"
+              fontSize={PLAN_LABEL_METRES}
+            >
+              {zone.name}
+            </text>
+          )}
         </g>
       ))}
       {cells.map((stack) => {
@@ -218,8 +222,8 @@ export function Plan2D({
             pointerEvents="none"
           >
             <polygon points={zone.outline.map(([x, y]) => `${String(x)},${String(y)}`).join(" ")} />
-            <text x={first[0]} y={first[1] - 1.8} fontSize={PLAN_LABEL_METRES}>
-              Zone {zone.code}
+            <text x={first[0]} y={first[1] - 0.4} fontSize={PLAN_LABEL_METRES}>
+              {zone.name}
             </text>
           </g>
         );

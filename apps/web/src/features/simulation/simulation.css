@@ -1,0 +1,128 @@
+/* Time shift bar, guided demo and bell (slice-4-acceptance step 5). Tokens only. */
+
+/* Its blur makes the bar a stacking context: the bar itself sits above the workspace, so the demo
+   panel inside it is never covered by the panels below. */
+.pw-timebar {
+  position: relative;
+  z-index: 4;
+  display: grid;
+  gap: var(--pw-space-2);
+  margin: 0 var(--pw-space-8) var(--pw-space-3);
+  padding: var(--pw-space-2) var(--pw-space-4);
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-md);
+  background: var(--pw-color-glass);
+  backdrop-filter: blur(var(--pw-blur-glass));
+}
+
+.pw-timebar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pw-space-3);
+}
+
+.pw-timebar-time {
+  margin: 0;
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-timebar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pw-space-2);
+}
+
+.pw-timebar-progress,
+.pw-timebar-error,
+.pw-confirm p {
+  margin: 0;
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-timebar-progress {
+  color: var(--pw-color-text-muted);
+}
+
+.pw-timebar-error {
+  color: var(--pw-color-status-critical);
+}
+
+.pw-confirm {
+  display: grid;
+  gap: var(--pw-space-2);
+  padding: var(--pw-space-3);
+  border-left: 4px solid var(--pw-color-status-warning);
+  border-radius: var(--pw-radius-sm);
+  background: var(--pw-color-surface);
+}
+
+.pw-timebar-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--pw-space-2);
+}
+
+.pw-timebar-picker label {
+  display: grid;
+  gap: var(--pw-space-1);
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-timebar-picker input {
+  padding: var(--pw-space-1) var(--pw-space-2);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-sm);
+  background: var(--pw-color-surface);
+  color: var(--pw-color-text-primary);
+  font: inherit;
+}
+
+.pw-danger {
+  color: var(--pw-color-status-critical);
+}
+
+.pw-danger-fill {
+  background: var(--pw-color-status-critical);
+  color: var(--pw-color-surface);
+}
+
+/* The demo opens over the workspace's right side, below the bar, and never moves the map. */
+.pw-demo {
+  position: absolute;
+  top: calc(100% + var(--pw-space-2));
+  right: 0;
+  z-index: 4;
+  width: min(26rem, calc(100vw - 2 * var(--pw-space-4)));
+  gap: var(--pw-space-3);
+  box-shadow: var(--pw-shadow-popover);
+}
+
+.pw-demo h2,
+.pw-demo p {
+  margin: 0;
+}
+
+.pw-demo-head,
+.pw-demo-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pw-bell {
+  position: relative;
+}
+
+.pw-bell-dot {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.5rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-color-status-critical);
+  box-shadow: 0 0 0 2px var(--pw-color-surface);
+}

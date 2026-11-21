@@ -119,6 +119,7 @@ def test_a_manager_moves_time_and_the_clock_follows_the_ingestion(sim: Env, conn
     sim.sign_in(subject="manager-time")
     before = state(sim)
     assert before["mode"] == "SIMULATED" and before["shifting"] is False
+    assert before["can_control"] is True  # the screens show the time bar
     start = datetime.fromisoformat(before["site_time"])
     moved = shift(sim, {"by": "1h"})
     assert moved.status_code == 200, moved.text
@@ -193,7 +194,8 @@ def test_a_real_site_cannot_move_and_an_outside_site_is_not_found(sim: Env, conn
     sim.sign_in(subject="manager-real", sites=[sim.site.site, real])
     refused = shift(sim, {"by": "1h"}, site=real)
     assert refused.status_code == 409 and refused.json()["code"] == "NOT_SIMULATED"
-    assert sim.client.get(f"/api/sites/{real}/simulation").json()["mode"] == "REAL"
+    real_state = sim.client.get(f"/api/sites/{real}/simulation").json()
+    assert real_state["mode"] == "REAL" and real_state["can_control"] is False
     assert shift(sim, {"by": "1h"}, site=uuid4()).status_code == 404
 
 

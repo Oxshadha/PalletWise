@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from palletwise.api.problems import problem
 from palletwise.api.security import CurrentPrincipal
-from palletwise.api.sites import Reads, authorize_site
+from palletwise.api.sites import Reads, authorize_site, policy_decision
 from palletwise.db.audit_repo import AuditEntry
 from palletwise.db.ids import uuid7
 from palletwise.db.simulation_repo import Reset, reset_site, site_simulation
@@ -129,6 +129,8 @@ class SimulationOut(BaseModel):
     simulator_time: datetime | None  # how far the simulator has emitted; None if unknown
     shifting: bool  # the simulator is ahead of the site: a shift is still being ingested
     next_morning: datetime | None
+    # The viewer holds simulation.control here: the screens show the time bar, the demo and reset.
+    can_control: bool
 
 
 class ShiftIn(BaseModel):
@@ -189,6 +191,10 @@ async def simulation_state(site_id: UUID, request: Request, principal: CurrentPr
     if found is None:
         return problem(404, "NOT_FOUND", "Not found.", current_trace_id())
     simulator_time = None
+    can_control = (
+        found.mode == "SIMULATED"
+        and (await policy_decision(principal, site_id, "simulation.state", reads, CONTROL_SCOPE)).allow
+    )
     if found.mode == "SIMULATED" and found.run_id is not None:
         try:
             state = await asyncio.to_thread(simulator(request).state, found.run_id)
@@ -203,6 +209,7 @@ async def simulation_state(site_id: UUID, request: Request, principal: CurrentPr
         simulator_time=simulator_time,
         shifting=bool(simulator_time and found.site_time and simulator_time > found.site_time),
         next_morning=found.next_morning,
+        can_control=can_control,
     )
 
 

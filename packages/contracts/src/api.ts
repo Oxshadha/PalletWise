@@ -1124,6 +1124,8 @@ export interface components {
         };
         /** SimulationOut */
         SimulationOut: {
+            /** Can Control */
+            can_control: boolean;
             /** Data Status */
             data_status: string;
             /**

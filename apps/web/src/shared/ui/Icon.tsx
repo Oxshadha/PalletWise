@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  Bell,
   Check,
   ChevronDown,
   ChevronUp,
@@ -41,6 +42,7 @@ const ICONS = {
   stop: Square,
   pin: MapPin,
   arrow: ArrowRight,
+  bell: Bell,
   "rotate-left": RotateCcw,
   "rotate-right": RotateCw,
   "tilt-up": ChevronUp,
