@@ -21,6 +21,7 @@ dependencies = [
   "opentelemetry-sdk>=1.45.2",
   "opentelemetry-exporter-otlp-proto-http>=1.45.2",
   "prometheus-client>=0.26.0",
+  "pglast>=7,<8",  # PostgreSQL 17 parser for the governed query guard (ADR 0002)
 ]
 
 [project.scripts]

@@ -827,6 +827,7 @@ dependencies = [
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
+    { name = "pglast" },
     { name = "prometheus-client" },
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic" },
@@ -848,6 +849,7 @@ requires-dist = [
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.45.2" },
     { name = "opentelemetry-sdk", specifier = ">=1.45.2" },
+    { name = "pglast", specifier = ">=7,<8" },
     { name = "prometheus-client", specifier = ">=0.26.0" },
     { name = "psycopg", extras = ["binary", "pool"] },
     { name = "pydantic" },
@@ -889,6 +891,23 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
     { name = "testcontainers", extras = ["postgres"] },
+]
+
+[[package]]
+name = "pglast"
+version = "7.24"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/25/01/78d46a9238627d64573773177bb241903bcd26a6158bfa5838fcaefff928/pglast-7.24.tar.gz", hash = "sha256:45a74abc7151158df0841c49a719f36c0e78a2ec74997ea3a857a29e58b5616d", size = 3439368, upload-time = "2026-11-19T07:07:07.725Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9b/c2/c7028056f15f02d41c9c737e7b19cfcd317995825fdd5b311c3df7c81e85/pglast-7.24-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:dfd332ba5f66987c12d1b8dafc5a69b7d4fada7e734d853ddbe7ac076c6ad8a5", size = 1608184, upload-time = "2026-11-19T07:29:58.197Z" },
+    { url = "https://files.pythonhosted.org/packages/b7/61/4ed4aa463aabfbc7f3b0b6eb83eef0b121676d2bf0286fc8878e09844c92/pglast-7.24-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:b5f95a52465f0da38b5c6e0c7439af23eec100ea370effe63fbce4cc98940bb3", size = 1547633, upload-time = "2026-11-19T07:29:59.955Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/e3/9d30ac32b397d784515662c56bc5d8f31048303494669a66ffe5d32bd6d8/pglast-7.24-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:c6e10cafbf38e21364021d11592ebee1b2e0e144bf09ed145265dafda2fd7e5f", size = 6206648, upload-time = "2026-11-19T07:30:01.571Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/6c/1d40ab9670cba7ee1c2221e4fb37d47f7bd9b27165c2e7f73236cc581588/pglast-7.24-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9986bc3a2d24d6b5f66550e13515f7e877fba634fdbd97955bbf243f1ba1aad9", size = 6306652, upload-time = "2026-11-19T07:30:03.383Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/4f/0aad0dab5d03ceab5d69c3229eaf8d95220afc3679426cafa7f2bdf59a10/pglast-7.24-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:cc61955043896b69fb72eb047d7231ec9a2df20aadd8b8f5f808b8e897f251a9", size = 5992421, upload-time = "2026-11-19T07:30:05.394Z" },
+    { url = "https://files.pythonhosted.org/packages/37/3c/6b1a54395bcf7e8b8acc92509575ed3c2a50caf06f0c5b52946ba92c9726/pglast-7.24-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:5e8526cc0d9b2db517dd376147a35fc471fc6f5d0358579ceb697d1c13bf3d77", size = 6094457, upload-time = "2026-11-19T07:30:07.418Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/e4/67ed127d54f8835802268f91122cb7834d4cd7d8263fabdf837c4fb5edd8/pglast-7.24-cp313-cp313-win32.whl", hash = "sha256:a090cfee6cba0f80c912d2aa97d6d9a0477a94a4361a5d266d5388dc70e81fa1", size = 1317687, upload-time = "2026-11-19T07:30:09.121Z" },
+    { url = "https://files.pythonhosted.org/packages/4f/ff/71406332707f6e25d73a089adc1512242fae8e13f73dc13e8a7b69c4d40a/pglast-7.24-cp313-cp313-win_amd64.whl", hash = "sha256:65b5c1f949c51bbe682cf65af01ebb6bc2f099d6ba114af9605d480b4e74e0bf", size = 1385693, upload-time = "2026-11-19T07:30:10.72Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/3a/790d5684f2b9f3943e98140f5056e0e8cbb7d4ecab46f34f20d86272336f/pglast-7.24-cp313-cp313-win_arm64.whl", hash = "sha256:ae8d070f4b00b47737a5ef03b88dcc44433cfc5f01eadab1d1a6b32485334df5", size = 1305907, upload-time = "2026-11-19T07:30:12.066Z" },
 ]
 
 [[package]]
