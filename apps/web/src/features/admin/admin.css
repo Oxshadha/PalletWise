@@ -1,0 +1,97 @@
+/* Admin panel core. Tokens only. */
+
+.pw-admin {
+  flex: 1;
+  min-height: 0;
+  margin: 0 var(--pw-space-8) var(--pw-space-6);
+  overflow: auto;
+}
+
+.pw-admin-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pw-space-3);
+}
+
+.pw-admin-head h2 {
+  margin: 0;
+}
+
+.pw-admin-section {
+  display: grid;
+  gap: var(--pw-space-3);
+}
+
+.pw-admin-section p {
+  margin: 0;
+}
+
+.pw-admin-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--pw-space-2) var(--pw-space-6);
+  margin: 0;
+}
+
+.pw-admin-facts dt {
+  color: var(--pw-color-text-muted);
+}
+
+.pw-admin-facts dd {
+  margin: 0;
+}
+
+.pw-admin-ok {
+  color: var(--pw-color-status-success);
+}
+
+.pw-admin-off {
+  color: var(--pw-color-status-critical);
+}
+
+.pw-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pw-space-2);
+}
+
+.pw-admin-error {
+  color: var(--pw-color-status-critical);
+}
+
+.pw-admin-scroll {
+  overflow-x: auto;
+}
+
+.pw-admin-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--pw-space-2);
+}
+
+.pw-admin-filters label {
+  display: grid;
+  gap: var(--pw-space-1);
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-admin-filters input,
+.pw-admin-filters select {
+  padding: var(--pw-space-1) var(--pw-space-2);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-sm);
+  background: var(--pw-color-surface);
+  color: var(--pw-color-text-primary);
+  font: inherit;
+}
+
+.pw-admin-filters a {
+  text-decoration: none;
+}
+
+.pw-admin-trace {
+  font-size: var(--pw-font-size-xs);
+}

@@ -2,6 +2,7 @@ import "./app.css";
 
 import { useEffect, useState } from "react";
 
+import { AdminPanel } from "../features/admin/AdminPanel";
 import { CopilotPanel } from "../features/copilot/CopilotPanel";
 import { InboxPanel } from "../features/inbox/InboxPanel";
 import { Search } from "../features/search/SearchBox";
@@ -55,12 +56,13 @@ const THEMES: { value: ThemeChoice; label: string }[] = [
   { value: "system", label: "System" },
 ];
 
-type Panel = "warehouse" | "copilot" | "inbox";
+type Panel = "warehouse" | "copilot" | "inbox" | "admin";
 
 const PANEL_HEADING: Record<Panel, string> = {
   warehouse: "pw-warehouse-title",
   copilot: "pw-copilot-title",
   inbox: "pw-inbox-title",
+  admin: "pw-admin-title",
 };
 
 /** Below this width one panel shows at a time (UX spec 9, app.css). */
@@ -242,6 +244,17 @@ export function App() {
             >
               <Icon name="inbox" size={16} /> Inbox
             </button>
+            {me.role === "admin" && (
+              <button
+                type="button"
+                aria-pressed={panel === "admin"}
+                onClick={() => {
+                  choosePanel("admin");
+                }}
+              >
+                <Icon name="layers" size={16} /> Admin
+              </button>
+            )}
           </nav>
         )}
         <div className="pw-topbar-actions">
@@ -307,7 +320,9 @@ export function App() {
         </main>
       )}
 
-      {me && siteInfo && (
+      {me && siteInfo && panel === "admin" && <AdminPanel />}
+
+      {me && siteInfo && panel !== "admin" && (
         <main className="pw-workspace" data-panel={panel}>
           <MapPanel />
           <CopilotPanel
