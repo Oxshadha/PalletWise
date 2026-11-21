@@ -136,6 +136,26 @@ decline, never an approximate number.
   it, rows, truncation, bytes and duration. The Admin's "Unanswered questions" view also lists
   questions the governed tier answered, so frequent ones can become proper tools.
 
+### 6a. Traceability to the AI agent's identity
+
+Every governed query is attributable to the agent that wrote it and the user it acted for, end to
+end, without trusting anything the model supplies:
+
+- **Delegated identity first.** The tool runs only inside a copilot run that obtained its token by
+  the validated token exchange (identity spec 5): the run's subject is the signed-in user and the
+  exchanged token's client is the copilot. A run without that delegation cannot call the tool.
+- **Agent identity on the audit record.** As for every tool call, `tools.executor` records actor
+  type `AGENT`, the agent id and version, the model, the prompt version, the copilot run id, the
+  user and role it acted for, the scope and the policy decision; the governed record adds the
+  normalized SQL, its hash, the guard verdict, rows, bytes, truncation, duration and the
+  configuration fingerprint (section 7).
+- **The same identity inside the database.** The runner tags the query's transaction with the run
+  (`application_name` and transaction-local settings carrying the agent id and copilot run id, set by
+  the runner, never by the query), so a statement seen in database logs or activity views links
+  back to its agent run, trace and audit record.
+- **One trace.** The guard, the runner and the database call are spans of the run's trace, so the
+  Admin can follow a question from the user, through the agent's decision, to the exact statement.
+
 ### 7. Evaluation and enablement
 
 The tier is on by default for every tenant and the Admin can switch it off (and on again) per
@@ -193,4 +213,6 @@ tested configuration cannot silently become an untested one.
 
 ## Status
 
-Proposed, revision 2, 2026-11-21, after the product owner review: allowlist over the whole tree with privileges that make names unambiguous, declared view semantics and correctness rules (join fan-out, non-additive measures, units), owner-rights views for isolation, response size and pool limits, a semantic-invalidity gate and a configuration fingerprint. Awaiting approval; no code until approved.
+Accepted, 2026-11-21, by the product owner (revision 2 with the product owner's changes: on by
+default, SQL kept to the audit record and the trace, and traceability to the agent's identity,
+section 6a). History: proposed, revision 2, after the product owner review: allowlist over the whole tree with privileges that make names unambiguous, declared view semantics and correctness rules (join fan-out, non-additive measures, units), owner-rights views for isolation, response size and pool limits, a semantic-invalidity gate and a configuration fingerprint.
