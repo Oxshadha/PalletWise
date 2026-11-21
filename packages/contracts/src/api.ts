@@ -333,6 +333,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sites/{site_id}/simulation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Simulation State */
+        get: operations["simulation_state_api_sites__site_id__simulation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/simulation/shift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Shift Time */
+        post: operations["shift_time_api_sites__site_id__simulation_shift_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sites/{site_id}/status": {
         parameters: {
             query?: never;
@@ -950,6 +984,48 @@ export interface components {
          * @enum {string}
          */
         Severity: "info" | "warning" | "critical";
+        /** ShiftIn */
+        ShiftIn: {
+            /** By */
+            by?: ("1h" | "4h" | "1d" | "1w" | "next_morning") | null;
+            /** To */
+            to?: string | null;
+        };
+        /** ShiftOut */
+        ShiftOut: {
+            /**
+             * From Time
+             * Format: date-time
+             */
+            from_time: string;
+            /** Records */
+            records: number;
+            /**
+             * To
+             * Format: date-time
+             */
+            to: string;
+        };
+        /** SimulationOut */
+        SimulationOut: {
+            /** Data Status */
+            data_status: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "SIMULATED" | "REAL";
+            /** Next Morning */
+            next_morning: string | null;
+            /** Shifting */
+            shifting: boolean;
+            /** Simulator Time */
+            simulator_time: string | null;
+            /** Site Time */
+            site_time: string | null;
+            /** Time Zone */
+            time_zone: string;
+        };
         /** SiteGeometry */
         SiteGeometry: {
             /** Code */
@@ -1703,6 +1779,100 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    simulation_state_api_sites__site_id__simulation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulationOut"];
+                };
+            };
+            /** @description NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shift_time_api_sites__site_id__simulation_shift_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShiftIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShiftOut"];
+                };
+            };
+            /** @description FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description NOT_SIMULATED or SIMULATION_BUSY */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SHIFT_REFUSED or VALIDATION_FAILED */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description DATA_NOT_READY or SIMULATOR_UNAVAILABLE */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

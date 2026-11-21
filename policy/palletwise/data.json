@@ -4,6 +4,7 @@
       "inventory.read",
       "orders.read",
       "exception.acknowledge",
+      "simulation.control",
       "proposal.create",
       "proposal.approve",
       "proposal.reject"
@@ -16,7 +17,8 @@
       "admin.settings.manage",
       "admin.audit.read",
       "admin.usage.read",
-      "admin.simulation.control"
+      "admin.simulation.control",
+      "simulation.control"
     ]
   },
   "agent_forbidden_scopes": ["proposal.approve", "proposal.reject"],

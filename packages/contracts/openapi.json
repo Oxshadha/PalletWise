@@ -1527,6 +1527,138 @@
         "title": "Severity",
         "type": "string"
       },
+      "ShiftIn": {
+        "properties": {
+          "by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "1h",
+                  "4h",
+                  "1d",
+                  "1w",
+                  "next_morning"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          }
+        },
+        "title": "ShiftIn",
+        "type": "object"
+      },
+      "ShiftOut": {
+        "properties": {
+          "from_time": {
+            "format": "date-time",
+            "title": "From Time",
+            "type": "string"
+          },
+          "records": {
+            "title": "Records",
+            "type": "integer"
+          },
+          "to": {
+            "format": "date-time",
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_time",
+          "to",
+          "records"
+        ],
+        "title": "ShiftOut",
+        "type": "object"
+      },
+      "SimulationOut": {
+        "properties": {
+          "data_status": {
+            "title": "Data Status",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "SIMULATED",
+              "REAL"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "next_morning": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Morning"
+          },
+          "shifting": {
+            "title": "Shifting",
+            "type": "boolean"
+          },
+          "simulator_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Simulator Time"
+          },
+          "site_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Time"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "data_status",
+          "site_time",
+          "time_zone",
+          "simulator_time",
+          "shifting",
+          "next_morning"
+        ],
+        "title": "SimulationOut",
+        "type": "object"
+      },
       "SiteGeometry": {
         "properties": {
           "code": {
@@ -2670,6 +2802,117 @@
         "summary": "Search",
         "tags": [
           "search"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/simulation": {
+      "get": {
+        "operationId": "simulation_state_api_sites__site_id__simulation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Simulation State",
+        "tags": [
+          "simulation"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/simulation/shift": {
+      "post": {
+        "operationId": "shift_time_api_sites__site_id__simulation_shift_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{8,128}$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShiftIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShiftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "409": {
+            "description": "NOT_SIMULATED or SIMULATION_BUSY"
+          },
+          "422": {
+            "description": "SHIFT_REFUSED or VALIDATION_FAILED"
+          },
+          "503": {
+            "description": "DATA_NOT_READY or SIMULATOR_UNAVAILABLE"
+          }
+        },
+        "summary": "Shift Time",
+        "tags": [
+          "simulation"
         ]
       }
     },
