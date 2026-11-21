@@ -7,6 +7,19 @@ from the warehouse database through governed tools, and the locations it is abou
 One warehouse is simulated end to end: products, zones, racks and bins, customers, orders,
 allocations, picks, receipts and 180 days of stock movements.
 
+![PalletWise, light mode: low-stock answer with its locations on the 3D map](docs/screenshots/home-light.jpg)
+
+![PalletWise, dark mode: where SKU-102 is stored, both locations pinned](docs/screenshots/home-dark.jpg)
+
+<p>
+  <img src="docs/screenshots/signin-light.jpg" alt="Sign-in page, light mode" width="49%">
+  <img src="docs/screenshots/signin-dark.jpg" alt="Sign-in page, dark mode" width="49%">
+</p>
+
+![Admin panel: token budget, cost, the copilot's status and kill switch](docs/screenshots/admin-light.jpg)
+
+## Architecture
+
 ![PalletWise system architecture](docs/architecture/containers.svg)
 
 ## Run it (Windows, macOS, Linux)
