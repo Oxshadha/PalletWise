@@ -133,7 +133,6 @@ not wired in: each would need its own adapter and its own run of the evaluation 
 | Specific tools | Low stock, fast movers, dead stock, slow stock in prime locations, zone summary, capacity hotspots, delayed orders, stockout risks, order status, open exceptions, product locations, bin contents | Picks the tool |
 | Query language | `query_inventory`: approved measures, dimensions and filters, compiled and validated by code | Picks measures and filters |
 | Multi-step | Up to five tool calls; follow-ups on the previous answer's identifiers | Plans the calls |
-| Governed SQL | Off: failed its evaluation gate (see below) | Would write one read-only `SELECT` |
 | Honest decline | Says what it cannot answer and offers two or three things it can | None |
 
 ## Data path
@@ -151,7 +150,6 @@ refused for it.
   table and a movement ledger.
 - **`sem` schema:** the semantic layer. Every business calculation lives here, once. The map, the
   copilot, the brief and the inbox all read it, and an evaluation check proves they agree.
-- **`gq` schema:** read-only governed views for the governed SQL tier.
 - **The seed is deterministic.** The same seed always produces the same data; its dataset hash is
   checked against `services/simulator/golden/` on every load.
 
@@ -199,7 +197,7 @@ directly.
 | Identity | Keycloak (OIDC). The API is a backend for frontend: sessions are server side and the browser holds an opaque cookie. Passwords stay with the identity provider; the sign-in page is a PalletWise Keycloak theme. |
 | The agent's identity | Token exchange: the copilot acts as itself on behalf of the user, with the intersection of the user's and the agent's scopes. Every action is traceable to agent id and version, run and user. |
 | Authorization | Open Policy Agent decides every request and every tool call. |
-| Data isolation | Forced row-level security; one database role per write path (`pw_app`, `pw_ingest`, `pw_agent_read`, `pw_evaluator`, `pw_brief`, `pw_admin_read`, `pw_query_read` and more). None can bypass RLS. |
+| Data isolation | Forced row-level security; one database role per write path (`pw_app`, `pw_ingest`, `pw_agent_read`, `pw_evaluator`, `pw_brief`, `pw_admin_read` and more). None can bypass RLS. |
 | The model's reach | Tools only, through `tools.executor`. No credentials, no database access, no SQL in the live product. Inputs are length limited and screened; outputs are grounded; markdown is sanitized under a strict content security policy. |
 | Kill switch and budget | The Admin suspends the copilot at once. A daily token budget degrades answers to templates instead of failing. |
 | Audit | Every tool call, refusal, time shift, reset and admin change, in a hash-chained log. |
@@ -219,7 +217,6 @@ Architecture decisions are in [`docs/adr/`](docs/adr/); slice decisions are in e
 | One database role per write path, forced RLS | A bug in one path cannot write elsewhere or across tenants |
 | Simulator behind a connector, not a seed script | The same path a real WMS uses; time and scenarios are real data |
 | ADR 0001: one gate for quality, latency and cost together | Improving one never hides a regression in another |
-| ADR 0002: governed SQL as a last-resort layer, behind an evaluation gate | More questions answered without giving the model the database |
 | Fast path before the model | Known questions answer in milliseconds and work with no model at all |
 | Working sets carry provenance and re-query current data (Slice 2) | Follow-ups never answer from stale values |
 | Input classifier is an extra layer, never the boundary (Slice 2) | A classifier can be wrong; OPA, validation and grounding are the boundary |
@@ -230,29 +227,6 @@ Architecture decisions are in [`docs/adr/`](docs/adr/); slice decisions are in e
 | The simulator owns time; a time shift, not a running clock (Slice 4) | The presenter controls the demo; nothing changes under them |
 | Reset and time controls for the Manager, on simulated sites only (Slice 4) | A demo recovers from one screen; a real site has nothing to reset |
 | One operation at a time per site (Slice 4) | A shift, a scenario step and a reset can never interleave |
-| Governed tier stays off until its gate passes (Slice 5) | An unevaluated tool measurably degraded routing and latency |
-
-## Governed SQL tier: built, evaluated, failed its gate
-
-The sixth answer layer (ADR 0002) lets the model write one read-only `SELECT` over governed views
-for questions no tool covers. It is built and tested: a PostgreSQL 17 parser guard (`pglast`) with
-a whole-tree allowlist and declared join and measure rules, a read-only role limited to the `gq`
-views, hard limits (2 s, 200 rows, 20 columns, 256 KB, a cost cap), an admin switch, and audit
-records with the SQL hash and the agent's identity.
-
-The rule is that the model is offered the tool only after it passes the evaluation gate for the
-deployed model and prompt. **It did not pass.** Over four gate runs on Gemini Flash-Lite:
-
-| Measure | Result | Gate |
-|---|---|---|
-| Correct answers on governed questions | 0.73 | 0.90 |
-| Invalid queries refused | 0.978 | 1.0 |
-| Prompt injection, grounding, routing safety | 100% | 100% |
-
-Safety held; SQL accuracy did not. The cause is the model's SQL accuracy on this catalog, not the
-guard or the architecture. The tier is therefore **off** (`semantic/governed_gate.json` lists no
-passed configuration), and the copilot answers through the five other layers. It can be retried
-with a stronger model or a revised prompt; a pass is recorded in the gate file with its report.
 
 ## Quality
 

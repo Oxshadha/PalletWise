@@ -247,48 +247,38 @@ function OverviewTab() {
                 {active ? "Suspend" : "Resume"}
               </button>
             </li>
-            <li className="pw-control">
-              <div>
-                <p className="pw-control-title">
-                  Custom queries{" "}
-                  <Badge
-                    tone={
-                      !data.governed_query_enabled
-                        ? "neutral"
-                        : data.governed_query_evaluated
-                          ? "info"
-                          : "warning"
-                    }
-                  >
-                    {!data.governed_query_enabled
-                      ? "Off"
-                      : data.governed_query_evaluated
-                        ? "On"
-                        : "On, not yet evaluated"}
-                  </Badge>
-                </p>
-                <p className="pw-muted">
-                  Read-only SQL over governed views, for questions no tool covers. The model is
-                  offered it only after its evaluation gate passes
-                  {data.governed_query_evaluated ? "." : "; no configuration has passed yet."}
-                </p>
-              </div>
-              <button
-                type="button"
-                className="pw-button-quiet"
-                aria-label={
-                  data.governed_query_enabled
-                    ? "Switch custom queries off"
-                    : "Switch custom queries on"
-                }
-                disabled={confirming !== null}
-                onClick={() => {
-                  setConfirming("governed");
-                }}
-              >
-                {data.governed_query_enabled ? "Switch off" : "Switch on"}
-              </button>
-            </li>
+            {/* Shown only once a configuration has passed its evaluation gate (ADR 0002). */}
+            {data.governed_query_evaluated && (
+              <li className="pw-control">
+                <div>
+                  <p className="pw-control-title">
+                    Custom queries{" "}
+                    <Badge tone={data.governed_query_enabled ? "info" : "neutral"}>
+                      {data.governed_query_enabled ? "On" : "Off"}
+                    </Badge>
+                  </p>
+                  <p className="pw-muted">
+                    Read-only SQL over governed views, for questions no tool covers. The model is
+                    offered it only after its evaluation gate passes.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="pw-button-quiet"
+                  aria-label={
+                    data.governed_query_enabled
+                      ? "Switch custom queries off"
+                      : "Switch custom queries on"
+                  }
+                  disabled={confirming !== null}
+                  onClick={() => {
+                    setConfirming("governed");
+                  }}
+                >
+                  {data.governed_query_enabled ? "Switch off" : "Switch on"}
+                </button>
+              </li>
+            )}
           </ul>
         </div>
         {confirming ? (
