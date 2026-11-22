@@ -231,8 +231,8 @@ function OverviewTab() {
                   </Badge>
                 </p>
                 <p className="pw-muted">
-                  Suspending stops every new answer at once. Known questions still answer from
-                  templates, with no model.
+                  Suspending stops every copilot answer at once, for everyone in your organisation,
+                  until you resume it.
                 </p>
               </div>
               <button
