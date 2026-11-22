@@ -21,6 +21,7 @@ import {
 import { formatNumber } from "../../shared/format";
 import { Badge, type BadgeTone } from "../../shared/ui/Badge";
 import { Icon, type IconName } from "../../shared/ui/Icon";
+import { CostChart } from "./CostChart";
 
 type Tab = "overview" | "usage" | "unanswered" | "audit";
 
@@ -137,35 +138,12 @@ function Donut({ share, label, value }: { share: number; label: string; value: s
   );
 }
 
-/** One bar per day, scaled to the largest; empty days keep their place. */
-function BarStrip({ days, label }: { days: { day: string; value: number }[]; label: string }) {
-  const top = Math.max(...days.map((d) => d.value), 0);
-  if (days.length === 0) return <p className="pw-muted">No model calls in this period.</p>;
-  return (
-    <div
-      className="pw-bars"
-      role="img"
-      aria-label={`${label}: ${days.map((d) => `${d.day} ${d.value.toFixed(4)}`).join(", ")}`}
-    >
-      {days.map((d) => (
-        <span key={d.day} className="pw-bar" title={`${d.day}: ${d.value.toFixed(4)} USD`}>
-          <span
-            className="pw-bar-fill"
-            style={{ height: `${String(top ? (d.value / top) * 100 : 0)}%` }}
-          />
-        </span>
-      ))}
-    </div>
-  );
-}
-
-/** Estimated cost per day, from the days the API returned (oldest first). */
-function costPerDay(rows: UsageRow[]): { day: string; value: number }[] {
-  const byDay = new Map<string, number>();
-  for (const r of rows) byDay.set(r.day, (byDay.get(r.day) ?? 0) + r.cost_estimated);
-  return [...byDay.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([day, value]) => ({ day, value }));
+/** A share as people read it: 0.2% rather than 0% for a small but real use. */
+function percent(share: number): string {
+  if (share <= 0) return "0%";
+  if (share < 0.001) return "under 0.1%";
+  if (share < 0.1) return `${(share * 100).toFixed(1)}%`;
+  return `${String(Math.round(share * 100))}%`;
 }
 
 function OverviewTab() {
@@ -215,39 +193,104 @@ function OverviewTab() {
       <div className="pw-admin-cards">
         <section className="pw-admin-card" aria-labelledby="pw-budget-title">
           <h3 id="pw-budget-title">Daily token budget</h3>
-          <Donut share={share} label="used today" value={`${String(Math.round(share * 100))}%`} />
+          <Donut share={share} label="used today" value={percent(share)} />
+          <p className="pw-muted pw-donut-note">
+            {formatNumber(data.used_tokens_today)} of {formatNumber(data.daily_token_budget)}{" "}
+            tokens. When the budget is spent, answers use templates instead of failing.
+          </p>
         </section>
         <section className="pw-admin-card" aria-labelledby="pw-cost-title">
           <h3 id="pw-cost-title">Estimated cost per day</h3>
-          <p className="pw-muted">
-            Last 14 days, in USD; provider-reported tokens times the configured prices.
+          <CostChart rows={usage.data ?? []} />
+          <p className="pw-muted pw-chart-note">
+            Provider-reported tokens times the configured prices. The table is under Usage and cost.
           </p>
-          <BarStrip days={costPerDay(usage.data ?? [])} label="Estimated cost per day" />
         </section>
       </div>
 
       <section className="pw-admin-card" aria-labelledby="pw-controls-title">
         <h3 id="pw-controls-title">Copilot</h3>
-        <dl className="pw-admin-facts">
-          <dt>Status</dt>
-          <dd>
-            <Badge tone={active ? "success" : "critical"}>{active ? "Active" : "Suspended"}</Badge>
-          </dd>
-          <dt>Custom queries</dt>
-          <dd>
-            <Badge tone={data.governed_query_enabled ? "info" : "neutral"}>
-              {data.governed_query_enabled ? "On" : "Off"}
-            </Badge>
-          </dd>
-          <dt>Agent</dt>
-          <dd>
-            {data.id}, version {data.version}
-          </dd>
-          <dt>Model</dt>
-          <dd>{data.primary_model}</dd>
-          <dt>Prompt version</dt>
-          <dd>{data.prompt_version}</dd>
-        </dl>
+        <div className="pw-copilot-grid">
+          <dl className="pw-admin-facts">
+            <dt>Agent</dt>
+            <dd>
+              {data.id}, version {data.version}
+            </dd>
+            <dt>Model</dt>
+            <dd>{data.primary_model}</dd>
+            <dt>Prompt version</dt>
+            <dd>{data.prompt_version}</dd>
+          </dl>
+          <ul className="pw-control-list">
+            <li className="pw-control">
+              <div>
+                <p className="pw-control-title">
+                  Copilot{" "}
+                  <Badge tone={active ? "success" : "critical"}>
+                    {active ? "Active" : "Suspended"}
+                  </Badge>
+                </p>
+                <p className="pw-muted">
+                  Suspending stops every new answer at once. Known questions still answer from
+                  templates, with no model.
+                </p>
+              </div>
+              <button
+                type="button"
+                className={active ? "pw-button-quiet pw-danger" : "pw-button"}
+                aria-label={active ? "Suspend the copilot" : "Resume the copilot"}
+                disabled={confirming !== null}
+                onClick={() => {
+                  setConfirming("status");
+                }}
+              >
+                {active ? "Suspend" : "Resume"}
+              </button>
+            </li>
+            <li className="pw-control">
+              <div>
+                <p className="pw-control-title">
+                  Custom queries{" "}
+                  <Badge
+                    tone={
+                      !data.governed_query_enabled
+                        ? "neutral"
+                        : data.governed_query_evaluated
+                          ? "info"
+                          : "warning"
+                    }
+                  >
+                    {!data.governed_query_enabled
+                      ? "Off"
+                      : data.governed_query_evaluated
+                        ? "On"
+                        : "On, not yet evaluated"}
+                  </Badge>
+                </p>
+                <p className="pw-muted">
+                  Read-only SQL over governed views, for questions no tool covers. The model is
+                  offered it only after its evaluation gate passes
+                  {data.governed_query_evaluated ? "." : "; no configuration has passed yet."}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="pw-button-quiet"
+                aria-label={
+                  data.governed_query_enabled
+                    ? "Switch custom queries off"
+                    : "Switch custom queries on"
+                }
+                disabled={confirming !== null}
+                onClick={() => {
+                  setConfirming("governed");
+                }}
+              >
+                {data.governed_query_enabled ? "Switch off" : "Switch on"}
+              </button>
+            </li>
+          </ul>
+        </div>
         {confirming ? (
           <div className="pw-confirm" role="alertdialog" aria-label="Confirm">
             <p>
@@ -286,30 +329,7 @@ function OverviewTab() {
               </button>
             </div>
           </div>
-        ) : (
-          <div className="pw-admin-actions">
-            <button
-              type="button"
-              className={active ? "pw-button-quiet pw-danger" : "pw-button"}
-              onClick={() => {
-                setConfirming("status");
-              }}
-            >
-              {active ? "Suspend the copilot" : "Resume the copilot"}
-            </button>
-            <button
-              type="button"
-              className="pw-button-quiet"
-              onClick={() => {
-                setConfirming("governed");
-              }}
-            >
-              {data.governed_query_enabled
-                ? "Switch custom queries off"
-                : "Switch custom queries on"}
-            </button>
-          </div>
-        )}
+        ) : null}
         {problem && <Failed message={problem} />}
       </section>
     </div>
@@ -445,6 +465,8 @@ function UnansweredTab() {
   );
 }
 
+const PAGE_SIZE = 25;
+
 const FILTERS = [
   { key: "user", label: "User" },
   { key: "agent", label: "Agent" },
@@ -458,6 +480,10 @@ function AuditTab() {
   const load = useCallback((signal: AbortSignal) => fetchAudit(applied, signal), [applied]);
   const { data, error } = useLoad<AuditRow[]>(load);
   const query = auditQuery(applied);
+  const [page, setPage] = useState(0);
+  const pages = Math.max(1, Math.ceil((data?.length ?? 0) / PAGE_SIZE));
+  const current = Math.min(page, pages - 1);
+  const rows = (data ?? []).slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
   return (
     <div className="pw-admin-section">
       <form
@@ -465,6 +491,7 @@ function AuditTab() {
         onSubmit={(event) => {
           event.preventDefault();
           setApplied({ ...draft });
+          setPage(0);
         }}
       >
         {FILTERS.map((f) => (
@@ -502,9 +529,9 @@ function AuditTab() {
       {data && (
         <>
           <p className="pw-muted" role="status">
-            {data.length === 500
-              ? "The newest 500 entries; narrow the filters to see older ones."
-              : `${String(data.length)} entries, newest first.`}
+            {data.length === 0
+              ? "No entries match these filters."
+              : `Entries ${String(current * PAGE_SIZE + 1)} to ${String(current * PAGE_SIZE + rows.length)} of ${String(data.length)}, newest first.${data.length === 500 ? " The newest 500 are shown; narrow the filters to see older ones." : ""}`}
           </p>
           <div className="pw-admin-scroll">
             <table className="pw-table">
@@ -522,7 +549,7 @@ function AuditTab() {
                 </tr>
               </thead>
               <tbody>
-                {data.map((r) => (
+                {rows.map((r) => (
                   <tr key={`${r.trace_id}-${r.occurred_at}-${r.action}-${r.tool ?? ""}`}>
                     <td>{when(r.occurred_at)}</td>
                     <td>{r.actor_type.toLowerCase()}</td>
@@ -553,6 +580,33 @@ function AuditTab() {
               </tbody>
             </table>
           </div>
+          {pages > 1 && (
+            <nav className="pw-pager" aria-label="Audit log pages">
+              <button
+                type="button"
+                className="pw-button-quiet"
+                disabled={current === 0}
+                onClick={() => {
+                  setPage(current - 1);
+                }}
+              >
+                Previous
+              </button>
+              <span className="pw-muted">
+                Page {current + 1} of {pages}
+              </span>
+              <button
+                type="button"
+                className="pw-button-quiet"
+                disabled={current >= pages - 1}
+                onClick={() => {
+                  setPage(current + 1);
+                }}
+              >
+                Next
+              </button>
+            </nav>
+          )}
         </>
       )}
     </div>

@@ -33,6 +33,8 @@ def test_only_the_admin_reads_the_panel(env: Env) -> None:
     agent = env.client.get("/api/admin/agent")
     assert agent.status_code == 200, agent.text
     assert agent.json()["id"] == "copilot" and agent.json()["status"] == "ACTIVE"
+    # No configuration has passed the governed gate: the switch alone does not offer the tool.
+    assert agent.json()["governed_query_evaluated"] is False
     assert env.client.get("/api/admin/usage?days=7").status_code == 200
 
 

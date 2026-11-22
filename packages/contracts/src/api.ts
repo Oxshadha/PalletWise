@@ -622,6 +622,8 @@ export interface components {
             daily_token_budget: number;
             /** Governed Query Enabled */
             governed_query_enabled: boolean;
+            /** Governed Query Evaluated */
+            governed_query_evaluated: boolean;
             /** Id */
             id: string;
             /** Primary Model */

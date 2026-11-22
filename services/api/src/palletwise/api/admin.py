@@ -26,6 +26,7 @@ from palletwise.auth.principal import Principal
 from palletwise.db import admin_repo
 from palletwise.db.audit_repo import AuditEntry
 from palletwise.db.simulation_repo import site_simulation
+from palletwise.governed import tool as governed
 from palletwise.telemetry.tracing import current_trace_id
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -58,6 +59,8 @@ class AgentOut(BaseModel):
     daily_token_budget: int
     used_tokens_today: int
     governed_query_enabled: bool  # custom queries on (ADR 0002); they also need a passed gate
+    # True when a configuration has passed the evaluation gate, so the model is offered the tool.
+    governed_query_evaluated: bool
 
 
 class StatusIn(BaseModel):
@@ -82,7 +85,7 @@ async def get_agent(principal: CurrentPrincipal, reads: Reads) -> Any:
     found = await asyncio.to_thread(admin_repo.agent, principal.tenant, AGENT, day)
     if found is None:
         return problem(404, "NOT_FOUND", "Not found.", current_trace_id())
-    return AgentOut(**found)
+    return AgentOut(**found, governed_query_evaluated=bool(governed.passed_fingerprints()))
 
 
 @router.put("/agent/status", response_model=StatusOut)

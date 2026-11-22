@@ -68,6 +68,10 @@
             "title": "Governed Query Enabled",
             "type": "boolean"
           },
+          "governed_query_evaluated": {
+            "title": "Governed Query Evaluated",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -105,7 +109,8 @@
           "prompt_version",
           "daily_token_budget",
           "used_tokens_today",
-          "governed_query_enabled"
+          "governed_query_enabled",
+          "governed_query_evaluated"
         ],
         "title": "AgentOut",
         "type": "object"

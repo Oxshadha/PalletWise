@@ -12,6 +12,7 @@ let agent: AdminAgent = {
   daily_token_budget: 2000000,
   used_tokens_today: 1234,
   governed_query_enabled: true,
+  governed_query_evaluated: false,
 };
 const setAgentStatus = vi.fn((status: "ACTIVE" | "SUSPENDED") => {
   agent = { ...agent, status };
