@@ -94,10 +94,15 @@ class AuditFilter:
 
 
 AUDIT_COLUMNS = (
-    "occurred_at", "actor_type", "user_subject", "user_role", "agent_id", "agent_version", "model",
-    "prompt_version", "run_id", "action", "scope", "tool", "decision", "deny_reasons", "outcome",
-    "row_count", "latency_ms", "cost_estimated", "trace_id", "parameters",
+    "occurred_at", "actor_type", "user_subject", "user_name", "user_role", "agent_id",
+    "agent_version", "model", "prompt_version", "run_id", "action", "scope", "tool", "decision",
+    "deny_reasons", "outcome", "row_count", "latency_ms", "cost_estimated", "trace_id",
+    "parameters",
 )  # fmt: skip
+
+# The display name comes from the user directory (the sign-in id stays the record); every other
+# column is the audit event's own.
+_SELECT = {c: "d.display_name AS user_name" if c == "user_name" else f"a.{c}" for c in AUDIT_COLUMNS}
 
 
 def audit(tenant: UUID, f: AuditFilter) -> list[dict[str, Any]]:
@@ -110,13 +115,14 @@ def audit(tenant: UUID, f: AuditFilter) -> list[dict[str, Any]]:
         ("action", f.action, "="), ("decision", f.decision, "="),
     ):  # fmt: skip
         if value is not None:
-            where.append(f"{column} {op} %s")  # column and operator from the fixed list above
+            where.append(f"a.{column} {op} %s")  # column and operator from the fixed list above
             params.append(value)
     # Built only from the fixed column list and the fixed conditions above; values are bound.
     query = cast(
         LiteralString,
-        f"SELECT {', '.join(AUDIT_COLUMNS)} FROM pw.audit_event"  # noqa: S608
-        f" WHERE {' AND '.join(where)} ORDER BY seq DESC LIMIT {AUDIT_LIMIT}",
+        f"SELECT {', '.join(_SELECT[c] for c in AUDIT_COLUMNS)} FROM pw.audit_event a"  # noqa: S608
+        " LEFT JOIN pw.user_directory d ON d.tenant_id = a.tenant_id AND d.subject = a.user_subject"
+        f" WHERE {' AND '.join(where)} ORDER BY a.seq DESC LIMIT {AUDIT_LIMIT}",
     )
     return _rows(tenant, query, tuple(params))
 

@@ -80,9 +80,9 @@ function Failed({ message }: { message: string }) {
 
 function outcomeTone(value: string | null | undefined): BadgeTone {
   const v = (value ?? "").toUpperCase();
-  // Green: passed. Blue: an answer. Violet: a change was made. Amber: declined or limited. Red: refused or failed.
-  if (["OK", "ALLOW"].includes(v)) return "success";
-  if (v === "ANSWER") return "info";
+  // Palette colors only. Green: passed or answered. Blue: a change was made. Amber: declined or
+  // limited. Red: refused or failed. Grey: a template or no outcome. The icon tells them apart too.
+  if (["OK", "ALLOW", "ANSWER"].includes(v)) return "success";
   if (["CHANGED", "SHIFTED", "STAGED", "RESET", "RAN"].includes(v)) return "action";
   if (["DENY", "DENIED", "ERROR", "FAILED", "REFUSED"].includes(v)) return "critical";
   if (["DECLINE", "BUSY", "VALIDATION_FAILED", "RATE_LIMITED", "NO_RESULTS", "MIXED"].includes(v))
@@ -334,13 +334,98 @@ function OverviewTab() {
   );
 }
 
+const PAGE_SIZE = 25;
+
+/** The rows of one page, and the page the controls show (kept in range when the rows change). */
+function usePaging<T>(items: readonly T[]) {
+  const [page, setPage] = useState(0);
+  const pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const current = Math.min(page, pages - 1);
+  const rows = items.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
+  return { rows, current, pages, setPage };
+}
+
+/** 1 2 3 … 9 10: the first and last page, the current one and its neighbours. */
+function pageItems(current: number, pages: number): (number | null)[] {
+  const wanted = new Set([0, pages - 1, current - 1, current, current + 1]);
+  const items: (number | null)[] = [];
+  let previous = -1;
+  for (const n of [...wanted].filter((n) => n >= 0 && n < pages).sort((a, b) => a - b)) {
+    if (n - previous > 1) items.push(null);
+    items.push(n);
+    previous = n;
+  }
+  return items;
+}
+
+/** Page controls under a table, always shown: arrows at the ends, numbered pages between. */
+function Pager({
+  current,
+  pages,
+  label,
+  onPage,
+}: {
+  current: number;
+  pages: number;
+  label: string;
+  onPage: (page: number) => void;
+}) {
+  return (
+    <nav className="pw-pager" aria-label={label}>
+      <button
+        type="button"
+        className="pw-page"
+        aria-label="Previous page"
+        disabled={current === 0}
+        onClick={() => {
+          onPage(current - 1);
+        }}
+      >
+        <Icon name="chevron-left" size={16} />
+      </button>
+      {pageItems(current, pages).map((n, i) =>
+        n === null ? (
+          <span key={`gap-${String(i)}`} className="pw-pager-gap" aria-hidden="true">
+            …
+          </span>
+        ) : (
+          <button
+            key={n}
+            type="button"
+            className="pw-page"
+            aria-label={`Page ${String(n + 1)}`}
+            aria-current={n === current ? "page" : undefined}
+            onClick={() => {
+              onPage(n);
+            }}
+          >
+            {n + 1}
+          </button>
+        ),
+      )}
+      <button
+        type="button"
+        className="pw-page"
+        aria-label="Next page"
+        disabled={current >= pages - 1}
+        onClick={() => {
+          onPage(current + 1);
+        }}
+      >
+        <Icon name="chevron-right" size={16} />
+      </button>
+    </nav>
+  );
+}
+
 function UsageTab() {
   const [days, setDays] = useState(7);
   const load = useCallback((signal: AbortSignal) => fetchUsage(days, signal), [days]);
   const { data, error } = useLoad<UsageRow[]>(load);
   const total = (data ?? []).reduce((sum, r) => sum + r.cost_estimated, 0);
+  const paging = usePaging(data ?? []);
   return (
-    <div className="pw-admin-section">
+    <div className="pw-admin-section pw-admin-fill">
       <div className="pw-segmented" role="group" aria-label="Period">
         {[1, 7, 30].map((d) => (
           <button
@@ -393,7 +478,7 @@ function UsageTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.map((r) => (
+                  {paging.rows.map((r) => (
                     <tr key={`${r.day}-${r.model}-${r.purpose}`}>
                       <td>{r.day}</td>
                       <td>{r.model}</td>
@@ -410,6 +495,12 @@ function UsageTab() {
               </table>
             </div>
           )}
+          <Pager
+            current={paging.current}
+            pages={paging.pages}
+            label="Usage pages"
+            onPage={paging.setPage}
+          />
         </>
       )}
     </div>
@@ -419,12 +510,13 @@ function UsageTab() {
 function UnansweredTab() {
   const load = useCallback((signal: AbortSignal) => fetchUnanswered(30, signal), []);
   const { data, error } = useLoad<UnansweredRow[]>(load);
+  const paging = usePaging(data ?? []);
   if (error) return <Failed message={error} />;
   if (!data) return <p className="pw-muted">Loading.</p>;
   if (data.length === 0)
     return <p className="pw-muted">Every question in the last 30 days was answered.</p>;
   return (
-    <div className="pw-admin-section">
+    <div className="pw-admin-section pw-admin-fill">
       <p className="pw-muted">
         Questions the copilot declined or could not answer in the last 30 days, most frequent first.
         Frequent ones are candidates for a new tool.
@@ -442,7 +534,7 @@ function UnansweredTab() {
             </tr>
           </thead>
           <tbody>
-            {data.map((r) => (
+            {paging.rows.map((r) => (
               <tr key={r.question}>
                 <td>{r.question}</td>
                 <td className="pw-num">{formatNumber(r.times)}</td>
@@ -459,11 +551,15 @@ function UnansweredTab() {
           </tbody>
         </table>
       </div>
+      <Pager
+        current={paging.current}
+        pages={paging.pages}
+        label="Unanswered pages"
+        onPage={paging.setPage}
+      />
     </div>
   );
 }
-
-const PAGE_SIZE = 25;
 
 type AuditGroup = AuditRow & { count: number };
 
@@ -496,31 +592,16 @@ function groupAudit(rows: AuditRow[]): AuditGroup[] {
   return groups;
 }
 
-/** 1 2 3 … 9 10: the first and last page, the current one and its neighbours. */
-function pageItems(current: number, pages: number): (number | null)[] {
-  const wanted = new Set([0, pages - 1, current - 1, current, current + 1]);
-  const items: (number | null)[] = [];
-  let previous = -1;
-  for (const n of [...wanted].filter((n) => n >= 0 && n < pages).sort((a, b) => a - b)) {
-    if (n - previous > 1) items.push(null);
-    items.push(n);
-    previous = n;
-  }
-  return items;
-}
-
 function AuditTab() {
   const [applied, setApplied] = useState<Record<string, string>>({});
   const load = useCallback((signal: AbortSignal) => fetchAudit(applied, signal), [applied]);
   const { data, error } = useLoad<AuditRow[]>(load);
   const query = auditQuery(applied);
-  const [page, setPage] = useState(0);
   const grouped = useMemo(() => groupAudit(data ?? []), [data]);
-  const pages = Math.max(1, Math.ceil(grouped.length / PAGE_SIZE));
-  const current = Math.min(page, pages - 1);
-  const rows = grouped.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
+  const paging = usePaging(grouped);
+  const { rows, current, pages, setPage } = paging;
   return (
-    <div className="pw-admin-section">
+    <div className="pw-admin-section pw-admin-fill">
       <div className="pw-admin-toolbar">
         <label>
           <span>Decision</span>
@@ -567,7 +648,10 @@ function AuditTab() {
                   <tr key={`${r.trace_id}-${r.occurred_at}-${r.action}-${r.tool ?? ""}`}>
                     <td>{when(r.occurred_at)}</td>
                     <td title={r.user_subject ?? undefined}>
-                      {roleLabel(r.user_role) ?? r.user_subject?.slice(0, 8) ?? ""}
+                      {r.user_name ?? roleLabel(r.user_role) ?? r.user_subject?.slice(0, 8) ?? ""}
+                      {r.user_name && r.user_role && (
+                        <span className="pw-muted"> ({roleLabel(r.user_role)})</span>
+                      )}
                     </td>
                     <td>
                       {r.agent_id
@@ -595,52 +679,7 @@ function AuditTab() {
               </tbody>
             </table>
           </div>
-          {pages > 1 && (
-            <nav className="pw-pager" aria-label="Audit log pages">
-              <button
-                type="button"
-                className="pw-page"
-                aria-label="Previous page"
-                disabled={current === 0}
-                onClick={() => {
-                  setPage(current - 1);
-                }}
-              >
-                <Icon name="chevron-left" size={16} />
-              </button>
-              {pageItems(current, pages).map((n, i) =>
-                n === null ? (
-                  <span key={`gap-${String(i)}`} className="pw-pager-gap" aria-hidden="true">
-                    …
-                  </span>
-                ) : (
-                  <button
-                    key={n}
-                    type="button"
-                    className="pw-page"
-                    aria-label={`Page ${String(n + 1)}`}
-                    aria-current={n === current ? "page" : undefined}
-                    onClick={() => {
-                      setPage(n);
-                    }}
-                  >
-                    {n + 1}
-                  </button>
-                ),
-              )}
-              <button
-                type="button"
-                className="pw-page"
-                aria-label="Next page"
-                disabled={current >= pages - 1}
-                onClick={() => {
-                  setPage(current + 1);
-                }}
-              >
-                <Icon name="chevron-right" size={16} />
-              </button>
-            </nav>
-          )}
+          <Pager current={current} pages={pages} label="Audit log pages" onPage={setPage} />
         </>
       )}
     </div>
@@ -671,10 +710,12 @@ export function AdminPanel() {
           ))}
         </div>
       </header>
-      {tab === "overview" && <OverviewTab />}
-      {tab === "usage" && <UsageTab />}
-      {tab === "unanswered" && <UnansweredTab />}
-      {tab === "audit" && <AuditTab />}
+      <div className="pw-admin-body">
+        {tab === "overview" && <OverviewTab />}
+        {tab === "usage" && <UsageTab />}
+        {tab === "unanswered" && <UnansweredTab />}
+        {tab === "audit" && <AuditTab />}
+      </div>
     </main>
   );
 }

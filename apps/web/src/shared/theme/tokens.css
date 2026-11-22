@@ -74,7 +74,6 @@
   --pw-color-status-warning: #b45309;
   --pw-color-status-critical: #c62828;
   --pw-color-status-success: #15803d;
-  --pw-color-status-action: #5b30d6;
 
   /* ---- Typography: light display type for titles and numbers, quiet small labels */
   --pw-font-family:
@@ -195,7 +194,6 @@
   --pw-color-status-warning: #f59e0b;
   --pw-color-status-critical: #f87171;
   --pw-color-status-success: #4ade80;
-  --pw-color-status-action: #a78bfa;
 
   --pw-shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
   --pw-shadow-raised:

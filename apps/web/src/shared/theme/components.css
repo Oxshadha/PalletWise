@@ -181,7 +181,8 @@ a {
 }
 
 .pw-segmented {
-  display: flex;
+  display: inline-flex;
+  align-self: flex-start;
   gap: var(--pw-space-1);
   padding: var(--pw-space-1);
   border: 1px solid var(--pw-color-border);
@@ -404,7 +405,7 @@ a {
 }
 
 .pw-badge.is-action {
-  --pw-badge-color: var(--pw-color-status-action);
+  --pw-badge-color: var(--pw-color-status-info);
 }
 
 /* Dropdowns: one flat style with our own chevron, matching the text fields (no native chrome). */

@@ -1,21 +1,33 @@
 /* Admin panel core. Tokens only. */
 
+/* The panel itself never scrolls: the tab bar stays put, and only a table's rows scroll inside
+   their frame, with its header row pinned and its page controls always visible underneath. */
 .pw-admin {
   flex: 1;
   min-height: 0;
   margin: 0 var(--pw-space-8) var(--pw-space-6);
+  overflow: hidden;
+}
+
+.pw-admin-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
 }
 
-.pw-admin-head {
-  /* Pinned to the panel's very top edge: it reaches over the panel padding so nothing shows above it. */
-  position: sticky;
-  top: calc(-1 * var(--pw-space-5));
-  z-index: 5;
-  margin: calc(-1 * var(--pw-space-5)) calc(-1 * var(--pw-space-5)) 0;
-  padding: var(--pw-space-5) var(--pw-space-5) var(--pw-space-3);
-  background: var(--pw-color-surface);
+.pw-admin-fill {
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: none;
   display: flex;
+  flex-direction: column;
+}
+
+.pw-admin-head {
+  display: flex;
+  flex: none;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
@@ -70,7 +82,8 @@
 
 /* Tables scroll inside their frame, with the header row kept in view. */
 .pw-admin-scroll {
-  max-height: min(60vh, 36rem);
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   border: 1px solid var(--pw-color-border);
   border-radius: var(--pw-radius-md);
@@ -338,6 +351,7 @@
 }
 
 .pw-pager {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;

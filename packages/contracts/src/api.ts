@@ -683,6 +683,8 @@ export interface components {
             tool: string | null;
             /** Trace Id */
             trace_id: string;
+            /** User Name */
+            user_name: string | null;
             /** User Role */
             user_role: string | null;
             /** User Subject */

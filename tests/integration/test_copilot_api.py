@@ -98,13 +98,17 @@ class Env:
     models: Models
 
     def sign_in(
-        self, subject: str = "user-1", role: str = "warehouse_manager", sites: list[UUID] | None = None
+        self,
+        subject: str = "user-1",
+        role: str = "warehouse_manager",
+        sites: list[UUID] | None = None,
+        name: str = "Demo",
     ) -> None:
         self.idp.users[subject] = {
             "pw_roles": [role],
             "pw_tenant": str(self.site.tenant),
             "pw_sites": [str(s) for s in (sites or [self.site.site])],
-            "name": "Demo",
+            "name": name,
         }
         self.client.cookies.clear()
         start = self.client.get("/api/auth/login", follow_redirects=False)

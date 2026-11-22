@@ -285,6 +285,17 @@
             "title": "Trace Id",
             "type": "string"
           },
+          "user_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Name"
+          },
           "user_role": {
             "anyOf": [
               {
@@ -312,6 +323,7 @@
           "occurred_at",
           "actor_type",
           "user_subject",
+          "user_name",
           "user_role",
           "agent_id",
           "agent_version",
