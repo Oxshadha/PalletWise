@@ -1,0 +1,3296 @@
+{
+ "level": "model",
+ "git_sha": "d43234b",
+ "date": "2026-11-22",
+ "sets": {
+  "newq": "038a84eefc2f4969d918e527adc45063fd09ff7a91cbeadfe8929435dcd61282"
+ },
+ "dataset_version": "sim-v1-seed42-14d",
+ "model": {
+  "models": {
+   "gemini-flash": "gemini-3.8-flash",
+   "gemini-flash-lite": "gemini-3.5-flash-lite",
+   "gemini-flash-fallback": "gemini-3.5-flash"
+  },
+  "location": "global",
+  "runs": 1
+ },
+ "configurations": [
+  {
+   "name": "production",
+   "config": {
+    "name": "production",
+    "wording_model": null,
+    "agent_thinking": "low",
+    "hedge_after_s": 2.5,
+    "parallel_tools": false,
+    "headline_first": true,
+    "headline_after_s": 3.0,
+    "answer_deadline_s": 7.0,
+    "routed_answer_deadline_s": 2.5,
+    "semantic_router": true,
+    "agent_model": null,
+    "input_classifier": true,
+    "wording_cache": false
+   },
+   "status": "fail: tool_accuracy, outcome_accuracy",
+   "metrics": {
+    "tool_accuracy": 0.0,
+    "parameter_accuracy": 1.0,
+    "highlight_f1": null,
+    "outcome_accuracy": 0.4333,
+    "correct_decline_rate": null,
+    "declined_or_denied": 0,
+    "injection_resistance": null,
+    "grounding_violations": 0,
+    "facts_present": null,
+    "governed": {
+     "correct": 0.0,
+     "routing_kept": null,
+     "invalid_refused": null
+    },
+    "latency": {
+     "tier1": null,
+     "tier2": null,
+     "tier3": {
+      "runs": 30,
+      "first_progress_p50": 0.1448,
+      "first_progress_p95": 0.4529,
+      "first_highlight_p50": 2.7301,
+      "first_highlight_p95": 4.2493,
+      "first_headline_p50": 3.1903,
+      "first_headline_p95": 6.1166,
+      "complete_p50": 4.0944,
+      "complete_p95": 7.1855,
+      "without_highlights": 25,
+      "without_progress": 0,
+      "without_headline": 0,
+      "stages_p50": {
+       "prechecks_s": 0.1445,
+       "until_first_tool_s": 1.2791,
+       "tools_s": 0.152,
+       "between_tools_s": 0.0,
+       "until_text_s": 1.5867,
+       "after_text_s": 0.0017
+      }
+     }
+    },
+    "routing": {
+     "share": {
+      "tier1": 0,
+      "tier2": 0,
+      "tier3": 30
+     },
+     "tier2_accuracy": null,
+     "tier2_abstention": null,
+     "misrouted": 0
+    },
+    "cost": {
+     "per_answer_p50_usd": 0.0034,
+     "per_answer_p95_usd": 0.0502,
+     "total_usd": 0.352816,
+     "estimated_calls": 17,
+     "by_stage": {
+      "ANSWER_TEXT": {
+       "calls": 28,
+       "input_tokens": 72602,
+       "output_tokens": 5433,
+       "cost_usd": 0.035363,
+       "latency_ms_p50": 1290,
+       "dispositions": {
+        "accepted": 17,
+        "discarded": 11
+       }
+      },
+      "UNKNOWN": {
+       "calls": 17,
+       "input_tokens": 28327,
+       "output_tokens": 34816,
+       "cost_usd": 0.285262,
+       "latency_ms_p50": 1486,
+       "dispositions": {
+        "cancelled": 17
+       }
+      },
+      "TOOL_CHOICE": {
+       "calls": 31,
+       "input_tokens": 79488,
+       "output_tokens": 2005,
+       "cost_usd": 0.032191,
+       "latency_ms_p50": 1180,
+       "dispositions": {
+        "accepted": 31
+       }
+      }
+     },
+     "tier3_per_answer_p95_usd": 0.0502
+    },
+    "text_source": {
+     "model": 17,
+     "template": 13,
+     "cache": 0,
+     "message": 0
+    },
+    "provider_errors": {
+     "rejected_calls": 0,
+     "calls": 76
+    },
+    "path_mix": {
+     "C": 30
+    },
+    "unstable_cases": [],
+    "brief": {
+     "items": 4,
+     "samples": 3,
+     "asked": 9,
+     "model_worded": 6,
+     "model_share": 0.667,
+     "ungrounded": 0,
+     "sentences": [
+      {
+       "top_exceptions": {
+        "source": "model",
+        "text": "The top 3 open exceptions out of 51 include critical capacity hotspots in Zone B and Zone D with scores of 33.3 and an info dead stock exception for SKU-148 with a score of 32.6."
+       },
+       "orders_at_risk_today": {
+        "source": "template",
+        "text": "No open order due in this window is at risk of a stockout."
+       },
+       "throughput": {
+        "source": "model",
+        "text": "Yesterday saw 771 units picked, which is 5.1 percent above the average of 733.3, and 46 orders shipped, which is 15.8 percent below the average of 54.6."
+       },
+       "data_freshness": {
+        "source": "template",
+        "text": "All data is up to date with the site time."
+       }
+      },
+      {
+       "top_exceptions": {
+        "source": "model",
+        "text": "The 51 open exceptions include critical capacity hotspots in Zone B and Zone D with scores of 33.3 and an info dead stock exception for SKU-148 with a score of 32.6."
+       },
+       "orders_at_risk_today": {
+        "source": "template",
+        "text": "No open order due in this window is at risk of a stockout."
+       },
+       "throughput": {
+        "source": "model",
+        "text": "Units picked reached 771, which is 5.1 percent above the average of 733.3, while orders shipped were 46, which is 15.8 percent below the average of 54.6."
+       },
+       "data_freshness": {
+        "source": "template",
+        "text": "All data is up to date with the site time."
+       }
+      },
+      {
+       "top_exceptions": {
+        "source": "model",
+        "text": "The top 3 open exceptions out of 51 include critical capacity hotspots in Zone B and Zone D with scores of 33.3 and info dead stock for SKU-148 with a score of 32.6."
+       },
+       "orders_at_risk_today": {
+        "source": "template",
+        "text": "No open order due in this window is at risk of a stockout."
+       },
+       "throughput": {
+        "source": "model",
+        "text": "Units picked reached 771 compared to the average of 733.3 which is 5.1 percent above, while orders shipped were 46 compared to the average of 54.6 which is 15.8 percent below."
+       },
+       "data_freshness": {
+        "source": "template",
+        "text": "All data is up to date with the site time."
+       }
+      }
+     ]
+    }
+   },
+   "gates": [
+    {
+     "group": "quality",
+     "metric": "tool_accuracy",
+     "op": ">=",
+     "threshold": 0.95,
+     "blocking": true,
+     "value": 0.0,
+     "verdict": "fail"
+    },
+    {
+     "group": "quality",
+     "metric": "parameter_accuracy",
+     "op": ">=",
+     "threshold": 0.95,
+     "blocking": true,
+     "value": 1.0,
+     "verdict": "pass"
+    },
+    {
+     "group": "quality",
+     "metric": "highlight_f1",
+     "op": ">=",
+     "threshold": 0.95,
+     "blocking": true,
+     "value": null,
+     "verdict": "no data"
+    },
+    {
+     "group": "quality",
+     "metric": "outcome_accuracy",
+     "op": ">=",
+     "threshold": 0.95,
+     "blocking": true,
+     "value": 0.4333,
+     "verdict": "fail"
+    },
+    {
+     "group": "quality",
+     "metric": "correct_decline_rate",
+     "op": ">=",
+     "threshold": 0.9,
+     "blocking": true,
+     "value": null,
+     "verdict": "no data"
+    },
+    {
+     "group": "quality",
+     "metric": "injection_resistance",
+     "op": ">=",
+     "threshold": 1.0,
+     "blocking": true,
+     "value": null,
+     "verdict": "no data"
+    },
+    {
+     "group": "quality",
+     "metric": "grounding_violations",
+     "op": "==",
+     "threshold": 0,
+     "blocking": true,
+     "value": 0,
+     "verdict": "pass"
+    },
+    {
+     "group": "quality",
+     "metric": "facts_present",
+     "op": ">=",
+     "threshold": 1.0,
+     "blocking": true,
+     "value": null,
+     "verdict": "no data"
+    },
+    {
+     "group": "quality",
+     "metric": "routing.misrouted",
+     "op": "==",
+     "threshold": 0,
+     "blocking": true,
+     "value": 0,
+     "verdict": "pass"
+    },
+    {
+     "group": "latency",
+     "metric": "latency.tier3.first_progress_p95",
+     "op": "<=",
+     "threshold": 1.0,
+     "blocking": true,
+     "value": 0.4529,
+     "verdict": "pass"
+    },
+    {
+     "group": "latency",
+     "metric": "latency.tier3.first_highlight_p95",
+     "op": "<=",
+     "threshold": 7.0,
+     "blocking": true,
+     "value": 4.2493,
+     "verdict": "pass"
+    },
+    {
+     "group": "latency",
+     "metric": "latency.tier3.first_headline_p95",
+     "op": "<=",
+     "threshold": 7.0,
+     "blocking": true,
+     "value": 6.1166,
+     "verdict": "pass"
+    },
+    {
+     "group": "latency",
+     "metric": "latency.tier3.complete_p95",
+     "op": "<=",
+     "threshold": 8.0,
+     "blocking": true,
+     "value": 7.1855,
+     "verdict": "pass"
+    },
+    {
+     "group": "latency",
+     "metric": "latency.tier1.first_highlight_p95",
+     "op": "<=",
+     "threshold": 1.0,
+     "blocking": true,
+     "value": null,
+     "verdict": "no data"
+    },
+    {
+     "group": "latency",
+     "metric": "latency.tier1.first_headline_p95",
+     "op": "<=",
+     "threshold": 3.0,
+     "blocking": true,
+     "value": null,
+     "verdict": "no data"
+    },
+    {
+     "group": "latency",
+     "metric": "latency.tier1.complete_p95",
+     "op": "<=",
+     "threshold": 3.0,
+     "blocking": true,
+     "value": null,
+     "verdict": "no data"
+    },
+    {
+     "group": "latency",
+     "metric": "latency.tier2.first_highlight_p95",
+     "op": "<=",
+     "threshold": 1.0,
+     "blocking": true,
+     "value": null,
+     "verdict": "no data"
+    },
+    {
+     "group": "latency",
+     "metric": "latency.tier2.first_headline_p95",
+     "op": "<=",
+     "threshold": 3.0,
+     "blocking": true,
+     "value": null,
+     "verdict": "no data"
+    },
+    {
+     "group": "latency",
+     "metric": "latency.tier2.complete_p95",
+     "op": "<=",
+     "threshold": 3.0,
+     "blocking": true,
+     "value": null,
+     "verdict": "no data"
+    },
+    {
+     "group": "cost",
+     "metric": "cost.per_answer_p95_usd",
+     "op": "<=",
+     "threshold": 0.003,
+     "blocking": false,
+     "value": 0.0502,
+     "verdict": "over limit (reported)"
+    },
+    {
+     "group": "quality",
+     "metric": "brief.items",
+     "op": "==",
+     "threshold": 4,
+     "blocking": true,
+     "value": 4,
+     "verdict": "pass"
+    },
+    {
+     "group": "quality",
+     "metric": "brief.ungrounded",
+     "op": "==",
+     "threshold": 0,
+     "blocking": true,
+     "value": 0,
+     "verdict": "pass"
+    },
+    {
+     "group": "quality",
+     "metric": "brief.model_share",
+     "op": ">=",
+     "threshold": 0.5,
+     "blocking": true,
+     "value": 0.667,
+     "verdict": "pass"
+    }
+   ],
+   "cases": [
+    {
+     "case": "GOV-001",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "DECLINE",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": null,
+       "params": {},
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.86,
+       "first_progress_s": 0.8629,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 6.6472,
+       "complete_s": 6.649,
+       "stages": {
+        "prechecks_s": 0.86,
+        "until_first_tool_s": null,
+        "tools_s": null,
+        "between_tools_s": null,
+        "until_text_s": 5.7872,
+        "after_text_s": 0.0018
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2412,
+         "output_tokens": 649,
+         "cached_tokens": 0,
+         "cost": 0.002346,
+         "latency_ms": 5387,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash",
+         "input_tokens": 719,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.01951,
+         "latency_ms": 3044,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        }
+       ],
+       "input_tokens": 3131,
+       "output_tokens": 2697,
+       "cached_tokens": 0,
+       "cost_usd": 0.021856,
+       "cost_estimated_calls": 1,
+       "text": "I cannot answer that question yet because my tools do not cover order counts by customer brand.",
+       "run_id": "01a20218-1f09-75bc-b657-f72e0650cd61",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-002",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "DECLINE",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {},
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1616,
+       "first_progress_s": 0.1621,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 2.5231,
+       "complete_s": 2.5252,
+       "stages": {
+        "prechecks_s": 0.1616,
+        "until_first_tool_s": 1.2191,
+        "tools_s": 0.1403,
+        "between_tools_s": 0.0,
+        "until_text_s": 1.0021,
+        "after_text_s": 0.0021
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2414,
+         "output_tokens": 18,
+         "cached_tokens": 0,
+         "cost": 0.000769,
+         "latency_ms": 1143,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2470,
+         "output_tokens": 15,
+         "cached_tokens": 0,
+         "cost": 0.000778,
+         "latency_ms": 949,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        }
+       ],
+       "input_tokens": 4884,
+       "output_tokens": 33,
+       "cached_tokens": 0,
+       "cost_usd": 0.001547,
+       "cost_estimated_calls": 0,
+       "text": "I cannot answer that question as my tools do not cover order line counts.",
+       "run_id": "01a20218-390d-74f8-a363-01db22589931",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-003",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "DECLINE",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": null,
+       "params": {},
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1167,
+       "first_progress_s": 0.1172,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 3.5656,
+       "complete_s": 3.5667,
+       "stages": {
+        "prechecks_s": 0.1167,
+        "until_first_tool_s": null,
+        "tools_s": null,
+        "between_tools_s": null,
+        "until_text_s": 3.4489,
+        "after_text_s": 0.0011
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2413,
+         "output_tokens": 380,
+         "cached_tokens": 0,
+         "cost": 0.001674,
+         "latency_ms": 3340,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash",
+         "input_tokens": 719,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.01951,
+         "latency_ms": 870,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        }
+       ],
+       "input_tokens": 3132,
+       "output_tokens": 2428,
+       "cached_tokens": 0,
+       "cost_usd": 0.021184,
+       "cost_estimated_calls": 1,
+       "text": "I cannot answer that question yet, as my tools do not cover order line averages.",
+       "run_id": "01a20218-4353-723a-b3eb-19d55204f51b",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-004",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "NO_RESULTS",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "get_open_exceptions",
+       "params": {
+        "limit": 5
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1937,
+       "first_progress_s": 0.1945,
+       "first_highlight_s": 2.1343,
+       "has_highlights": true,
+       "first_headline_s": 3.1903,
+       "complete_s": 5.9825,
+       "stages": {
+        "prechecks_s": 0.1937,
+        "until_first_tool_s": 1.1741,
+        "tools_s": 1.3289,
+        "between_tools_s": 2.1454,
+        "until_text_s": 1.1374,
+        "after_text_s": 0.003
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2411,
+         "output_tokens": 12,
+         "cached_tokens": 0,
+         "cost": 0.000753,
+         "latency_ms": 1123,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 3132,
+         "output_tokens": 16,
+         "cached_tokens": 0,
+         "cost": 0.00098,
+         "latency_ms": 1044,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 3203,
+         "output_tokens": 22,
+         "cached_tokens": 0,
+         "cost": 0.001016,
+         "latency_ms": 995,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 3296,
+         "output_tokens": 15,
+         "cached_tokens": 0,
+         "cost": 0.001026,
+         "latency_ms": 1044,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        }
+       ],
+       "input_tokens": 12042,
+       "output_tokens": 65,
+       "cached_tokens": 0,
+       "cost_usd": 0.003775,
+       "cost_estimated_calls": 0,
+       "text": "I cannot answer how many order lines are still open with the available tools.",
+       "run_id": "01a20218-519d-7ac2-b83c-07cc9fa1ce40",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-005",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "ANSWER",
+       "text_source": "template",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {},
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": true,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1856,
+       "first_progress_s": 0.1869,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 3.5802,
+       "complete_s": 5.8042,
+       "stages": {
+        "prechecks_s": 0.1856,
+        "until_first_tool_s": 1.5848,
+        "tools_s": 0.3611,
+        "between_tools_s": 1.4463,
+        "until_text_s": 2.2235,
+        "after_text_s": 0.0029
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2412,
+         "output_tokens": 50,
+         "cached_tokens": 0,
+         "cost": 0.000849,
+         "latency_ms": 1499,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2482,
+         "output_tokens": 61,
+         "cached_tokens": 0,
+         "cost": 0.000897,
+         "latency_ms": 1398,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2914,
+         "output_tokens": 32,
+         "cached_tokens": 0,
+         "cost": 0.000954,
+         "latency_ms": 910,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "discarded"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2971,
+         "output_tokens": 25,
+         "cached_tokens": 0,
+         "cost": 0.000954,
+         "latency_ms": 1080,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "discarded"
+        }
+       ],
+       "input_tokens": 10779,
+       "output_tokens": 168,
+       "cached_tokens": 0,
+       "cost_usd": 0.003654,
+       "cost_estimated_calls": 0,
+       "text": "20 outlets found, led by OUT067 (units picked 12), OUT009 (units picked 10), OUT062 (units picked 9).",
+       "run_id": "01a20218-6934-76c9-9959-3703bed0da2d",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-006",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "DECLINE",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": null,
+       "params": {},
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.3061,
+       "first_progress_s": 0.3077,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 5.5426,
+       "complete_s": 5.546,
+       "stages": {
+        "prechecks_s": 0.3061,
+        "until_first_tool_s": null,
+        "tools_s": null,
+        "between_tools_s": null,
+        "until_text_s": 5.2365,
+        "after_text_s": 0.0034
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2415,
+         "output_tokens": 733,
+         "cached_tokens": 0,
+         "cost": 0.002557,
+         "latency_ms": 5071,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash",
+         "input_tokens": 721,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.019514,
+         "latency_ms": 2584,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        }
+       ],
+       "input_tokens": 3136,
+       "output_tokens": 2781,
+       "cached_tokens": 0,
+       "cost_usd": 0.022071,
+       "cost_estimated_calls": 1,
+       "text": "I cannot answer that yet, as my tools do not provide order history by outlet without a specified time range.",
+       "run_id": "01a20218-8093-79be-9bfa-936944cd2360",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-007",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "DECLINE",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": null,
+       "params": {},
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1433,
+       "first_progress_s": 0.1443,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 4.23,
+       "complete_s": 4.235,
+       "stages": {
+        "prechecks_s": 0.1433,
+        "until_first_tool_s": null,
+        "tools_s": null,
+        "between_tools_s": null,
+        "until_text_s": 4.0867,
+        "after_text_s": 0.005
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2410,
+         "output_tokens": 476,
+         "cached_tokens": 0,
+         "cost": 0.001913,
+         "latency_ms": 3856,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash",
+         "input_tokens": 716,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.019506,
+         "latency_ms": 1458,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        }
+       ],
+       "input_tokens": 3126,
+       "output_tokens": 2524,
+       "cached_tokens": 0,
+       "cost_usd": 0.021419,
+       "cost_estimated_calls": 1,
+       "text": "I cannot answer how many orders have been shipped yet, as my tools do not cover order shipping totals.",
+       "run_id": "01a20218-962e-7db3-ad80-2b30b4a070df",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-008",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "DECLINE",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": null,
+       "params": {},
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.4522,
+       "first_progress_s": 0.4529,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 4.0009,
+       "complete_s": 4.0026,
+       "stages": {
+        "prechecks_s": 0.4522,
+        "until_first_tool_s": null,
+        "tools_s": null,
+        "between_tools_s": null,
+        "until_text_s": 3.5487,
+        "after_text_s": 0.0017
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2413,
+         "output_tokens": 388,
+         "cached_tokens": 0,
+         "cost": 0.001694,
+         "latency_ms": 3408,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash",
+         "input_tokens": 720,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.019512,
+         "latency_ms": 911,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        }
+       ],
+       "input_tokens": 3133,
+       "output_tokens": 2436,
+       "cached_tokens": 0,
+       "cost_usd": 0.021206,
+       "cost_estimated_calls": 1,
+       "text": "I cannot answer that question yet because my tools do not cover order delivery dates.",
+       "run_id": "01a20218-a75c-74bc-9f50-d94ab237b086",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-009",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "NO_RESULTS",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {
+        "measures": [
+         "on_hand"
+        ],
+        "dimensions": [
+         "bin"
+        ],
+        "filters": [
+         {
+          "field": "bin_role",
+          "op": "=",
+          "value": "pick"
+         },
+         {
+          "field": "on_hand",
+          "op": "=",
+          "value": 0
+         }
+        ],
+        "time_range": null,
+        "sort": null,
+        "limit": 20,
+        "scope": {
+         "working_set": false
+        }
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1445,
+       "first_progress_s": 0.1448,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 3.6861,
+       "complete_s": 6.4798,
+       "stages": {
+        "prechecks_s": 0.1445,
+        "until_first_tool_s": 1.2791,
+        "tools_s": 2.7454,
+        "between_tools_s": 1.1769,
+        "until_text_s": 1.1256,
+        "after_text_s": 0.0083
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2412,
+         "output_tokens": 65,
+         "cached_tokens": 0,
+         "cost": 0.000886,
+         "latency_ms": 1197,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2505,
+         "output_tokens": 59,
+         "cached_tokens": 0,
+         "cost": 0.000899,
+         "latency_ms": 1075,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2596,
+         "output_tokens": 10,
+         "cached_tokens": 0,
+         "cost": 0.000804,
+         "latency_ms": 1006,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        }
+       ],
+       "input_tokens": 7513,
+       "output_tokens": 134,
+       "cached_tokens": 0,
+       "cost_usd": 0.002589,
+       "cost_estimated_calls": 0,
+       "text": "I cannot answer that question with the tools available.",
+       "run_id": "01a20218-b7c5-7b00-af3d-8aa335e82ea5",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-010",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "ANSWER",
+       "text_source": "template",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {
+        "measures": [
+         "on_hand"
+        ],
+        "dimensions": [
+         "product"
+        ],
+        "filters": [],
+        "time_range": null,
+        "sort": null,
+        "limit": 20,
+        "scope": {
+         "working_set": false
+        }
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": true,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1488,
+       "first_progress_s": 0.1499,
+       "first_highlight_s": 1.3847,
+       "has_highlights": true,
+       "first_headline_s": 2.2585,
+       "complete_s": 2.2614,
+       "stages": {
+        "prechecks_s": 0.1488,
+        "until_first_tool_s": 1.1302,
+        "tools_s": 0.1053,
+        "between_tools_s": 0.0,
+        "until_text_s": 0.8742,
+        "after_text_s": 0.0029
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2414,
+         "output_tokens": 24,
+         "cached_tokens": 0,
+         "cost": 0.000784,
+         "latency_ms": 1094,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2901,
+         "output_tokens": 21,
+         "cached_tokens": 0,
+         "cost": 0.000923,
+         "latency_ms": 712,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "discarded"
+        }
+       ],
+       "input_tokens": 5315,
+       "output_tokens": 45,
+       "cached_tokens": 0,
+       "cost_usd": 0.001707,
+       "cost_estimated_calls": 0,
+       "text": "More than 20 products found, led by SKU-418 (on hand 2045), SKU-466 (on hand 1058), SKU-402 (on hand 716).",
+       "run_id": "01a20218-d16a-7997-a81d-1eeeab44e57e",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-011",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "NO_RESULTS",
+       "text_source": "template",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "get_order_stockout_risks",
+       "params": {
+        "view": "products",
+        "hours": null
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.3185,
+       "first_progress_s": 0.3197,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 3.2883,
+       "complete_s": 7.3598,
+       "stages": {
+        "prechecks_s": 0.3185,
+        "until_first_tool_s": 1.0787,
+        "tools_s": 0.4479,
+        "between_tools_s": 0.83,
+        "until_text_s": 4.6803,
+        "after_text_s": 0.0044
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2412,
+         "output_tokens": 22,
+         "cached_tokens": 0,
+         "cost": 0.000779,
+         "latency_ms": 980,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2503,
+         "output_tokens": 24,
+         "cached_tokens": 0,
+         "cost": 0.000811,
+         "latency_ms": 773,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash",
+         "input_tokens": 2587,
+         "output_tokens": 35,
+         "cached_tokens": 0,
+         "cost": 0.004196,
+         "latency_ms": 2069,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2864,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.005979,
+         "latency_ms": 4615,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        }
+       ],
+       "input_tokens": 10366,
+       "output_tokens": 2129,
+       "cached_tokens": 0,
+       "cost_usd": 0.011765,
+       "cost_estimated_calls": 1,
+       "text": "No exception of that type is open.",
+       "run_id": "01a20218-db84-7222-8503-6a1731c98dae",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-012",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "ANSWER",
+       "text_source": "template",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {
+        "measures": [
+         "demand_units"
+        ],
+        "dimensions": [
+         "brand"
+        ],
+        "filters": [],
+        "time_range": {
+         "last_days": 30,
+         "from": null,
+         "to": null
+        },
+        "sort": null,
+        "limit": 20,
+        "scope": {
+         "working_set": false
+        }
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": true,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.2692,
+       "first_progress_s": 0.27,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 3.2255,
+       "complete_s": 3.8474,
+       "stages": {
+        "prechecks_s": 0.2692,
+        "until_first_tool_s": 1.6785,
+        "tools_s": 0.3466,
+        "between_tools_s": 0.0,
+        "until_text_s": 1.5521,
+        "after_text_s": 0.001
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2413,
+         "output_tokens": 35,
+         "cached_tokens": 0,
+         "cost": 0.000811,
+         "latency_ms": 1316,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2539,
+         "output_tokens": 31,
+         "cached_tokens": 0,
+         "cost": 0.000839,
+         "latency_ms": 1478,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "discarded"
+        }
+       ],
+       "input_tokens": 4952,
+       "output_tokens": 66,
+       "cached_tokens": 0,
+       "cost_usd": 0.00165,
+       "cost_estimated_calls": 0,
+       "text": "3 brands found, led by Fresh (units picked 4700), Style (units picked 3760), Tech (units picked 826).",
+       "run_id": "01a20218-f8da-7729-8f5d-660916f6e349",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-013",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "DECLINE",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": null,
+       "params": {},
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1747,
+       "first_progress_s": 0.1751,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 1.2848,
+       "complete_s": 1.2858,
+       "stages": {
+        "prechecks_s": 0.1747,
+        "until_first_tool_s": null,
+        "tools_s": null,
+        "between_tools_s": null,
+        "until_text_s": 1.1101,
+        "after_text_s": 0.001
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2411,
+         "output_tokens": 18,
+         "cached_tokens": 0,
+         "cost": 0.000768,
+         "latency_ms": 1074,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        }
+       ],
+       "input_tokens": 2411,
+       "output_tokens": 18,
+       "cached_tokens": 0,
+       "cost_usd": 0.000768,
+       "cost_estimated_calls": 0,
+       "text": "I cannot answer it yet, as no available tool provides a breakdown of orders by status.",
+       "run_id": "01a20219-07ed-720d-80aa-8cb75bee14f2",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-014",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "ANSWER",
+       "text_source": "template",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {
+        "measures": [
+         "on_hand"
+        ],
+        "dimensions": [
+         "brand"
+        ],
+        "filters": [],
+        "time_range": null,
+        "sort": null,
+        "limit": 20,
+        "scope": {
+         "working_set": false
+        }
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": true,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.0599,
+       "first_progress_s": 0.0603,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 2.357,
+       "complete_s": 2.3577,
+       "stages": {
+        "prechecks_s": 0.0599,
+        "until_first_tool_s": 1.0863,
+        "tools_s": 0.1501,
+        "between_tools_s": 0.0,
+        "until_text_s": 1.0607,
+        "after_text_s": 0.0007
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2411,
+         "output_tokens": 24,
+         "cached_tokens": 0,
+         "cost": 0.000783,
+         "latency_ms": 1033,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2530,
+         "output_tokens": 29,
+         "cached_tokens": 0,
+         "cost": 0.000832,
+         "latency_ms": 1034,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "discarded"
+        }
+       ],
+       "input_tokens": 4941,
+       "output_tokens": 53,
+       "cached_tokens": 0,
+       "cost_usd": 0.001615,
+       "cost_estimated_calls": 0,
+       "text": "3 brands found, led by Style (on hand 5850), Fresh (on hand 5789), Tech (on hand 1089).",
+       "run_id": "01a20219-0cc6-7ed5-90ba-6930804fc937",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-015",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "ANSWER",
+       "text_source": "template",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {
+        "measures": [
+         "stock_value",
+         "on_hand"
+        ],
+        "dimensions": [
+         "category"
+        ],
+        "filters": [],
+        "time_range": null,
+        "sort": null,
+        "limit": 20,
+        "scope": {
+         "working_set": false
+        }
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": true,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1405,
+       "first_progress_s": 0.1407,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 3.0349,
+       "complete_s": 3.0371,
+       "stages": {
+        "prechecks_s": 0.1405,
+        "until_first_tool_s": 1.3059,
+        "tools_s": 0.1918,
+        "between_tools_s": 0.0,
+        "until_text_s": 1.3967,
+        "after_text_s": 0.0022
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2415,
+         "output_tokens": 30,
+         "cached_tokens": 0,
+         "cost": 0.0008,
+         "latency_ms": 1233,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2897,
+         "output_tokens": 18,
+         "cached_tokens": 0,
+         "cost": 0.000914,
+         "latency_ms": 1290,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "discarded"
+        }
+       ],
+       "input_tokens": 5312,
+       "output_tokens": 48,
+       "cached_tokens": 0,
+       "cost_usd": 0.001714,
+       "cost_estimated_calls": 0,
+       "text": "12 categories found, led by Apparel (stock value 9248784.94), Mobile Accessories (stock value 6346066.21), Accessories (stock value 5293456.47).",
+       "run_id": "01a20219-160b-7e8f-9804-40131afe95f6",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-016",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "DECLINE",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": null,
+       "params": {},
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1295,
+       "first_progress_s": 0.13,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 5.4766,
+       "complete_s": 5.478,
+       "stages": {
+        "prechecks_s": 0.1295,
+        "until_first_tool_s": null,
+        "tools_s": null,
+        "between_tools_s": null,
+        "until_text_s": 5.3471,
+        "after_text_s": 0.0014
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2411,
+         "output_tokens": 511,
+         "cached_tokens": 0,
+         "cost": 0.002001,
+         "latency_ms": 5216,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash",
+         "input_tokens": 719,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.01951,
+         "latency_ms": 2734,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        }
+       ],
+       "input_tokens": 3130,
+       "output_tokens": 2559,
+       "cached_tokens": 0,
+       "cost_usd": 0.021511,
+       "cost_estimated_calls": 1,
+       "text": "I cannot answer that question yet as my tools do not provide information on distinct outlets.",
+       "run_id": "01a20219-2248-7ea2-ba8e-9f8e6d9585cc",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-017",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "ANSWER",
+       "text_source": "template",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {
+        "measures": [
+         "demand_units"
+        ],
+        "dimensions": [
+         "brand"
+        ],
+        "filters": [],
+        "time_range": {
+         "last_days": 30,
+         "from": null,
+         "to": null
+        },
+        "sort": null,
+        "limit": 20,
+        "scope": {
+         "working_set": false
+        }
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": true,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1145,
+       "first_progress_s": 0.1154,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 3.1207,
+       "complete_s": 6.0443,
+       "stages": {
+        "prechecks_s": 0.1145,
+        "until_first_tool_s": 1.2865,
+        "tools_s": 0.7916,
+        "between_tools_s": 2.659,
+        "until_text_s": 1.1913,
+        "after_text_s": 0.0014
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2413,
+         "output_tokens": 35,
+         "cached_tokens": 0,
+         "cost": 0.000811,
+         "latency_ms": 1179,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2539,
+         "output_tokens": 35,
+         "cached_tokens": 0,
+         "cost": 0.000849,
+         "latency_ms": 1180,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2665,
+         "output_tokens": 24,
+         "cached_tokens": 0,
+         "cost": 0.00086,
+         "latency_ms": 1105,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2723,
+         "output_tokens": 21,
+         "cached_tokens": 0,
+         "cost": 0.000869,
+         "latency_ms": 1104,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "discarded"
+        }
+       ],
+       "input_tokens": 10340,
+       "output_tokens": 115,
+       "cached_tokens": 0,
+       "cost_usd": 0.003389,
+       "cost_estimated_calls": 0,
+       "text": "3 brands found, led by Fresh (movements 4330), Style (movements 1847), Tech (movements 861).",
+       "run_id": "01a20219-3819-7f09-9e3e-6d96523a2198",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-018",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "ANSWER",
+       "text_source": "template",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {
+        "measures": [
+         "stock_value"
+        ],
+        "dimensions": [
+         "brand"
+        ],
+        "filters": [
+         {
+          "field": "stock_value",
+          "op": ">",
+          "value": 1000
+         }
+        ],
+        "time_range": null,
+        "sort": null,
+        "limit": 20,
+        "scope": {
+         "working_set": false
+        }
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": true,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1673,
+       "first_progress_s": 0.1689,
+       "first_highlight_s": 4.0939,
+       "has_highlights": true,
+       "first_headline_s": 3.1406,
+       "complete_s": 7.1614,
+       "stages": {
+        "prechecks_s": 0.1673,
+        "until_first_tool_s": 1.6601,
+        "tools_s": 1.3132,
+        "between_tools_s": 3.8418,
+        "until_text_s": 0.1784,
+        "after_text_s": 0.0006
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2418,
+         "output_tokens": 48,
+         "cached_tokens": 0,
+         "cost": 0.000845,
+         "latency_ms": 1521,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2570,
+         "output_tokens": 52,
+         "cached_tokens": 0,
+         "cost": 0.000901,
+         "latency_ms": 1136,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 3317,
+         "output_tokens": 56,
+         "cached_tokens": 0,
+         "cost": 0.001135,
+         "latency_ms": 1106,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 3474,
+         "output_tokens": 64,
+         "cached_tokens": 0,
+         "cost": 0.001202,
+         "latency_ms": 1426,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 5587,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.006796,
+         "latency_ms": 154,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        }
+       ],
+       "input_tokens": 17366,
+       "output_tokens": 2268,
+       "cached_tokens": 0,
+       "cost_usd": 0.010879,
+       "cost_estimated_calls": 1,
+       "text": "3 brands found, led by Style (stock value 18551074.65), Tech (stock value 15627338.44), Fresh (stock value 7729122.47).",
+       "run_id": "01a20219-501d-7214-8351-7fd1f5d24f3b",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-019",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "NO_RESULTS",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {
+        "measures": [
+         "on_hand"
+        ],
+        "dimensions": [],
+        "filters": [
+         {
+          "field": "on_hand",
+          "op": "=",
+          "value": 0
+         }
+        ],
+        "time_range": null,
+        "sort": null,
+        "limit": 20,
+        "scope": {
+         "working_set": false
+        }
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.2533,
+       "first_progress_s": 0.2536,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 3.1201,
+       "complete_s": 3.1724,
+       "stages": {
+        "prechecks_s": 0.2533,
+        "until_first_tool_s": 1.6862,
+        "tools_s": 0.1145,
+        "between_tools_s": 0.0,
+        "until_text_s": 1.1163,
+        "after_text_s": 0.0021
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2414,
+         "output_tokens": 39,
+         "cached_tokens": 0,
+         "cost": 0.000822,
+         "latency_ms": 1628,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2497,
+         "output_tokens": 10,
+         "cached_tokens": 0,
+         "cost": 0.000774,
+         "latency_ms": 1036,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        }
+       ],
+       "input_tokens": 4911,
+       "output_tokens": 49,
+       "cached_tokens": 0,
+       "cost_usd": 0.001596,
+       "cost_estimated_calls": 0,
+       "text": "No products have zero stock anywhere in the warehouse.",
+       "run_id": "01a20219-6c21-7577-8745-6880ed3e8c3b",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-020",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "DECLINE",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": null,
+       "params": {},
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1403,
+       "first_progress_s": 0.1405,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 6.1166,
+       "complete_s": 6.1194,
+       "stages": {
+        "prechecks_s": 0.1403,
+        "until_first_tool_s": null,
+        "tools_s": null,
+        "between_tools_s": null,
+        "until_text_s": 5.9763,
+        "after_text_s": 0.0028
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2415,
+         "output_tokens": 926,
+         "cached_tokens": 0,
+         "cost": 0.00304,
+         "latency_ms": 5823,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash",
+         "input_tokens": 717,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.019508,
+         "latency_ms": 3381,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        }
+       ],
+       "input_tokens": 3132,
+       "output_tokens": 2974,
+       "cached_tokens": 0,
+       "cost_usd": 0.022548,
+       "cost_estimated_calls": 1,
+       "text": "I cannot answer that question yet as my tools do not cover order line counts.",
+       "run_id": "01a20219-78aa-7c7d-a491-23293b337314",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-021",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "DECLINE",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": null,
+       "params": {},
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.2881,
+       "first_progress_s": 0.2894,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 1.9093,
+       "complete_s": 1.9103,
+       "stages": {
+        "prechecks_s": 0.2881,
+        "until_first_tool_s": null,
+        "tools_s": null,
+        "between_tools_s": null,
+        "until_text_s": 1.6212,
+        "after_text_s": 0.001
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2415,
+         "output_tokens": 15,
+         "cached_tokens": 0,
+         "cost": 0.000762,
+         "latency_ms": 1465,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        }
+       ],
+       "input_tokens": 2415,
+       "output_tokens": 15,
+       "cached_tokens": 0,
+       "cost_usd": 0.000762,
+       "cost_estimated_calls": 0,
+       "text": "I cannot answer that question as my tools do not cover order line quantities.",
+       "run_id": "01a20219-9187-74f5-8f56-9aed856a7892",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-022",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "DECLINE",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": null,
+       "params": {},
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1346,
+       "first_progress_s": 0.1353,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 4.1928,
+       "complete_s": 4.1936,
+       "stages": {
+        "prechecks_s": 0.1346,
+        "until_first_tool_s": null,
+        "tools_s": null,
+        "between_tools_s": null,
+        "until_text_s": 4.0582,
+        "after_text_s": 0.0008
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2414,
+         "output_tokens": 429,
+         "cached_tokens": 0,
+         "cost": 0.001797,
+         "latency_ms": 3995,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash",
+         "input_tokens": 718,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.019509,
+         "latency_ms": 1479,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        }
+       ],
+       "input_tokens": 3132,
+       "output_tokens": 2477,
+       "cached_tokens": 0,
+       "cost_usd": 0.021306,
+       "cost_estimated_calls": 1,
+       "text": "I cannot answer that question yet because my tools do not provide order counts by outlet.",
+       "run_id": "01a20219-98e3-74c1-af6f-9930075f485f",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-023",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "ANSWER",
+       "text_source": "template",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {
+        "measures": [
+         "units_moved"
+        ],
+        "dimensions": [
+         "brand"
+        ],
+        "filters": [],
+        "time_range": {
+         "last_days": 30,
+         "from": null,
+         "to": null
+        },
+        "sort": null,
+        "limit": 20,
+        "scope": {
+         "working_set": false
+        }
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": true,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.0754,
+       "first_progress_s": 0.0758,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 2.7554,
+       "complete_s": 2.7565,
+       "stages": {
+        "prechecks_s": 0.0754,
+        "until_first_tool_s": 1.0966,
+        "tools_s": 0.4643,
+        "between_tools_s": 0.0,
+        "until_text_s": 1.1191,
+        "after_text_s": 0.0011
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2414,
+         "output_tokens": 35,
+         "cached_tokens": 0,
+         "cost": 0.000812,
+         "latency_ms": 973,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2543,
+         "output_tokens": 36,
+         "cached_tokens": 0,
+         "cost": 0.000853,
+         "latency_ms": 1075,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "discarded"
+        }
+       ],
+       "input_tokens": 4957,
+       "output_tokens": 71,
+       "cached_tokens": 0,
+       "cost_usd": 0.001665,
+       "cost_estimated_calls": 0,
+       "text": "3 brands found, led by Fresh (units moved 26090), Style (units moved 23563), Tech (units moved 4001).",
+       "run_id": "01a20219-a954-797d-befe-1dfb8d0b6aa8",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-024",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "DECLINE",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": null,
+       "params": {},
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.2935,
+       "first_progress_s": 0.2939,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 5.2304,
+       "complete_s": 5.2337,
+       "stages": {
+        "prechecks_s": 0.2935,
+        "until_first_tool_s": null,
+        "tools_s": null,
+        "between_tools_s": null,
+        "until_text_s": 4.9369,
+        "after_text_s": 0.0033
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2411,
+         "output_tokens": 551,
+         "cached_tokens": 0,
+         "cost": 0.002101,
+         "latency_ms": 4641,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash",
+         "input_tokens": 717,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.019508,
+         "latency_ms": 2313,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        }
+       ],
+       "input_tokens": 3128,
+       "output_tokens": 2599,
+       "cached_tokens": 0,
+       "cost_usd": 0.021609,
+       "cost_estimated_calls": 1,
+       "text": "I cannot answer that question yet.",
+       "run_id": "01a20219-b4bf-7ab8-aa48-ad0ef38cb125",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-025",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "ANSWER",
+       "text_source": "template",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {
+        "measures": [
+         "on_hand"
+        ],
+        "dimensions": [
+         "bin_role"
+        ],
+        "filters": [],
+        "time_range": null,
+        "sort": null,
+        "limit": 20,
+        "scope": {
+         "working_set": false
+        }
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": true,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.2106,
+       "first_progress_s": 0.2135,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 4.0995,
+       "complete_s": 7.1855,
+       "stages": {
+        "prechecks_s": 0.2106,
+        "until_first_tool_s": 3.7993,
+        "tools_s": 0.0885,
+        "between_tools_s": 0.0,
+        "until_text_s": 3.0838,
+        "after_text_s": 0.0033
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2410,
+         "output_tokens": 535,
+         "cached_tokens": 0,
+         "cost": 0.00206,
+         "latency_ms": 3710,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash",
+         "input_tokens": 716,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.019506,
+         "latency_ms": 1249,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash",
+         "input_tokens": 3030,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.022977,
+         "latency_ms": 555,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 3030,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.006029,
+         "latency_ms": 3063,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        }
+       ],
+       "input_tokens": 9186,
+       "output_tokens": 6679,
+       "cached_tokens": 0,
+       "cost_usd": 0.050572,
+       "cost_estimated_calls": 3,
+       "text": "4 rows found, led by RESERVE (on hand 6964), PICK (on hand 3302), BULK (on hand 2105).",
+       "run_id": "01a20219-c9e2-7e09-822d-7ac1d5c3202e",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-026",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "ANSWER",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {
+        "measures": [
+         "demand_units"
+        ],
+        "dimensions": [],
+        "filters": [
+         {
+          "field": "customer",
+          "op": "=",
+          "value": "OUT003"
+         }
+        ],
+        "time_range": {
+         "last_days": 30,
+         "from": null,
+         "to": null
+        },
+        "sort": null,
+        "limit": 20,
+        "scope": {
+         "working_set": false
+        }
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": true,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.1123,
+       "first_progress_s": 0.1129,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 3.0672,
+       "complete_s": 4.0944,
+       "stages": {
+        "prechecks_s": 0.1123,
+        "until_first_tool_s": 1.4346,
+        "tools_s": 0.1094,
+        "between_tools_s": 0.0,
+        "until_text_s": 2.4364,
+        "after_text_s": 0.0017
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2416,
+         "output_tokens": 53,
+         "cached_tokens": 0,
+         "cost": 0.000857,
+         "latency_ms": 1371,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2509,
+         "output_tokens": 23,
+         "cached_tokens": 0,
+         "cost": 0.00081,
+         "latency_ms": 1072,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "discarded"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2557,
+         "output_tokens": 16,
+         "cached_tokens": 0,
+         "cost": 0.000807,
+         "latency_ms": 1297,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        }
+       ],
+       "input_tokens": 7482,
+       "output_tokens": 92,
+       "cached_tokens": 0,
+       "cost_usd": 0.002474,
+       "cost_estimated_calls": 0,
+       "text": "The total quantity ordered by outlet OUT003 is 84 units.",
+       "run_id": "01a20219-e5e4-79d3-8774-67f16be1e023",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-027",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "ANSWER",
+       "text_source": "template",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "get_delayed_orders",
+       "params": {
+        "since_days": 0
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": true,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.0585,
+       "first_progress_s": 0.0588,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 3.0508,
+       "complete_s": 4.0813,
+       "stages": {
+        "prechecks_s": 0.0585,
+        "until_first_tool_s": 1.066,
+        "tools_s": 0.0956,
+        "between_tools_s": 1.3333,
+        "until_text_s": 1.5269,
+        "after_text_s": 0.001
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2413,
+         "output_tokens": 12,
+         "cached_tokens": 0,
+         "cost": 0.000754,
+         "latency_ms": 1030,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2568,
+         "output_tokens": 18,
+         "cached_tokens": 0,
+         "cost": 0.000815,
+         "latency_ms": 1305,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2624,
+         "output_tokens": 23,
+         "cached_tokens": 0,
+         "cost": 0.000845,
+         "latency_ms": 1435,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "discarded"
+        }
+       ],
+       "input_tokens": 7605,
+       "output_tokens": 53,
+       "cached_tokens": 0,
+       "cost_usd": 0.002414,
+       "cost_estimated_calls": 0,
+       "text": "1 order is delayed. SO-20260401-OUT011 for OUT011 is 0.8 hours late and shipped late.",
+       "run_id": "01a20219-f5f4-7b9f-adb8-ff962f537fa5",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-028",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "ANSWER",
+       "text_source": "template",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {
+        "measures": [
+         "on_hand"
+        ],
+        "dimensions": [
+         "product"
+        ],
+        "filters": [
+         {
+          "field": "bin_role",
+          "op": "=",
+          "value": "reserve"
+         }
+        ],
+        "time_range": null,
+        "sort": null,
+        "limit": 20,
+        "scope": {
+         "working_set": false
+        }
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": true,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.0735,
+       "first_progress_s": 0.0739,
+       "first_highlight_s": 4.2493,
+       "has_highlights": true,
+       "first_headline_s": 4.2497,
+       "complete_s": 7.0683,
+       "stages": {
+        "prechecks_s": 0.0735,
+        "until_first_tool_s": 4.0235,
+        "tools_s": 0.152,
+        "between_tools_s": 0.0,
+        "until_text_s": 2.8176,
+        "after_text_s": 0.0017
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2413,
+         "output_tokens": 428,
+         "cached_tokens": 0,
+         "cost": 0.001794,
+         "latency_ms": 3949,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash",
+         "input_tokens": 722,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.019515,
+         "latency_ms": 1486,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash",
+         "input_tokens": 2956,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.022866,
+         "latency_ms": 288,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "UNKNOWN",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2956,
+         "output_tokens": 2048,
+         "cached_tokens": 0,
+         "cost": 0.006007,
+         "latency_ms": 2806,
+         "outcome": "CANCELLED",
+         "usage_estimated": true,
+         "disposition": "cancelled"
+        }
+       ],
+       "input_tokens": 9047,
+       "output_tokens": 6572,
+       "cached_tokens": 0,
+       "cost_usd": 0.050182,
+       "cost_estimated_calls": 3,
+       "text": "More than 20 products found, led by SKU-466 (on hand 773), SKU-402 (on hand 521), SKU-267 (on hand 260).",
+       "run_id": "01a2021a-0631-7ee7-a40f-7eb1334d451a",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-029",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "DECLINE",
+       "text_source": "model",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": null,
+       "params": {},
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": false,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.0737,
+       "first_progress_s": 0.074,
+       "first_highlight_s": null,
+       "has_highlights": false,
+       "first_headline_s": 1.6604,
+       "complete_s": 1.6616,
+       "stages": {
+        "prechecks_s": 0.0737,
+        "until_first_tool_s": null,
+        "tools_s": null,
+        "between_tools_s": null,
+        "until_text_s": 1.5867,
+        "after_text_s": 0.0012
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2412,
+         "output_tokens": 15,
+         "cached_tokens": 0,
+         "cost": 0.000761,
+         "latency_ms": 1539,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        }
+       ],
+       "input_tokens": 2412,
+       "output_tokens": 15,
+       "cached_tokens": 0,
+       "cost_usd": 0.000761,
+       "cost_estimated_calls": 0,
+       "text": "I cannot answer your question because no available tool covers order line shipping details.",
+       "run_id": "01a2021a-21f3-78ac-9827-1a75df3f927c",
+       "error": null,
+       "passed": false
+      }
+     ]
+    },
+    {
+     "case": "GOV-030",
+     "set": "newq",
+     "category": "GOVERNED",
+     "passed": false,
+     "runs": [
+      {
+       "run": 1,
+       "path": "C",
+       "outcome": "ANSWER",
+       "text_source": "template",
+       "tier": 3,
+       "gold_tier": 3,
+       "tool": "query_inventory",
+       "params": {
+        "measures": [
+         "stock_value"
+        ],
+        "dimensions": [],
+        "filters": [],
+        "time_range": null,
+        "sort": {
+         "by": "stock_value",
+         "direction": "asc"
+        },
+        "limit": 20,
+        "scope": {
+         "working_set": false
+        }
+       },
+       "tool_ok": false,
+       "params_ok": true,
+       "gold_tool": "run_governed_query",
+       "governed_used": false,
+       "governed_answered": false,
+       "rows_ok": false,
+       "outcome_ok": true,
+       "highlight_f1": null,
+       "forbidden": [],
+       "facts_checked": 0,
+       "facts_missing": [],
+       "grounding_violations": [],
+       "first_event_s": 0.0779,
+       "first_progress_s": 0.0784,
+       "first_highlight_s": 2.7301,
+       "has_highlights": true,
+       "first_headline_s": 3.0651,
+       "complete_s": 3.899,
+       "stages": {
+        "prechecks_s": 0.0779,
+        "until_first_tool_s": 1.2682,
+        "tools_s": 0.1394,
+        "between_tools_s": 1.244,
+        "until_text_s": 1.169,
+        "after_text_s": 0.0005
+       },
+       "calls": [
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2413,
+         "output_tokens": 34,
+         "cached_tokens": 0,
+         "cost": 0.000809,
+         "latency_ms": 1241,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "TOOL_CHOICE",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 2505,
+         "output_tokens": 40,
+         "cached_tokens": 0,
+         "cost": 0.000852,
+         "latency_ms": 1224,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "accepted"
+        },
+        {
+         "purpose": "AGENT",
+         "stage": "ANSWER_TEXT",
+         "model": "gemini-3.5-flash-lite",
+         "input_tokens": 3083,
+         "output_tokens": 17,
+         "cached_tokens": 0,
+         "cost": 0.000967,
+         "latency_ms": 1154,
+         "outcome": "OK",
+         "usage_estimated": false,
+         "disposition": "discarded"
+        }
+       ],
+       "input_tokens": 8001,
+       "output_tokens": 91,
+       "cached_tokens": 0,
+       "cost_usd": 0.002628,
+       "cost_estimated_calls": 0,
+       "text": "More than 20 products found, led by SKU-224 (stock value 1754.88), SKU-325 (stock value 1874.04), SKU-328 (stock value 2282.75).",
+       "run_id": "01a2021a-28b2-7ab8-b4c8-abff7fdda325",
+       "error": null,
+       "passed": false
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

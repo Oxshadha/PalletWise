@@ -146,6 +146,11 @@ def _mark_evaluated() -> None:
     from palletwise.governed import tool as governed
 
     governed.passed_fingerprints = _Any  # type: ignore[assignment]
+    # The run asks many custom questions as one user in a few minutes; the production per-user
+    # limit would throttle the measurement itself, so this process lifts it.
+    import dataclasses
+
+    governed.RUN_GOVERNED_QUERY = dataclasses.replace(governed.RUN_GOVERNED_QUERY, rate_limit=10_000)
 
 
 def _evaluate_governed(env: Any) -> str:

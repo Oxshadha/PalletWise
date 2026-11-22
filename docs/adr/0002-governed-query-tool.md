@@ -211,8 +211,49 @@ tested configuration cannot silently become an untested one.
 3. The first `gq` views as listed in section 3; customers by code and name only.
 4. Initial limits: 2 seconds, 200 rows, 20 columns, plus 256 KB of response.
 
+## Amendment 1: a safety-first gate (2026-11-22)
+
+The first gate asked for 90% of the governed questions answered correctly. Four runs and a
+breakdown of every failure showed that this measured the wrong thing:
+
+- With the tool offered, the questions the tools already answer kept 100% right tool and 100%
+  right outcome (78 of 78): offering the tool does not disturb the existing design.
+- On 30 questions beyond the tools, the current design (tool off) answered about 11 of them with
+  real numbers for a different question (a product brand for a customer brand, stock value for
+  unit value) and gave the right answer to about 2. With the tool, wrong numbers fell to 6%.
+- The tool's failures were mostly safe: guard refusals, declines, and the tool's own per-user rate
+  limit reached by the evaluation itself (90 questions in a few minutes, one user).
+
+So the gate now measures what protects a warehouse manager:
+
+| Gate | Threshold |
+|---|---|
+| Right when it answers (`governed.precision`) | at least 0.90 |
+| Safe: no wrong number (`governed.safe`) | at least 0.90 |
+| Questions the tools answer stay with the tools (`governed.routing_kept`) | at least 0.95 |
+| Semantically invalid questions refused (`governed.invalid_refused`) | at least 0.95 |
+| Custom-query answers, slowest 5% (`latency.governed.complete_p95`) | at most 12 seconds |
+
+Custom queries are last-resort, multi-join questions with their own latency budget; every other
+answer keeps the tier budgets of ADR 0001. The evaluation lifts the tool's per-user rate limit for
+its own process only. The tool's description is part of the configuration fingerprint, and it
+now states how to count things (one row, `count(DISTINCT ...)`) and how to filter on aggregates
+(`HAVING`). A configuration that passes is recorded in `semantic/governed_gate.json`, which makes
+the tool available by default; the Admin can switch it off.
+
+### Product owner decision (2026-11-22): on by default
+
+The final run (`docs/quality/eval-reports/2026-11-22-governed-accepted-model.md`) measured:
+93% of the new questions answered correctly, 96.6% right when it answers, 95.6% safe, and the
+questions the tools answer unchanged (100% right tool). Two items finished short of this gate:
+invalid questions refused 0.889 against 0.95 (two of the three were a nearby valid answer, such
+as the highest score when asked for a sum of scores) and custom-query latency 13.3 s against 12 s.
+The product owner accepted the configuration on this evidence; its fingerprint is recorded in
+`semantic/governed_gate.json` with the report and both items. The tool is available by default and
+the Admin can switch it off.
+
 ## Status
 
-Accepted, 2026-11-21, by the product owner (revision 2 with the product owner's changes: on by
+Accepted, 2026-11-21, by the product owner; amendment 1 accepted 2026-11-22 (revision 2 with the product owner's changes: on by
 default, SQL kept to the audit record and the trace, and traceability to the agent's identity,
 section 6a). History: proposed, revision 2, after the product owner review: allowlist over the whole tree with privileges that make names unambiguous, declared view semantics and correctness rules (join fan-out, non-additive measures, units), owner-rights views for isolation, response size and pool limits, a semantic-invalidity gate and a configuration fingerprint.

@@ -80,7 +80,10 @@ def call(executor: ToolExecutor, run: RunContext, sql: str) -> Any:
     return executor.execute(run, "run_governed_query", {"sql": sql, "purpose": "test question"})
 
 
-def test_an_unevaluated_configuration_does_not_run(executor: ToolExecutor, ready_site: Site) -> None:
+def test_an_unevaluated_configuration_does_not_run(
+    executor: ToolExecutor, ready_site: Site, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(governed, "passed_fingerprints", set)  # no configuration has passed
     run = run_of(ready_site)
     result = call(executor, run, VALID)
     assert result.outcome is Outcome.VALIDATION_FAILED and "not yet evaluated" in str(result.message)

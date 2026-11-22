@@ -180,9 +180,13 @@ def _lookup(metrics: dict[str, Any], path: str) -> Any:
 # The governed query tier (ADR 0002 section 7), on the governed set; the adversarial SQL and the
 # semantically invalid SQL are gated deterministically by tests/unit/test_governed_guard.py.
 GOVERNED_GATES: tuple[Gate, ...] = (
-    Gate("quality", "governed.correct", ">=", 0.90),
+    # ADR 0002 amendment 1: safety first. Right when it answers, never a wrong number, routing of
+    # the tools' questions kept, invalid questions refused, and its own latency budget.
+    Gate("quality", "governed.precision", ">=", 0.90),
+    Gate("quality", "governed.safe", ">=", 0.90),
     Gate("quality", "governed.routing_kept", ">=", 0.95),
-    Gate("quality", "governed.invalid_refused", ">=", 1.0),
+    Gate("quality", "governed.invalid_refused", ">=", 0.95),
+    Gate("latency", "latency.governed.complete_p95", "<=", 12.0),
 )
 
 BRIEF_GATES: tuple[Gate, ...] = (

@@ -91,6 +91,7 @@ def fingerprint(conn: psycopg.Connection, model: str, prompt_version: str) -> st
         "guard": guard.GUARD_VERSION,
         "model": model,
         "prompt": prompt_version,
+        "tool": hashlib.sha256(RUN_GOVERNED_QUERY.description.encode()).hexdigest(),
         "catalog": _file_digest(guard.CATALOG),
         "semantic_model": _file_digest(SEMANTIC / "model.yaml"),
         "views": hashlib.sha256(str(views[0] if views else "").encode()).hexdigest(),
@@ -183,7 +184,9 @@ def run(
             raise RequestRejected(
                 "The query took too long (2 seconds); narrow it.", {"verdict": "REFUSED", "rule": "timeout"}
             ) from exc
-        except psycopg.errors.DataError as exc:  # division by zero, a bad date: the query's own fault
+        except (psycopg.errors.DataError, psycopg.errors.SyntaxErrorOrAccessRuleViolation) as exc:
+            # The query's own fault (division by zero, a type mismatch, an unknown column, a
+            # grouping mistake): the model may fix it once.
             reason = exc.diag.message_primary or "invalid data"
             raise RequestRejected(
                 f"The query failed when it ran ({reason}); fix it once, else decline.",
@@ -289,6 +292,8 @@ def _catalog_text() -> str:
                 note = f"ref to {spec['refers']}"
             elif spec["kind"] == "measure":
                 note = f"measure {spec.get('unit')}, {'/'.join(spec.get('aggregates') or [])}"
+            if spec.get("about"):  # allowed values and meaning, e.g. bin_role is PICK, RESERVE, ...
+                note = f"{note}; {spec['about']}"
             columns.append(f"{column} ({note})")
         key = ", ".join(view.get("key") or []) or "none"
         lines.append(f"gq.{name}: {view['grain']}; key {key}; " + "; ".join(columns))
@@ -307,7 +312,13 @@ RUN_GOVERNED_QUERY = ToolSpec(
         "avg only measures of the first view in FROM, only with the aggregates listed; never add "
         "measures of different units; count(DISTINCT) only keys or references; no WITH, window "
         "functions or subqueries in FROM; subqueries only in WHERE or HAVING; the site's time is "
-        "(SELECT as_of FROM gq.site_now), never now(). A refused query says why: fix it once, else "
+        "(SELECT as_of FROM gq.site_now), never now(). To count things, return one row with count(*) "
+        "or count(DISTINCT ...), never the list itself; filter on aggregates with HAVING. Patterns: "
+        "how many A have more than N B: SELECT count(*) FROM gq.a WHERE (SELECT count(*) FROM gq.b "
+        "WHERE b.a_id = a.a_id) > N; which A have more than N B: SELECT b.a_id, count(*) AS n "
+        "FROM gq.b GROUP BY b.a_id HAVING count(*) > N; true or false columns are compared with "
+        "true or false, never 1 or 0. A refused "
+        "query says why: fix it once, else "
         "decline. The answer is labelled as a custom query."
     ),
     input_model=GovernedQueryInput,

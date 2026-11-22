@@ -646,6 +646,11 @@ def _same_rows(env: EvalEnv, reference_sql: str, result: dict[str, Any] | None) 
     return True
 
 
+def _wrong(run: dict[str, Any]) -> bool:
+    """An answer whose rows are not the reference rows: a wrong number reached the user."""
+    return run["outcome"] == "ANSWER" and not run.get("rows_ok")
+
+
 def _latency(runs: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Milestone percentiles for one group of runs. A run that never emitted progress or a headline
     counts as infinitely late; runs whose answer has no highlights are left out of that milestone
@@ -694,6 +699,7 @@ def score(results: list[CaseResult]) -> dict[str, Any]:
     # Routing (ADR 0002 section 7): questions a tool or the query language answers stay there.
     tool_cases = [run for _, run in runs if run.get("gold_tool") not in (None, "run_governed_query")]
     governed_invalid = [run for r, run in runs if r.category == "GOVERNED_INVALID"]
+    governed_runs = [run for r, run in runs if r.category == "GOVERNED"]
     costs = [run["cost_usd"] for _, run in runs]
     calls = [c for _, run in runs for c in run["calls"]]
     paths = [run["path"] or "none" for _, run in runs]
@@ -709,11 +715,28 @@ def score(results: list[CaseResult]) -> dict[str, Any]:
         "facts_present": share([not run["facts_missing"] for run in with_facts]),
         "governed": {
             "correct": share(governed_rows),
+            # Safety first (ADR 0002 amendment 1): right when it answers, and never a wrong number.
+            "precision": share([run["rows_ok"] for run in governed_runs if run.get("governed_answered")]),
+            "safe": share([not _wrong(run) for run in governed_runs]),
             "routing_kept": share([not run.get("governed_used") for run in tool_cases]),
-            "invalid_refused": share([not run.get("governed_answered") for run in governed_invalid]),
+            # Judged by the answer the user gets: an invalid question is answered only when the
+            # custom query's rows are the final answer (amendment 1).
+            "invalid_refused": share(
+                [
+                    not (run.get("governed_answered") and run.get("tool") == "run_governed_query")
+                    for run in governed_invalid
+                ]
+            ),
         },
         # ADR 0001 amendment 2: every milestone per tier, so a slow tier 3 is never averaged away.
-        "latency": {f"tier{t}": _latency([run for _, run in runs if run["tier"] == t]) for t in (1, 2, 3)},
+        # Custom queries are last-resort, complex questions with their own budget (amendment 1).
+        "latency": {
+            **{
+                f"tier{t}": _latency([r for _, r in runs if r["tier"] == t and not r.get("governed_used")])
+                for t in (1, 2, 3)
+            },
+            "governed": _latency([run for _, run in runs if run.get("governed_used")]),
+        },
         "routing": {
             "share": {f"tier{t}": sum(run["tier"] == t for _, run in runs) for t in (1, 2, 3)},
             "tier2_accuracy": share(
