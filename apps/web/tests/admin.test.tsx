@@ -24,7 +24,6 @@ const audit: AuditRow[] = [
     actor_type: "AGENT",
     user_subject: "manager",
     user_name: "Nadia Perera",
-    user_name: "Warehouse Manager",
     user_role: "warehouse_manager",
     agent_id: "copilot",
     agent_version: "1",
