@@ -46,9 +46,8 @@
   padding: var(--pw-space-1);
   border: 1px solid var(--pw-color-glass-border);
   border-radius: var(--pw-radius-pill);
-  background: var(--pw-color-glass);
-  backdrop-filter: blur(var(--pw-blur-glass));
-  box-shadow: var(--pw-shadow-card);
+  background: var(--pw-color-background);
+  box-shadow: var(--pw-shadow-recess);
 }
 
 .pw-nav button {
@@ -59,17 +58,19 @@
   border: 0;
   border-radius: var(--pw-radius-pill);
   background: transparent;
-  color: var(--pw-color-text-muted);
+  color: var(--pw-color-text-soft);
   font: inherit;
   font-size: var(--pw-font-size-sm);
   font-weight: var(--pw-font-weight-navigation);
   cursor: pointer;
 }
 
+/* The active item is raised out of a recessed track: lighter fill, edge, deeper shadow, heavier type. */
 .pw-nav button[aria-pressed="true"] {
   background: var(--pw-color-surface);
   color: var(--pw-color-text-primary);
-  box-shadow: var(--pw-shadow-card);
+  font-weight: var(--pw-font-weight-heading-strong);
+  box-shadow: var(--pw-shadow-raised);
 }
 
 .pw-profile {

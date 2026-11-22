@@ -79,12 +79,11 @@ describe("admin panel", () => {
     render(<AdminPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Audit log" }));
     expect(await screen.findByText("get_low_stock")).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("User"), { target: { value: "manager" } });
-    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    fireEvent.change(screen.getByLabelText("Decision"), { target: { value: "DENY" } });
     await act(() => Promise.resolve());
-    expect(fetchAudit).toHaveBeenLastCalledWith({ user: "manager" }, expect.anything());
+    expect(fetchAudit).toHaveBeenLastCalledWith({ decision: "DENY" }, expect.anything());
     expect(screen.getByRole("link", { name: "Export CSV" }).getAttribute("href")).toBe(
-      "/api/admin/audit.csv?user=manager",
+      "/api/admin/audit.csv?decision=DENY",
     );
   });
 });

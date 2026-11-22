@@ -184,9 +184,10 @@ a {
   display: flex;
   gap: var(--pw-space-1);
   padding: var(--pw-space-1);
-  border: 1px solid var(--pw-color-glass-border);
+  border: 1px solid var(--pw-color-border);
   border-radius: var(--pw-radius-pill);
-  background: var(--pw-color-glass);
+  background: var(--pw-color-background);
+  box-shadow: var(--pw-shadow-recess);
 }
 
 .pw-segmented button {
@@ -194,7 +195,7 @@ a {
   border-radius: var(--pw-radius-pill);
   padding: var(--pw-space-1) var(--pw-space-3);
   background: transparent;
-  color: var(--pw-color-text-muted);
+  color: var(--pw-color-text-soft);
   font: inherit;
   font-size: var(--pw-font-size-sm);
   font-weight: var(--pw-font-weight-navigation);
@@ -204,7 +205,8 @@ a {
 .pw-segmented button[aria-pressed="true"] {
   background: var(--pw-color-surface);
   color: var(--pw-color-text-primary);
-  box-shadow: var(--pw-shadow-card);
+  font-weight: var(--pw-font-weight-heading-strong);
+  box-shadow: var(--pw-shadow-raised);
 }
 
 .pw-table {
@@ -366,22 +368,23 @@ a {
   --pw-badge-color: var(--pw-color-text-muted);
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--pw-space-1);
+  box-sizing: border-box;
+  min-width: 6.25rem;
   padding: 0.125rem var(--pw-space-2);
-  border: 1px solid color-mix(in oklab, var(--pw-badge-color) 30%, transparent);
-  border-radius: var(--pw-radius-pill);
-  background: color-mix(in oklab, var(--pw-badge-color) 12%, transparent);
+  border: 0;
+  border-radius: var(--pw-radius-sm);
+  background: color-mix(in oklab, var(--pw-badge-color) 14%, transparent);
   color: var(--pw-badge-color);
   font-size: var(--pw-font-size-xs);
-  font-weight: var(--pw-font-weight-navigation);
+  font-weight: var(--pw-font-weight-heading-strong);
   white-space: nowrap;
 }
 
-.pw-badge-dot {
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: var(--pw-radius-pill);
-  background: currentcolor;
+.pw-badge svg {
+  flex: none;
+  stroke-width: 2.5;
 }
 
 .pw-badge.is-success {
@@ -398,4 +401,71 @@ a {
 
 .pw-badge.is-info {
   --pw-badge-color: var(--pw-color-status-info);
+}
+
+.pw-badge.is-action {
+  --pw-badge-color: var(--pw-color-status-action);
+}
+
+/* Dropdowns: one flat style with our own chevron, matching the text fields (no native chrome). */
+select {
+  appearance: none;
+  box-sizing: border-box;
+  padding-right: var(--pw-space-8);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-sm);
+  background-color: var(--pw-color-surface);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--pw-color-text-soft) 50%),
+    linear-gradient(135deg, var(--pw-color-text-soft) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.15rem) 50%,
+    calc(100% - 0.8rem) 50%;
+  background-size:
+    0.35rem 0.35rem,
+    0.35rem 0.35rem;
+  background-repeat: no-repeat;
+  color: var(--pw-color-text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+select:hover {
+  border-color: var(--pw-color-accent);
+}
+
+/* A confirmation popup: dimmed page behind, a centred card, focus kept inside. */
+.pw-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: var(--pw-space-4);
+  background: var(--pw-color-overlay);
+  backdrop-filter: blur(var(--pw-blur-glass));
+}
+
+.pw-modal {
+  display: grid;
+  gap: var(--pw-space-4);
+  width: min(26rem, 100%);
+  padding: var(--pw-space-6);
+  border: 1px solid var(--pw-color-border);
+  border-left: 4px solid var(--pw-color-status-warning);
+  border-radius: var(--pw-radius-md);
+  background: var(--pw-color-surface);
+  box-shadow: var(--pw-shadow-card);
+}
+
+.pw-modal p {
+  margin: 0;
+  font-size: var(--pw-font-size-md);
+}
+
+.pw-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--pw-space-2);
 }
