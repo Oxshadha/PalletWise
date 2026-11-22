@@ -21,11 +21,37 @@
   </a>
 </p>
 
-The answer comes from the warehouse database through governed tools, and the locations it is
-about light up on a 3D (or 2D) map of the warehouse.
+## The problem
 
-One warehouse is simulated end to end: products, zones, racks and bins, customers, orders,
-allocations, picks, receipts and 180 days of stock movements.
+A warehouse management system records every transaction, but it does not answer the questions a
+manager asks every day.
+
+- **Answers are scattered.** "Which items are running low?" means opening several screens and
+  combining the results by hand.
+- **Reports list bin codes, not places.** The manager still has to work out where B12-06-01 is on
+  the floor and what is next to it.
+- **Problems surface late.** Low pick faces, dead stock in prime locations and orders at risk are
+  found when they already hurt.
+- **Generic AI chat is not safe here.** A chatbot that writes its own SQL or invents a number
+  cannot be trusted with operational data.
+
+## How PalletWise solves it
+
+| Problem | PalletWise |
+|---|---|
+| Scattered answers | Ask in plain language; the copilot answers from the warehouse database and shows how each figure was computed and how fresh the data is |
+| Bin codes, not places | Every location an answer is about lights up on a 3D or 2D map of the warehouse, and follow-up questions keep that context |
+| Problems surface late | A daily brief and an inbox of exceptions ranked by business impact, updated live as the warehouse changes |
+| AI that cannot be trusted | The model never sees the database: it chooses governed tools, every calculation lives in a semantic layer, and anything beyond the tools runs only as a parser-checked, read-only query with hard limits; every call is authorised and audited |
+| Tied to one WMS | One connector contract; a new WMS is an adapter, and everything above it stays the same |
+
+**The warehouse.** Peliyagoda Distribution Centre: 676 locations in 6 zones, products, customers,
+orders, allocations, picks, receipts and 180 days of stock movements. It is a live digital twin:
+a deterministic simulator runs the site like a real operation (orders arrive, picks happen, stock
+moves, time advances) and feeds PalletWise through the same connector path a real WMS uses. The
+same seed gives the same data on every machine.
+
+## Screenshots
 
 ![PalletWise, light mode: low-stock answer with its locations on the 3D map](docs/screenshots/home-light.jpg)
 
