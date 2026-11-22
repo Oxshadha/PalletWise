@@ -11,6 +11,14 @@
 
 <p align="center">
   <a href="https://palletwise.oshadhakariyawasam.me"><b>Live demo: palletwise.oshadhakariyawasam.me</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/Oxshadha/PalletWise/releases/download/demo-video/palletwise-demo.mp4"><b>Watch the demo video (4 min)</b></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Oxshadha/PalletWise/releases/download/demo-video/palletwise-demo.mp4">
+    <img src="docs/screenshots/demo-preview.jpg" alt="Play the PalletWise demo video" width="720">
+  </a>
 </p>
 
 The answer comes from the warehouse database through governed tools, and the locations it is
