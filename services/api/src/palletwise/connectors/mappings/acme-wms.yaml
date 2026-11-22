@@ -1,0 +1,58 @@
+# Acme WMS: a REST API with its own names, units and codes, mapped onto PalletWise's canonical
+# records. The credential comes from the ACME_WMS_TOKEN environment variable.
+source_system: acme-wms
+base_url: https://wms.acme.example/api/v2
+auth:
+  type: bearer
+  env: ACME_WMS_TOKEN
+paging:
+  style: cursor
+  param: pageToken
+  size_param: pageSize
+  size: 200
+  next: paging.nextToken
+
+streams:
+  - record_type: PRODUCT
+    path: /items
+    items: results
+    id: itemId
+    occurred_at: modifiedAt
+    since_param: modifiedSince
+    fields:
+      sku: { path: itemCode, as: upper }
+      name: description
+      brand: brandName
+      category: group.code
+      uom: { path: unitOfMeasure, default: EA }
+      unit_value: { path: price.amount, as: float }
+      unit_volume_m3: { path: dims.volumeCm3, as: float, scale: 0.000001 }
+      unit_weight_kg: { path: weightGrams, as: float, scale: 0.001 }
+      temperature_class:
+        path: storage
+        values: { amb: AMBIENT, chl: CHILLED, frz: FROZEN }
+
+  - record_type: ORDER
+    path: /outbound-orders
+    items: results
+    id: orderNumber
+    occurred_at: updatedAt
+    since_param: updatedSince
+    fields:
+      order_no: orderNumber
+      customer: shipTo.code
+      delivery_date: { path: requestedDelivery, as: date }
+      dispatch_deadline: { path: cutoffTime, as: datetime }
+
+  - record_type: ORDER_LINE
+    path: /outbound-order-lines
+    items: results
+    id: lineId
+    occurred_at: updatedAt
+    since_param: updatedSince
+    fields:
+      order_no: orderNumber
+      line_no: { path: lineNumber, as: int }
+      sku: { path: itemCode, as: upper }
+      qty_ordered: { path: quantity.ordered, as: int }
+      external_id: lineId
