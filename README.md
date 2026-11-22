@@ -1,4 +1,17 @@
-# PalletWise
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/brand/logo-dark.png">
+    <img src="apps/web/public/brand/logo-light.png" alt="PalletWise logo" width="96">
+  </picture>
+</p>
+
+<h1 align="center">PalletWise</h1>
+
+<p align="center">The warehouse copilot on a live digital twin: ask in plain language, see the answer on the map.</p>
+
+<p align="center">
+  <a href="https://palletwise.oshadhakariyawasam.me"><b>Live demo: palletwise.oshadhakariyawasam.me</b></a>
+</p>
 
 A warehouse copilot on a live digital twin. Ask a question in plain language. The answer comes
 from the warehouse database through governed tools, and the locations it is about light up on a 3D
