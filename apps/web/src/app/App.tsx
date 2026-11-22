@@ -169,7 +169,11 @@ function ProfileMenu({ me, siteName }: { me: Me; siteName: string | null }) {
               </button>
             ))}
           </div>
-          <button type="button" className="pw-button-quiet pw-signout" onClick={() => void signOut()}>
+          <button
+            type="button"
+            className="pw-button-quiet pw-signout"
+            onClick={() => void signOut()}
+          >
             <Icon name="sign-out" size={16} />
             Sign out
           </button>
