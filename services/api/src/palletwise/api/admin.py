@@ -207,6 +207,7 @@ class AuditRow(BaseModel):
     occurred_at: datetime
     actor_type: str
     user_subject: str | None
+    user_name: str | None
     user_role: str | None
     agent_id: str | None
     agent_version: str | None

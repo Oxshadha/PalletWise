@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS sim.outbox (
   payload          jsonb NOT NULL,
   PRIMARY KEY (run_id, seq)
 );
+-- The connector reads a run's newest simulated time on every poll: without this index that is a
+-- scan of the whole run (seconds, and hundreds of percent of a CPU, once resets pile runs up).
+CREATE INDEX IF NOT EXISTS outbox_run_time ON sim.outbox (run_id, sim_time);
 -- Slice 4 time shift: how far the run's outbox reaches, and each command once per key.
 ALTER TABLE sim.run ADD COLUMN IF NOT EXISTS emitted_until timestamptz;
 CREATE TABLE IF NOT EXISTS sim.command (

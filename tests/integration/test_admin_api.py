@@ -80,6 +80,31 @@ def test_unanswered_questions_and_the_audit_export(env: Env) -> None:
     assert all(r["decision"] == "DENY" for r in denied)
 
 
+def test_the_audit_names_who_acted(env: Env, connect_as: Any) -> None:
+    """The audit shows the user's display name beside the sign-in id; a later sign-in renames."""
+    import psycopg
+
+    env.sign_in(subject="admin-named", role="admin", name="Nadia Perera")
+    view = env.client.get("/api/admin/audit?user=admin-named").json()
+    assert view and all(r["user_name"] == "Nadia Perera" for r in view)
+    env.sign_in(subject="admin-named", role="admin", name="Nadia P.")
+    view = env.client.get("/api/admin/audit?user=admin-named").json()
+    assert len(view) >= 2 and all(r["user_name"] == "Nadia P." for r in view)
+    exported = list(csv.reader(io.StringIO(env.client.get("/api/admin/audit.csv?user=admin-named").text)))
+    assert exported[0][2:4] == ["user_subject", "user_name"] and exported[1][3] == "Nadia P."
+
+    # The admin read role sees only names in its tenant, and only the three granted columns.
+    admin = connect_as("pw_admin_read")
+    with admin.transaction():
+        admin.execute("SELECT set_config('app.tenant_id', %s, true)", (str(uuid4()),))
+        assert admin.execute("SELECT count(*) FROM pw.user_directory").fetchone() == (0,)
+    with pytest.raises(psycopg.errors.InsufficientPrivilege), admin.transaction():
+        admin.execute("SELECT updated_at FROM pw.user_directory")
+    app = connect_as("pw_app")
+    with pytest.raises(psycopg.errors.InsufficientPrivilege), app.transaction():
+        app.execute("SELECT display_name FROM pw.user_directory")
+
+
 def test_csv_cells_cannot_start_a_formula() -> None:
     from palletwise.api.admin import _cell  # pyright: ignore[reportPrivateUsage]
 
