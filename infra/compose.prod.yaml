@@ -14,6 +14,8 @@ services:
     mem_limit: 900m
 
   keycloak:
+    # Production mode behind the TLS proxy (local development keeps start-dev).
+    command: ["start", "--import-realm", "--http-enabled=true", "--http-port=8080"]
     environment:
       KC_HOSTNAME: https://palletwise.oshadhakariyawasam.me/auth
       KC_HTTP_RELATIVE_PATH: /auth
