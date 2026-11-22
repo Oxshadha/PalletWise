@@ -25,10 +25,12 @@ import {
   Object3D,
   type PerspectiveCamera,
   RepeatWrapping,
+  Shape,
 } from "three";
 
 import type { Highlight, Layout, LayoutBin } from "../../shared/api/client";
 import { type BinState, type Bounds, prefersReducedMotion, siteBounds } from "./geometry";
+import { Scenery } from "./Scenery";
 import type { CameraCommand } from "./MapPanel";
 import type { SceneColors } from "./useTokenColors";
 
@@ -61,6 +63,7 @@ interface Props {
   command: CameraCommand;
   colors: SceneColors;
   onSelect: (binId: string) => void;
+  heat?: Map<string, number> | null; // pick activity 0 to 1 per location; null when the heatmap is off
 }
 
 export function Scene3D(props: Props) {
@@ -103,7 +106,16 @@ export function Scene3D(props: Props) {
         marked={new Set(props.zoneHighlights.map((h) => h.target_id))}
       />
       <Racking layout={props.layout} colors={props.colors} />
+      <Scenery layout={props.layout} site={site} colors={props.colors} />
       <StatePlates {...props} />
+      {props.heat && (
+        <HeatFloor
+          layout={props.layout}
+          heat={props.heat}
+          onHand={props.onHand}
+          colors={props.colors}
+        />
+      )}
       <Stock {...props} />
       <ZoneOutlines {...props} />
       <HitTargets {...props} />
@@ -116,7 +128,13 @@ export function Scene3D(props: Props) {
         far={8}
         resolution={1024}
       />
-      <CameraRig mode={props.mode} focus={props.focus} command={props.command} site={site} />
+      {/* The overview includes the yard beside the docks (Scenery). */}
+      <CameraRig
+        mode={props.mode}
+        focus={props.focus}
+        command={props.command}
+        site={{ ...site, maxX: site.maxX + 12 }}
+      />
     </Canvas>
   );
 }
@@ -275,6 +293,7 @@ function useInstances(
   count: number,
   place: (dummy: Object3D, index: number) => void,
   deps: unknown[],
+  paint?: (index: number) => Color, // per-instance colour (the heatmap)
 ) {
   const mesh = useRef<InstancedMesh>(null);
   useLayoutEffect(() => {
@@ -287,6 +306,10 @@ function useInstances(
       target.setMatrixAt(i, dummy.matrix);
     }
     target.instanceMatrix.needsUpdate = true;
+    if (paint) {
+      for (let i = 0; i < count; i += 1) target.setColorAt(i, paint(i));
+      if (target.instanceColor) target.instanceColor.needsUpdate = true;
+    }
     target.computeBoundingSphere();
     // place is recreated on every render; the listed inputs decide when the matrices change
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -599,7 +622,72 @@ function StatePlate({
   );
 }
 
+/**
+ * The activity heatmap: a plate on top of each rack footprint (where the racks cannot hide it),
+ * from the soft accent to the critical colour by the footprint's busiest location (picks in the
+ * last 7 days).
+ */
+function HeatFloor({
+  layout,
+  heat,
+  onHand,
+  colors,
+}: {
+  layout: Layout;
+  heat: Map<string, number>;
+  onHand: Map<string, number>;
+  colors: SceneColors;
+}) {
+  const cells = useMemo(() => {
+    const byFootprint = new Map<string, { bin: LayoutBin; value: number }>();
+    for (const bin of layout.bins) {
+      const value = heat.get(bin.id) ?? 0;
+      const key = `${String(bin.x)}:${String(bin.y)}`;
+      const found = byFootprint.get(key);
+      // The plate sits on the highest shelf; its colour is the busiest location below it.
+      const top = !found || slotBase(bin) > slotBase(found.bin) ? bin : found.bin;
+      byFootprint.set(key, { bin: top, value: Math.max(value, found?.value ?? 0) });
+    }
+    return [...byFootprint.values()].filter((c) => c.value > 0);
+  }, [layout, heat]);
+  const mesh = useInstances(
+    cells.length,
+    (dummy, i) => {
+      const cell = cells[i];
+      if (!cell) return;
+      const stocked = (onHand.get(cell.bin.id) ?? 0) > 0;
+      const top = stocked ? 0.14 + Math.min(cell.bin.height_m * 0.62, 1.4) + 0.02 : 0.02;
+      dummy.position.set(cell.bin.x, slotBase(cell.bin) + top, cell.bin.y);
+      dummy.rotation.set(-Math.PI / 2, 0, 0);
+      dummy.scale.set(cell.bin.width_m, cell.bin.depth_m, 1);
+    },
+    [cells, colors, onHand],
+    (i) =>
+      new Color(colors["--pw-color-accent-soft"]).lerp(
+        new Color(colors["--pw-color-status-critical"]),
+        cells[i]?.value ?? 0,
+      ),
+  );
+  if (cells.length === 0) return null;
+  return (
+    <instancedMesh ref={mesh} args={[undefined, undefined, cells.length]} raycast={() => null}>
+      <planeGeometry args={[1, 1]} />
+      <meshBasicMaterial transparent opacity={0.85} depthWrite={false} />
+    </instancedMesh>
+  );
+}
+
 /** Zone highlights (semantic spec 7.6): an outline painted round the zone, with its code. */
+/** The zone's outline as a flat shape around its centre, for the floor tint (x, -z in the plane). */
+function zoneShape(outline: readonly (readonly number[])[], cx: number, cy: number): Shape {
+  const shape = new Shape();
+  outline.forEach(([x = 0, y = 0], i) => {
+    if (i === 0) shape.moveTo(x - cx, cy - y);
+    else shape.lineTo(x - cx, cy - y);
+  });
+  return shape;
+}
+
 function ZoneOutlines({ layout, zoneHighlights, colors }: Props) {
   const zones = new Map(layout.zones.map((z) => [z.id, z]));
   return (
@@ -614,10 +702,22 @@ function ZoneOutlines({ layout, zoneHighlights, colors }: Props) {
         const [cx, cy] = zoneCentre(zone.outline);
         return (
           <group key={highlight.target_id}>
+            {/* A light tint of the zone's floor and a thin edge: an area, not a fence. */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[cx, 0.015, cy]} raycast={() => null}>
+              <shapeGeometry args={[zoneShape(zone.outline, cx, cy)]} />
+              <meshBasicMaterial
+                color={colors[SEVERITY_TOKEN[highlight.severity]]}
+                transparent
+                opacity={0.08}
+                depthWrite={false}
+              />
+            </mesh>
             <Line
               points={points}
               color={colors[SEVERITY_TOKEN[highlight.severity]]}
-              lineWidth={highlight.severity === "critical" ? 6 : 4}
+              lineWidth={2.5}
+              transparent
+              opacity={0.85}
             />
             <Html position={[cx, 0.4, cy]} center zIndexRange={[20, 10]} pointerEvents="none">
               <span className={`pw-pin-tag is-${highlight.severity}`}>

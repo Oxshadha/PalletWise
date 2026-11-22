@@ -10,6 +10,8 @@
 
 /* Inter Variable with the optical size axis: the display cut at large sizes, every weight. */
 @import "@fontsource-variable/inter/opsz.css";
+/* Google Sans Flex Variable for body text (product owner, 2026-11-21); self-hosted, OFL-1.1. */
+@import "@fontsource-variable/google-sans-flex/index.css";
 
 :root {
   /* ---- Brand palette (product owner) */
@@ -42,6 +44,16 @@
   --pw-color-map-pallet: #b88b5a;
   --pw-color-map-wall: #f6f8fb;
   --pw-color-map-dock: #3d4a5c;
+  --pw-color-map-truck: #f3f5f9;
+  --pw-color-map-truck-cab: #2f6fd6;
+  --pw-color-map-glass: #22304d;
+  --pw-color-map-tyre: #1d2430;
+  --pw-color-map-forklift: #f2b33d;
+  --pw-color-map-steel: #4a5568;
+  --pw-color-map-vest: #ff8a3d;
+  --pw-color-map-skin: #e8c3a0;
+  --pw-color-map-apron: #c9d1dd;
+  --pw-color-map-yard-paint: #ffffff;
   --pw-color-secondary: #8abafb;
 
   /* ---- Derived roles (proposed from the mockups; adjust freely) */
@@ -58,7 +70,11 @@
   --pw-color-status-success: #15803d;
 
   /* ---- Typography: light display type for titles and numbers, quiet small labels */
-  --pw-font-family: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pw-font-family:
+    "Google Sans Flex Variable", "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Headings keep Inter's light display cut. */
+  --pw-font-family-display:
+    "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --pw-font-weight-light: 300;
   --pw-font-weight-body: 400;
   --pw-font-weight-navigation: 500;
@@ -141,6 +157,16 @@
   --pw-color-map-pallet: #8f6b45;
   --pw-color-map-wall: #26355a;
   --pw-color-map-dock: #0e1628;
+  --pw-color-map-truck: #c9d2e0;
+  --pw-color-map-truck-cab: #3b78d8;
+  --pw-color-map-glass: #0b1220;
+  --pw-color-map-tyre: #0a0f18;
+  --pw-color-map-forklift: #d99a2b;
+  --pw-color-map-steel: #6b7a90;
+  --pw-color-map-vest: #e9792f;
+  --pw-color-map-skin: #d6b08c;
+  --pw-color-map-apron: #1a2438;
+  --pw-color-map-yard-paint: #8a97ad;
   --pw-color-secondary: #64748b;
 
   --pw-color-text-muted: #a9b6cc;

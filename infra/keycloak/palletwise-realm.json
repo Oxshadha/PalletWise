@@ -1,7 +1,7 @@
 {
   "realm": "palletwise",
   "enabled": true,
-  "displayName": "PalletWise (development)",
+  "displayName": "PalletWise",
   "sslRequired": "external",
   "registrationAllowed": false,
   "roles": {
@@ -89,15 +89,17 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "redirectUris": [
-        "http://localhost:8080/api/auth/callback"
+        "http://localhost:8080/api/auth/callback",
+        "https://palletwise.oshadhakariyawasam.me/api/auth/callback"
       ],
       "webOrigins": [
-        "http://localhost:8080"
+        "http://localhost:8080",
+        "https://palletwise.oshadhakariyawasam.me"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "standard.token.exchange.enabled": "true",
-        "post.logout.redirect.uris": "http://localhost:8080/*"
+        "post.logout.redirect.uris": "http://localhost:8080/*##https://palletwise.oshadhakariyawasam.me/*"
       },
       "optionalClientScopes": [
         "copilot-audience"
@@ -260,5 +262,6 @@
   "defaultDefaultClientScopes": [
     "basic"
   ],
-  "defaultOptionalClientScopes": []
+  "defaultOptionalClientScopes": [],
+  "loginTheme": "palletwise"
 }

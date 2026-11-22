@@ -131,6 +131,20 @@ export function statesById(state: MapState | null): Map<string, BinState> {
   return new Map((state?.bins ?? []).map((b) => [b.bin_id, b.state]));
 }
 
+/**
+ * Pick activity per location, scaled 0 to 1 against the busiest location for colouring only (the
+ * picked units come from the semantic layer). Square-rooted so quieter locations stay visible.
+ */
+export function heatById(state: MapState | null): Map<string, number> {
+  const bins = state?.bins ?? [];
+  const top = Math.max(0, ...bins.map((b) => b.picked_7d));
+  return new Map(
+    top > 0
+      ? bins.filter((b) => b.picked_7d > 0).map((b) => [b.bin_id, Math.sqrt(b.picked_7d / top)])
+      : [],
+  );
+}
+
 export function onHandById(state: MapState | null): Map<string, number> {
   return new Map((state?.bins ?? []).map((b) => [b.bin_id, b.on_hand]));
 }

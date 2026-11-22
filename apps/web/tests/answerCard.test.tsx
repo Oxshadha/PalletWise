@@ -5,6 +5,12 @@ import { AnswerCard } from "../src/features/copilot/AnswerCard";
 import type { Answer } from "../src/shared/workspace/workspace";
 import { BIN_A, BIN_B, envelope } from "./fixtures";
 
+/** An answer paragraph by its whole text (key figures inside it are bold, so it spans elements). */
+function sentence(text: string) {
+  return (_: string, element: Element | null) =>
+    element?.classList.contains("pw-rich-p") === true && element.textContent === text;
+}
+
 function answer(overrides: Partial<Answer> = {}): Answer {
   return {
     id: "a",
@@ -41,7 +47,7 @@ describe("answer card (UX spec 7)", () => {
         onSuggestion={noop}
       />,
     );
-    expect(screen.getByText("SKU-102 is stored in 2 locations.")).toBeTruthy();
+    expect(screen.getByText(sentence("SKU-102 is stored in 2 locations."))).toBeTruthy();
     expect(screen.getByRole("button", { name: "Show on map (2 locations)" })).toBeTruthy();
     expect(container.textContent).not.toContain("find_product_locations");
     expect(container.textContent).not.toContain("normalized_request");
@@ -145,7 +151,7 @@ describe("answer card (UX spec 7)", () => {
       />,
     );
     expect(screen.queryByText("Writing the answer")).toBeNull();
-    expect(screen.getByText("SKU-102 is stored in 2 locations.")).toBeTruthy();
+    expect(screen.getByText(sentence("SKU-102 is stored in 2 locations."))).toBeTruthy();
   });
 
   it("shows the template headline while the answer is late, then the answer", () => {
@@ -159,7 +165,7 @@ describe("answer card (UX spec 7)", () => {
         onSuggestion={() => undefined}
       />,
     );
-    expect(screen.getByText(headline)).toBeTruthy();
+    expect(screen.getByText(sentence(headline))).toBeTruthy();
     expect(screen.queryByText("Writing the answer")).toBeNull();
     rerender(
       <AnswerCard
@@ -170,7 +176,7 @@ describe("answer card (UX spec 7)", () => {
         onSuggestion={() => undefined}
       />,
     );
-    expect(screen.queryByText(headline)).toBeNull();
-    expect(screen.getByText("SKU-102 is stored in 2 locations.")).toBeTruthy();
+    expect(screen.queryByText(sentence(headline))).toBeNull();
+    expect(screen.getByText(sentence("SKU-102 is stored in 2 locations."))).toBeTruthy();
   });
 });

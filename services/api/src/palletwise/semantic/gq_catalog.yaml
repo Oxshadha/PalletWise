@@ -1,0 +1,135 @@
+# Governed views: what each row is, how views join, and how each measure may be aggregated
+# (ADR 0002 sections 3 and 4). The guard enforces these rules; the model reads this file as its
+# schema description. A test checks it against the live view definitions.
+#
+# kinds: key (identifies a row of this view), ref (refers to another view's key), attribute,
+# measure. A measure has a unit and the aggregates allowed on it; "count" counts rows or keys and
+# is always allowed. Joins are many to one: a ref may join only the key of the view it names.
+
+version: 1
+
+views:
+  site_now:
+    grain: one row, the site's current time (site clock)
+    key: []
+    columns:
+      as_of: { kind: attribute, type: timestamptz, about: the site's current time; use it for "today" or "last 7 days", never the system clock }
+      time_zone: { kind: attribute, type: text }
+      site_code: { kind: attribute, type: text }
+      site_name: { kind: attribute, type: text }
+
+  products:
+    grain: one row per active product
+    key: [product_id]
+    columns:
+      product_id: { kind: key, type: uuid }
+      sku: { kind: attribute, type: text }
+      name: { kind: attribute, type: text }
+      brand: { kind: attribute, type: text }
+      category_code: { kind: attribute, type: text }
+      category_name: { kind: attribute, type: text }
+      uom: { kind: attribute, type: text, about: unit of measure of the product's quantities }
+      unit_value: { kind: measure, type: numeric, unit: LKR per unit, aggregates: [min, max, avg], about: a price, never summed across products }
+
+  locations:
+    grain: one row per active storage location (bin) at the site
+    key: [bin_id]
+    columns:
+      bin_id: { kind: key, type: uuid }
+      bin_code: { kind: attribute, type: text }
+      bin_role: { kind: attribute, type: text, about: "PICK, RESERVE, BULK, RECEIVING, STAGING, RETURNS" }
+      storable: { kind: attribute, type: boolean }
+      zone_id: { kind: attribute, type: uuid }
+      zone_code: { kind: attribute, type: text }
+      zone_name: { kind: attribute, type: text }
+      zone_type: { kind: attribute, type: text }
+      rack_code: { kind: attribute, type: text }
+      bay: { kind: attribute, type: integer }
+      level: { kind: attribute, type: integer }
+      is_prime: { kind: attribute, type: boolean, about: a fast-pick zone }
+
+  stock:
+    grain: one row per location and product holding stock now
+    key: [bin_id, product_id]
+    columns:
+      bin_id: { kind: ref, type: uuid, refers: locations }
+      product_id: { kind: ref, type: uuid, refers: products }
+      on_hand: { kind: measure, type: integer, unit: units, aggregates: [sum, min, max, avg] }
+      allocated: { kind: measure, type: integer, unit: units, aggregates: [sum, min, max, avg] }
+      available: { kind: measure, type: integer, unit: units, aggregates: [sum, min, max, avg] }
+      inventory_value: { kind: measure, type: numeric, unit: LKR, aggregates: [sum, min, max, avg] }
+      last_movement_at: { kind: attribute, type: timestamptz }
+
+  movements:
+    grain: one row per stock movement at the site
+    key: []
+    columns:
+      movement_type: { kind: attribute, type: text, about: "RECEIPT, PUTAWAY, REPLENISH, PICK, SHIP, ADJUSTMENT, CYCLE_COUNT" }
+      product_id: { kind: ref, type: uuid, refers: products }
+      qty: { kind: measure, type: integer, unit: units, aggregates: [sum, min, max, avg] }
+      from_bin_id: { kind: ref, type: uuid, refers: locations }
+      to_bin_id: { kind: ref, type: uuid, refers: locations }
+      occurred_at: { kind: attribute, type: timestamptz }
+      reason_code: { kind: attribute, type: text }
+      order_line_id: { kind: ref, type: uuid, refers: order_lines }
+
+  orders:
+    grain: one row per outbound order at the site
+    key: [order_id]
+    columns:
+      order_id: { kind: key, type: uuid }
+      order_no: { kind: attribute, type: text }
+      customer_code: { kind: attribute, type: text, about: the outlet's business code }
+      customer_brand: { kind: attribute, type: text }
+      status: { kind: attribute, type: text }
+      dispatch_deadline: { kind: attribute, type: timestamptz }
+      shipped_at: { kind: attribute, type: timestamptz }
+      delivery_date: { kind: attribute, type: date }
+      line_count: { kind: measure, type: integer, unit: lines, aggregates: [sum, min, max, avg] }
+
+  order_lines:
+    grain: one row per order line at the site
+    key: [order_line_id]
+    columns:
+      order_line_id: { kind: key, type: uuid }
+      order_id: { kind: ref, type: uuid, refers: orders }
+      line_no: { kind: attribute, type: integer }
+      product_id: { kind: ref, type: uuid, refers: products }
+      qty_ordered: { kind: measure, type: integer, unit: units, aggregates: [sum, min, max, avg] }
+      qty_allocated: { kind: measure, type: integer, unit: units, aggregates: [sum, min, max, avg] }
+      qty_picked: { kind: measure, type: integer, unit: units, aggregates: [sum, min, max, avg] }
+      qty_shipped: { kind: measure, type: integer, unit: units, aggregates: [sum, min, max, avg] }
+      unallocated_qty: { kind: measure, type: integer, unit: units, aggregates: [sum, min, max, avg] }
+      is_open: { kind: attribute, type: boolean }
+
+  allocations:
+    grain: one row per open allocation of an order line to a location
+    key: []
+    columns:
+      order_line_id: { kind: ref, type: uuid, refers: order_lines }
+      product_id: { kind: ref, type: uuid, refers: products }
+      bin_id: { kind: ref, type: uuid, refers: locations }
+      open_qty: { kind: measure, type: integer, unit: units, aggregates: [sum, min, max, avg] }
+
+  exceptions:
+    grain: one row per exception record at the site (open, acknowledged or resolved)
+    key: [exception_id]
+    columns:
+      exception_id: { kind: key, type: uuid }
+      exception_type: { kind: attribute, type: text, about: "STOCKOUT_RISK, DELAYED_ORDER, LOW_STOCK, DEAD_STOCK, SLOW_IN_PRIME, CAPACITY_HOTSPOT" }
+      product_id: { kind: ref, type: uuid, refers: products }
+      zone_id: { kind: attribute, type: uuid }
+      order_id: { kind: ref, type: uuid, refers: orders }
+      status: { kind: attribute, type: text, about: "OPEN, ACKNOWLEDGED, RESOLVED" }
+      critical: { kind: attribute, type: boolean }
+      score: { kind: measure, type: numeric, unit: impact score, aggregates: [min, max], about: a ranking score from 0 to 100, never summed or averaged }
+      first_detected_at: { kind: attribute, type: timestamptz }
+      last_evaluated_at: { kind: attribute, type: timestamptz }
+      acknowledged: { kind: attribute, type: boolean }
+
+  calendar:
+    grain: one row per calendar day of the site's region
+    key: [date]
+    columns:
+      date: { kind: key, type: date }
+      is_operating: { kind: attribute, type: boolean }

@@ -79,7 +79,12 @@ def exception_severity(exception_type: str, critical: bool) -> Severity:
 
 class RequestRejected(ValueError):
     """A tool request refused for a reason the agent can act on (semantic spec 7.4): reported as a
-    validation failure with this message, and counted toward the step limit (NFR-REL-03)."""
+    validation failure with this message, and counted toward the step limit (NFR-REL-03). `audit`
+    adds what the audit record should keep about the refusal (for example the rule that refused)."""
+
+    def __init__(self, message: str, audit: dict[str, object] | None = None) -> None:
+        super().__init__(message)
+        self.audit = audit or {}
 
 
 class Frozen(BaseModel):

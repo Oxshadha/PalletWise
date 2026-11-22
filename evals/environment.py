@@ -327,6 +327,13 @@ def standalone() -> Generator[EvalEnv]:
                 "SELECT outcome FROM pw.evaluate_site_exceptions(%s)", (site,)
             ).fetchone()
         assert evaluated is not None and evaluated[0] == "evaluated", evaluated
+        # A gate run makes hundreds of model calls in one day: the evaluation tenant's daily
+        # budget must never run out mid-run and turn answers into templates (found on c667e7e).
+        # The budget gate itself is tested by the unit and integration suites, not by this run.
+        budget = connect("postgres")
+        budget.autocommit = True
+        budget.execute("UPDATE pw.agent SET daily_token_budget = 100000000 WHERE tenant_id = %s", (tenant,))
+        budget.close()
 
         superuser = connect("postgres")
         superuser.autocommit = True

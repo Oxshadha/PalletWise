@@ -1,0 +1,11 @@
+# PalletWise: start everything from the repository root with
+#   docker compose up -d --build --wait
+# The stack itself is infra/compose.yaml; image digests are pinned in infra/images.env and the
+# local secrets are in .env (created by scripts/setup.py).
+name: palletwise
+
+include:
+  - path: infra/compose.yaml
+    env_file:
+      - infra/images.env
+      - .env

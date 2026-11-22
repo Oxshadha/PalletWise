@@ -13,6 +13,7 @@ class BinState:
     bin_id: UUID
     state: str  # NORMAL, EMPTY, LOW_STOCK or OVER_CAPACITY (ux-screens 5)
     on_hand: int
+    picked_7d: int = 0  # units picked from it in the last 7 site days (the activity heatmap)
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +22,10 @@ class MapState:
     time_zone: str
     data_as_of: datetime | None
     bins: list[BinState]
+    total_units: int = 0
+    stocked_locations: int = 0
+    active_zones: int = 0
+    open_exceptions: int = 0
 
 
 def map_state(conn: Connection, site: UUID) -> MapState:
@@ -31,5 +36,21 @@ def map_state(conn: Connection, site: UUID) -> MapState:
         "SELECT bin_id, state, on_hand FROM sem.bin_states(%s, %s, %s)",
         (site, moment.as_of, moment.settings_version_id),
     ).fetchall()
+    picked = dict(
+        query(
+            conn,
+            "bin_pick_activity",
+            "SELECT bin_id, picked_units FROM sem.bin_pick_activity(%s, %s, 7)",
+            (site, moment.as_of),
+        ).fetchall()
+    )
+    summary = query(
+        conn,
+        "site_summary",
+        "SELECT total_units, stocked_locations, active_zones, open_exceptions FROM sem.site_summary(%s, %s)",
+        (site, moment.as_of),
+    ).fetchone()
     evidence = moment.evidence(("MASTER", "MOVEMENTS"), ())
-    return MapState(moment.as_of, moment.time_zone, evidence.data_as_of, [BinState(*r) for r in rows])
+    bins = [BinState(r[0], r[1], r[2], int(picked.get(r[0], 0))) for r in rows]
+    figures = [int(v) for v in summary] if summary else [0, 0, 0, 0]
+    return MapState(moment.as_of, moment.time_zone, evidence.data_as_of, bins, *figures)

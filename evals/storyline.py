@@ -127,8 +127,15 @@ class Demo:
             "with_exceptions_s": round(recalculated_at - started, 2),
         }
 
+    def open_bar(self) -> None:
+        """The time controls start folded to a pill beside the site name; open them."""
+        pill = self.page.locator(".pw-timebar-pill")
+        if pill.count() > 0:
+            pill.click()
+
     def reset(self) -> float:
         started = time.monotonic()
+        self.open_bar()
         self.page.get_by_role("button", name="Reset", exact=True).click()
         self.confirm("Reset the simulation")
         self.page.get_by_role("status").filter(has_text="Resetting").wait_for(timeout=30000)

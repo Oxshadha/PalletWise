@@ -1,0 +1,6 @@
+# Keep LF everywhere, so files read inside Linux containers work the same from a Windows checkout.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.woff2 binary
+*.ico binary

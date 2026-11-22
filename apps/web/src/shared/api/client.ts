@@ -25,6 +25,10 @@ export type ShiftBy = NonNullable<Schemas["ShiftIn"]["by"]>;
 export type Shifted = Schemas["ShiftOut"];
 export type ScenarioRun = Schemas["ScenarioOut"];
 export type ResetDone = Schemas["ResetOut"];
+export type AdminAgent = Schemas["AgentOut"];
+export type UsageRow = Schemas["UsageRow"];
+export type UnansweredRow = Schemas["UnansweredRow"];
+export type AuditRow = Schemas["AuditRow"];
 
 /** Thrown when the session is missing or has ended; the shell sends the user to sign in. */
 export class SignedOut extends Error {}
@@ -194,3 +198,47 @@ export async function resetSimulation(siteId: string): Promise<ResetDone> {
   const response = await send(`${site(siteId)}/simulation/reset`, undefined, once());
   return (await response.json()) as ResetDone;
 }
+
+/* ---------------------------------------------------------------- admin panel (FR-ADM-03, 05 to 07) */
+
+export const fetchAdminAgent = (signal?: AbortSignal) =>
+  getJson<AdminAgent>("/api/admin/agent", signal);
+
+/** The kill switch: suspending stops new copilot requests on the next request. */
+export async function setAgentStatus(status: "ACTIVE" | "SUSPENDED"): Promise<void> {
+  const response = await fetch("/api/admin/agent/status", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...once() },
+    body: JSON.stringify({ status }),
+  });
+  if (response.status === 401) throw new SignedOut();
+  if (!response.ok) throw await problemFrom(response);
+}
+
+/** Custom queries on or off for the organisation (ADR 0002); they also need a passed gate. */
+export async function setGovernedQuery(enabled: boolean): Promise<void> {
+  const response = await fetch("/api/admin/agent/governed-query", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...once() },
+    body: JSON.stringify({ enabled }),
+  });
+  if (response.status === 401) throw new SignedOut();
+  if (!response.ok) throw await problemFrom(response);
+}
+
+export const fetchUsage = (days: number, signal?: AbortSignal) =>
+  getJson<UsageRow[]>(`/api/admin/usage?days=${String(days)}`, signal);
+
+export const fetchUnanswered = (days: number, signal?: AbortSignal) =>
+  getJson<UnansweredRow[]>(`/api/admin/unanswered?days=${String(days)}`, signal);
+
+/** The audit filters; empty values are left out. */
+export function auditQuery(filters: Record<string, string>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters))
+    if (value.trim()) params.set(key, value.trim());
+  return params.toString();
+}
+
+export const fetchAudit = (filters: Record<string, string>, signal?: AbortSignal) =>
+  getJson<AuditRow[]>(`/api/admin/audit?${auditQuery(filters)}`, signal);

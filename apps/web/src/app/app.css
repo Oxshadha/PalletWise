@@ -6,7 +6,10 @@
   height: 100vh;
 }
 
+/* Above the time bar and the panels, so its menus open over them. */
 .pw-topbar {
+  position: relative;
+  z-index: 20;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
@@ -24,12 +27,9 @@
   line-height: var(--pw-line-height-heading);
 }
 
-.pw-brand-sub {
-  display: block;
-  color: var(--pw-color-text-muted);
-  font-size: var(--pw-font-size-xs);
-  font-weight: var(--pw-font-weight-body);
-  letter-spacing: var(--pw-letter-spacing-label);
+/* The logo and the name alone, like the reference design. */
+.pw-brand-name {
+  font-size: var(--pw-font-size-xl);
 }
 
 .pw-brand-logo {
@@ -97,7 +97,7 @@
   z-index: 3;
   display: grid;
   gap: var(--pw-space-2);
-  width: 16rem;
+  width: 19rem;
   margin-top: var(--pw-space-2);
   padding: var(--pw-space-4);
   border: 1px solid var(--pw-color-glass-border);
@@ -114,8 +114,24 @@
   font-weight: var(--pw-font-weight-heading);
 }
 
+/* The site title, with the folded time controls as a pill on the right; opened, the time bar
+   takes its own row under the title. */
 .pw-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pw-space-3) var(--pw-space-4);
   padding: var(--pw-space-2) var(--pw-space-8) var(--pw-space-5);
+}
+
+.pw-page-title {
+  min-width: 0;
+}
+
+.pw-page-head > .pw-timebar {
+  flex-basis: 100%;
+  margin: 0;
 }
 
 .pw-page-head p {
@@ -142,51 +158,86 @@
   max-width: 36rem;
 }
 
-/* Both panels side by side; balanced from 1600 px (UX spec 9). */
+/* The map and one side panel (copilot or inbox) side by side, split by a draggable bar
+   (UX spec 9). The view switch shows or hides either; both stay mounted, so an answer in
+   progress keeps streaming while hidden. */
 .pw-workspace {
   display: grid;
-  grid-template-columns: minmax(560px, 1.55fr) minmax(380px, 1fr);
-  gap: var(--pw-space-5);
+  grid-template-columns: minmax(480px, var(--pw-split, 58%)) 1.5rem minmax(360px, 1fr);
   flex: 1;
   min-height: 0;
   padding: 0 var(--pw-space-8) var(--pw-space-6);
 }
 
-/* 1200 to 1599 px: the selected panel gets 55 percent, never below its minimum. */
-@media (max-width: 1599px) {
-  .pw-workspace[data-panel="warehouse"] {
-    grid-template-columns: minmax(560px, 55fr) minmax(380px, 45fr);
-  }
-
-  .pw-workspace[data-panel="copilot"] {
-    grid-template-columns: minmax(560px, 45fr) minmax(380px, 55fr);
-  }
-
-  .pw-workspace[data-panel="inbox"] {
-    grid-template-columns: minmax(560px, 55fr) minmax(380px, 45fr);
-  }
+.pw-workspace[data-map="off"],
+.pw-workspace[data-side="none"] {
+  grid-template-columns: minmax(0, 1fr);
 }
 
-/* The copilot and the inbox share the column beside the map (D4); both stay mounted, so an
-   answer in progress keeps streaming while the inbox is shown. */
-.pw-workspace[data-panel="inbox"] .pw-copilot,
-.pw-workspace:not([data-panel="inbox"]) .pw-inbox {
+.pw-workspace[data-map="off"] .pw-map-panel,
+.pw-workspace[data-map="off"] .pw-splitter,
+.pw-workspace[data-side="none"] .pw-splitter,
+.pw-workspace:not([data-side="copilot"]) .pw-copilot,
+.pw-workspace:not([data-side="inbox"]) .pw-inbox {
   display: none;
 }
 
-/* Below 1200 px: one panel at a time; the view switch toggles between them. */
+.pw-splitter {
+  display: grid;
+  place-items: center;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: var(--pw-radius-sm);
+}
+
+.pw-splitter span {
+  width: 4px;
+  height: 3rem;
+  border-radius: 2px;
+  background: var(--pw-color-text-muted);
+  opacity: 0.35;
+  transition:
+    background 0.15s,
+    height 0.15s;
+}
+
+.pw-splitter:hover span,
+.pw-splitter:focus-visible span,
+.pw-resizing .pw-splitter span {
+  height: 5rem;
+  background: var(--pw-color-accent);
+  opacity: 1;
+}
+
+.pw-splitter:focus-visible {
+  outline: 2px solid var(--pw-color-accent);
+  outline-offset: 2px;
+}
+
+body.pw-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* Below 1200 px: one panel at a time; the view switch chooses it. */
 @media (max-width: 1199px) {
   .pw-workspace,
-  .pw-workspace[data-panel="warehouse"],
-  .pw-workspace[data-panel="copilot"],
-  .pw-workspace[data-panel="inbox"] {
+  .pw-workspace[data-map="off"],
+  .pw-workspace[data-side="none"] {
     grid-template-columns: minmax(0, 1fr);
+    gap: var(--pw-space-5);
   }
 
+  .pw-workspace .pw-splitter,
   .pw-workspace[data-panel="warehouse"] .pw-copilot,
+  .pw-workspace[data-panel="warehouse"] .pw-inbox,
   .pw-workspace[data-panel="copilot"] .pw-map-panel,
   .pw-workspace[data-panel="inbox"] .pw-map-panel {
     display: none;
+  }
+
+  .pw-workspace[data-panel="warehouse"] .pw-map-panel {
+    display: flex;
   }
 }
 
@@ -211,4 +262,147 @@
   display: flex;
   align-items: center;
   gap: var(--pw-space-2);
+}
+
+/* Sign-in screen: a split card, the floor routes beside the sign-in. */
+.pw-signin {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: var(--pw-space-6) var(--pw-space-4);
+}
+
+.pw-signin-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: min(56rem, 100%);
+  min-height: 34rem;
+  overflow: hidden;
+  border: 1px solid var(--pw-color-glass-border);
+  border-radius: var(--pw-radius-lg);
+  background: var(--pw-color-surface);
+  box-shadow: var(--pw-shadow-popover);
+  animation: pw-signin-in 0.5s ease-out;
+}
+
+@keyframes pw-signin-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pw-signin-card {
+    animation: none;
+  }
+}
+
+.pw-signin-art {
+  position: relative;
+  overflow: hidden;
+  border-right: 1px solid var(--pw-color-border);
+  background:
+    radial-gradient(40rem 30rem at 30% 20%, var(--pw-color-canvas-glow), transparent 70%),
+    var(--pw-color-background);
+}
+
+.pw-signin-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.pw-signin-brand {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: var(--pw-space-3);
+  height: 100%;
+  padding: var(--pw-space-8);
+  text-align: center;
+}
+
+.pw-signin-brand p {
+  margin: 0;
+  max-width: 20rem;
+}
+
+.pw-signin-logo {
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
+.pw-signin-name {
+  color: var(--pw-color-accent-text);
+  font-family: var(--pw-font-family-display);
+  font-size: var(--pw-font-size-2xl);
+  font-weight: var(--pw-font-weight-light);
+}
+
+.pw-signin-form {
+  display: grid;
+  align-content: center;
+  gap: var(--pw-space-3);
+  padding: var(--pw-space-12) var(--pw-space-8);
+}
+
+.pw-signin-form h1,
+.pw-signin-form p {
+  margin: 0;
+}
+
+.pw-signin-error {
+  color: var(--pw-color-status-critical);
+}
+
+.pw-signin-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pw-space-2);
+  width: 100%;
+  margin-top: var(--pw-space-4);
+  padding: var(--pw-space-3) var(--pw-space-4);
+  border-radius: var(--pw-radius-md);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.pw-signin-button:hover {
+  box-shadow: var(--pw-shadow-card);
+  transform: translateY(-1px);
+}
+
+.pw-signin-note {
+  color: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-sm);
+}
+
+@media (max-width: 767px) {
+  .pw-signin-card {
+    grid-template-columns: 1fr;
+  }
+
+  .pw-signin-art {
+    min-height: 12rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--pw-color-border);
+  }
+}
+
+/* Theme choice in the profile menu: three equal options, each with its icon. */
+.pw-profile-menu .pw-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.pw-profile-menu .pw-segmented button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pw-space-1);
 }

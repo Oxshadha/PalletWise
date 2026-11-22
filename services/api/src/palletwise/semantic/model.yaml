@@ -140,6 +140,11 @@ results:
       its deadline, or shipped after it), and for each line the units ordered, allocated,
       picked and shipped. A line is at stockout risk when it is open, not fully allocated, due
       within {hours} hours and its product is short in its pick locations.
+  run_governed_query:
+    measures: []
+    how_computed: >-
+      Answered with a custom query over the governed views at {as_of}, checked against the
+      catalog's join and measure rules; not a standard metric.
   get_open_exceptions:
     measures: []
     how_computed: >-

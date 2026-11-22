@@ -1,7 +1,8 @@
 import "./app.css";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { AdminPanel } from "../features/admin/AdminPanel";
 import { CopilotPanel } from "../features/copilot/CopilotPanel";
 import { InboxPanel } from "../features/inbox/InboxPanel";
 import { Search } from "../features/search/SearchBox";
@@ -27,6 +28,8 @@ import { useSiteChanges } from "../shared/api/siteEvents";
 import { formatSiteTime, siteDate } from "../shared/format";
 import { Icon } from "../shared/ui/Icon";
 import { WorkspaceProvider } from "../shared/workspace/WorkspaceContext";
+import { Splitter } from "./Splitter";
+import { SignIn } from "./SignIn";
 
 /** Data status text (UX spec 2); the copilot input shows the same text while not READY. */
 const NOT_READY_TEXT: Record<string, string> = {
@@ -49,26 +52,59 @@ const ROLE_TEXT: Record<string, string> = {
   admin: "Admin",
 };
 
-const THEMES: { value: ThemeChoice; label: string }[] = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "system", label: "System" },
+const THEMES: { value: ThemeChoice; label: string; icon: "sun" | "moon" | "monitor" }[] = [
+  { value: "light", label: "Light", icon: "sun" },
+  { value: "dark", label: "Dark", icon: "moon" },
+  { value: "system", label: "System", icon: "monitor" },
 ];
 
-type Panel = "warehouse" | "copilot" | "inbox";
+type Panel = "warehouse" | "copilot" | "inbox" | "admin";
+type Side = "copilot" | "inbox";
 
 const PANEL_HEADING: Record<Panel, string> = {
   warehouse: "pw-warehouse-title",
   copilot: "pw-copilot-title",
   inbox: "pw-inbox-title",
+  admin: "pw-admin-title",
 };
 
 /** Below this width one panel shows at a time (UX spec 9, app.css). */
 const ONE_PANEL = "(max-width: 1199px)";
 
+/** True below the two-panel width; false where media queries are not available. */
+function narrowScreen(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia(ONE_PANEL).matches;
+}
+
+const RETRY_KEY = "pw.sign-in-retry";
+/** A fresh sign-in is on its way: render nothing and load nothing. */
+const REDIRECTING = "";
+const RETRY_WINDOW_MS = 60_000;
+
+/**
+ * An expired or already used sign-in link (a sign-in page left open past its 10 minutes, or the
+ * back button) is harmless: start a fresh sign-in once instead of showing an error. A second
+ * failure within a minute shows the message, so this can never loop.
+ */
+function retryExpiredSignIn(reason: string | null): boolean {
+  if (reason !== "state") return false;
+  try {
+    const last = Number(window.sessionStorage.getItem(RETRY_KEY));
+    if (last && Date.now() - last < RETRY_WINDOW_MS) return false;
+    window.sessionStorage.setItem(RETRY_KEY, String(Date.now()));
+  } catch {
+    return false; // storage blocked: show the message rather than risk a loop
+  }
+  return true;
+}
+
 function signInError(): string | null {
   const reason = new URLSearchParams(window.location.search).get("auth_error");
   if (reason === null) return null;
+  if (retryExpiredSignIn(reason)) {
+    signIn();
+    return REDIRECTING;
+  }
   return SIGN_IN_ERRORS[reason] ?? SIGN_IN_ERRORS["failed"] ?? null;
 }
 
@@ -76,14 +112,21 @@ function ProfileMenu({ me, siteName }: { me: Me; siteName: string | null }) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<ThemeChoice>(storedThemeChoice);
   useEffect(() => followSystemTheme(theme), [theme]);
+  const menu = useRef<HTMLDivElement>(null);
+  // Closes on Escape and on a click or tap anywhere outside the menu.
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
+    const onPointer = (event: PointerEvent) => {
+      if (!menu.current?.contains(event.target as Node)) setOpen(false);
+    };
     window.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointer);
     return () => {
       window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointer);
     };
   }, [open]);
   const initials = me.name
@@ -94,7 +137,7 @@ function ProfileMenu({ me, siteName }: { me: Me; siteName: string | null }) {
     .toUpperCase();
 
   return (
-    <div className="pw-profile">
+    <div className="pw-profile" ref={menu}>
       <button
         type="button"
         className="pw-avatar"
@@ -122,7 +165,7 @@ function ProfileMenu({ me, siteName }: { me: Me; siteName: string | null }) {
                   setTheme(t.value);
                 }}
               >
-                {t.label}
+                <Icon name={t.icon} size={15} /> {t.label}
               </button>
             ))}
           </div>
@@ -145,9 +188,26 @@ export function App() {
   const [site, setSite] = useState<SiteStatus | null>(null);
   const [unreachable, setUnreachable] = useState(false);
   const [panel, setPanel] = useState<Panel>("warehouse");
+  // Wide screens: the map and one side panel (copilot or inbox), each switched on or off from the
+  // view switch; at least one stays visible. Narrow screens show `panel` alone.
+  const [showMap, setShowMap] = useState(true);
+  const [side, setSide] = useState<Side | null>("copilot");
+  const [wide, setWide] = useState(() => !narrowScreen());
+  const workspace = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(ONE_PANEL);
+    const update = () => {
+      setWide(!query.matches);
+    };
+    query.addEventListener("change", update);
+    return () => {
+      query.removeEventListener("change", update);
+    };
+  }, []);
 
   useEffect(() => {
-    if (authError) return;
+    if (authError !== null) return;
     const controller = new AbortController();
     const load = async () => {
       try {
@@ -157,6 +217,7 @@ export function App() {
         setSite(first ? await fetchSiteStatus(first.id, controller.signal) : null);
         setUnreachable(false);
       } catch (error) {
+        // One sign-in page: the identity provider's PalletWise page with the form (no extra step).
         if (error instanceof SignedOut) signIn();
         else if (!controller.signal.aborted) setUnreachable(true);
       }
@@ -187,6 +248,8 @@ export function App() {
 
   const choosePanel = (next: Panel) => {
     setPanel(next);
+    if (next === "warehouse") setShowMap(true);
+    if (next === "copilot" || next === "inbox") setSide(next);
     // Reveal the panel and move focus to its heading (UX spec 2).
     window.requestAnimationFrame(() => {
       const heading = document.getElementById(PANEL_HEADING[next]);
@@ -195,49 +258,82 @@ export function App() {
     });
   };
 
+  /** A view switch click: on wide screens it shows or hides that panel (never the last one). */
+  const toggle = (target: Exclude<Panel, "admin">) => {
+    if (!wide || panel === "admin") {
+      choosePanel(target);
+      return;
+    }
+    if (target === "warehouse") {
+      if (showMap && side) setShowMap(false);
+      else choosePanel("warehouse");
+    } else if (side === target && showMap) {
+      setSide(null);
+    } else {
+      choosePanel(target);
+    }
+  };
+  const shown = (target: Exclude<Panel, "admin">): boolean => {
+    if (panel === "admin") return false;
+    if (!wide) return panel === target;
+    return target === "warehouse" ? showMap : side === target;
+  };
+
   const siteInfo = me?.sites[0] ?? null;
   const notReady =
     site && site.data_status !== "READY" ? (NOT_READY_TEXT[site.data_status] ?? null) : null;
+
+  // A sign-in that failed: why, and a way to try again.
+  if (authError === REDIRECTING) return null;
+  if (authError) return <SignIn error={authError} />;
 
   const shell = (
     <div className="pw-app">
       <header className="pw-topbar">
         <div className="pw-brand">
           <span className="pw-brand-logo" role="img" aria-label="PalletWise logo" />
-          <span>
-            PalletWise
-            <span className="pw-brand-sub">Warehouse copilot</span>
-          </span>
+          <span className="pw-brand-name">PalletWise</span>
         </div>
         {me && siteInfo && (
           <nav className="pw-nav" aria-label="Show panel">
             <button
               type="button"
-              aria-pressed={panel === "warehouse"}
+              aria-pressed={shown("warehouse")}
               onClick={() => {
-                choosePanel("warehouse");
+                toggle("warehouse");
               }}
             >
               <Icon name="map" size={16} /> Warehouse
             </button>
             <button
               type="button"
-              aria-pressed={panel === "copilot"}
+              aria-pressed={shown("copilot")}
               onClick={() => {
-                choosePanel("copilot");
+                toggle("copilot");
               }}
             >
               <Icon name="chat" size={16} /> Copilot
             </button>
             <button
               type="button"
-              aria-pressed={panel === "inbox"}
+              aria-pressed={shown("inbox")}
               onClick={() => {
-                choosePanel("inbox");
+                toggle("inbox");
               }}
             >
               <Icon name="inbox" size={16} /> Inbox
             </button>
+            {me.role === "admin" && (
+              <button
+                type="button"
+                aria-pressed={panel === "admin"}
+                onClick={() => {
+                  choosePanel("admin");
+                }}
+              >
+                <Icon name="layers" size={16} /> Admin
+              </button>
+            )}
           </nav>
         )}
         <div className="pw-topbar-actions">
@@ -268,32 +364,21 @@ export function App() {
 
       {me && siteInfo && (
         <div className="pw-page-head">
-          <h1>{siteInfo.name}</h1>
-          <p className="pw-muted">
-            Live digital twin of {siteInfo.code}
-            {site?.sim_time ? ` · site time ${formatSiteTime(site.sim_time, site.time_zone)}` : ""}
-          </p>
+          <div className="pw-page-title">
+            <h1>{siteInfo.name}</h1>
+            <p className="pw-muted">
+              Live digital twin of {siteInfo.code}
+              {site?.sim_time
+                ? ` · site time ${formatSiteTime(site.sim_time, site.time_zone)}`
+                : ""}
+            </p>
+          </div>
+          <SimulationControls
+            onAsked={() => {
+              choosePanel("copilot");
+            }}
+          />
         </div>
-      )}
-
-      {me && siteInfo && (
-        <SimulationControls
-          onAsked={() => {
-            choosePanel("copilot");
-          }}
-        />
-      )}
-
-      {authError && (
-        <main className="pw-center">
-          <section className="pw-panel pw-message-card">
-            <h1>Sign-in was not completed</h1>
-            <p role="alert">{authError}</p>
-            <button type="button" className="pw-button" onClick={signIn}>
-              Sign in
-            </button>
-          </section>
-        </main>
       )}
 
       {unreachable && (
@@ -315,9 +400,18 @@ export function App() {
         </main>
       )}
 
-      {me && siteInfo && (
-        <main className="pw-workspace" data-panel={panel}>
+      {me && siteInfo && panel === "admin" && <AdminPanel />}
+
+      {me && siteInfo && panel !== "admin" && (
+        <main
+          ref={workspace}
+          className="pw-workspace"
+          data-panel={panel}
+          data-map={showMap ? "on" : "off"}
+          data-side={side ?? "none"}
+        >
           <MapPanel />
+          <Splitter workspace={workspace} />
           <CopilotPanel
             notReadyText={notReady}
             onOpenInbox={() => {
@@ -330,7 +424,7 @@ export function App() {
             }}
             onShowOnMap={() => {
               // Beside the map on wide screens; on narrow ones, show the map.
-              if (window.matchMedia(ONE_PANEL).matches) choosePanel("warehouse");
+              if (narrowScreen()) choosePanel("warehouse");
             }}
           />
         </main>

@@ -116,6 +116,7 @@ class BinStateOut(BaseModel):
     bin_id: UUID
     state: Literal["NORMAL", "EMPTY", "LOW_STOCK", "OVER_CAPACITY"]
     on_hand: int
+    picked_7d: int  # units picked from it in the last 7 site days (activity heatmap)
 
 
 class MapStateOut(BaseModel):
@@ -123,6 +124,11 @@ class MapStateOut(BaseModel):
     time_zone: str
     data_as_of: datetime | None
     bins: list[BinStateOut]
+    # The site at a glance, for the figures strip under the map.
+    total_units: int
+    stocked_locations: int
+    active_zones: int
+    open_exceptions: int
 
 
 async def policy_decision(
@@ -228,7 +234,14 @@ async def current_map_state(site_id: UUID, principal: CurrentPrincipal, reads: R
         as_of=state.as_of,
         time_zone=state.time_zone,
         data_as_of=state.data_as_of,
-        bins=[BinStateOut(bin_id=b.bin_id, state=b.state, on_hand=b.on_hand) for b in state.bins],  # pyright: ignore[reportArgumentType]
+        bins=[
+            BinStateOut(bin_id=b.bin_id, state=b.state, on_hand=b.on_hand, picked_7d=b.picked_7d)  # pyright: ignore[reportArgumentType]
+            for b in state.bins
+        ],
+        total_units=state.total_units,
+        stocked_locations=state.stocked_locations,
+        active_zones=state.active_zones,
+        open_exceptions=state.open_exceptions,
     )
 
 

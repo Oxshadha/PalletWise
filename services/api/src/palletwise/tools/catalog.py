@@ -3,7 +3,7 @@ semantic layer: no business rule lives here (semantic spec 8). Descriptions are 
 """
 
 from collections.abc import Callable
-from typing import Literal, Self
+from typing import Any, Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -294,4 +294,17 @@ SLICE_3_TOOLS = (GET_ORDER_STATUS, GET_OPEN_EXCEPTIONS)
 
 
 def v1_tools() -> ToolRegistry:
-    return ToolRegistry([FIND_PRODUCT_LOCATIONS, GET_BIN_CONTENTS, *SLICE_2_TOOLS, *SLICE_3_TOOLS])
+    from palletwise.governed import tool as governed  # the last-resort tier (ADR 0002)
+
+    tools: list[ToolSpec[Any, Any]] = [
+        FIND_PRODUCT_LOCATIONS,
+        GET_BIN_CONTENTS,
+        *SLICE_2_TOOLS,
+        *SLICE_3_TOOLS,
+    ]
+    # Offered to the model only once a configuration has passed its gate: until then the copilot
+    # works exactly as without the tier (an untested tool would still cost every question its
+    # description; found by the governed gate on ee15759). Each call rechecks the fingerprint.
+    if governed.passed_fingerprints():
+        tools.append(governed.RUN_GOVERNED_QUERY)
+    return ToolRegistry(tools)

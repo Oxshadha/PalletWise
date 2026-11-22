@@ -100,6 +100,7 @@ beforeEach(() => {
   inbox = { as_of: "2026-04-01T00:30:00Z", time_zone: "Asia/Colombo", exceptions: [] };
   changes = 0;
   window.localStorage.clear();
+  window.localStorage.setItem("pw.timebar.folded", "0"); // these cases use the opened bar
 });
 
 afterEach(() => {
@@ -108,6 +109,20 @@ afterEach(() => {
 });
 
 describe("time shift bar (slice-4-acceptance step 5)", () => {
+  it("folds to a pill with the site time, and opens again from it", async () => {
+    window.localStorage.setItem("pw.timebar.folded", "1");
+    controls();
+    const pill = await screen.findByRole("button", {
+      name: /Simulated time .*Show the time controls/u,
+    });
+    expect(screen.queryByRole("button", { name: "+1 hour" })).toBeNull();
+    fireEvent.click(pill);
+    expect(screen.getByRole("button", { name: "+1 hour" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Fold the time controls" }));
+    expect(screen.queryByRole("button", { name: "+1 hour" })).toBeNull();
+    expect(window.localStorage.getItem("pw.timebar.folded")).toBe("1");
+  });
+
   it("shows the site time, the shift buttons, the demo and reset to a holder of simulation.control", async () => {
     controls();
     expect(await screen.findByRole("region", { name: "Simulation time" })).toBeTruthy();

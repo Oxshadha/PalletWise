@@ -3,6 +3,7 @@ import "./map.css";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { LayoutBin } from "../../shared/api/client";
+import { formatNumber } from "../../shared/format";
 import { Icon } from "../../shared/ui/Icon";
 import { useWorkspace } from "../../shared/workspace/WorkspaceContext";
 import { activeHighlights } from "../../shared/workspace/workspace";
@@ -11,6 +12,7 @@ import {
   highlightBounds,
   onHandById,
   splitHighlights,
+  heatById,
   statesById,
   webglAvailable,
 } from "./geometry";
@@ -68,6 +70,11 @@ export function MapPanel() {
   const ready = layout.kind === "ready" ? layout.layout : null;
   const bins = useMemo(() => (ready ? binsById(ready) : new Map<string, LayoutBin>()), [ready]);
   const states = useMemo(() => statesById(mapState), [mapState]);
+  // The activity heatmap: picks in the last 7 site days per location (semantic layer).
+  const [heatOn, setHeatOn] = useState(false);
+  // Focus: the map alone in its panel (lists and figures hidden); the copilot stays beside it.
+  const [focused, setFocused] = useState(false);
+  const heat = useMemo(() => (heatOn ? heatById(mapState) : null), [heatOn, mapState]);
   const onHand = useMemo(() => onHandById(mapState), [mapState]);
   const answer = activeHighlights(state);
   // Racks become their bins; zones stay zones and are drawn as floor outlines (semantic spec 7.6).
@@ -131,7 +138,11 @@ export function MapPanel() {
   }, [highlights, bins]);
 
   return (
-    <section className="pw-panel pw-map-panel" aria-labelledby="pw-warehouse-title">
+    <section
+      className="pw-panel pw-map-panel"
+      aria-labelledby="pw-warehouse-title"
+      data-focus={focused ? "" : undefined}
+    >
       <header className="pw-panel-header">
         <div>
           <h2 id="pw-warehouse-title" tabIndex={-1}>
@@ -144,6 +155,16 @@ export function MapPanel() {
               : ""}
           </p>
         </div>
+        <button
+          type="button"
+          className="pw-button-quiet pw-heat-toggle"
+          aria-pressed={heatOn}
+          onClick={() => {
+            setHeatOn((on) => !on);
+          }}
+        >
+          <Icon name="activity" size={16} /> Heatmap
+        </button>
         <div className="pw-segmented" role="group" aria-label="Map view">
           {(["3d", "2d"] as const).map((v) => (
             <button
@@ -159,6 +180,18 @@ export function MapPanel() {
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          className="pw-icon-button pw-focus-toggle"
+          aria-pressed={focused}
+          aria-label={focused ? "Show the map details" : "Focus the map"}
+          title={focused ? "Show the map details" : "Focus the map"}
+          onClick={() => {
+            setFocused((on) => !on);
+          }}
+        >
+          <Icon name={focused ? "collapse" : "expand"} size={16} />
+        </button>
       </header>
 
       {!webgl && (
@@ -258,6 +291,7 @@ export function MapPanel() {
                   command={command}
                   colors={colors}
                   onSelect={select}
+                  heat={heat}
                 />
               </Suspense>
             </div>
@@ -272,7 +306,15 @@ export function MapPanel() {
               selectedBinId={state.selectedBinId}
               focus={focus}
               onSelect={select}
+              heat={heat}
             />
+          )}
+          {heat && (
+            <div className="pw-heat-legend" aria-label="Heatmap legend">
+              <span>Picks, last 7 days</span>
+              <span className="pw-heat-scale" aria-hidden="true" />
+              <span className="pw-muted">quiet to busy</span>
+            </div>
           )}
           <div className="pw-map-controls" role="group" aria-label="Map controls">
             <button
@@ -388,6 +430,26 @@ export function MapPanel() {
           )}
         </section>
       </div>
+      {mapState && (
+        <ul className="pw-figures" aria-label="The site at a glance">
+          <li>
+            <span className="pw-muted">Units on hand</span>
+            <strong>{formatNumber(mapState.total_units)}</strong>
+          </li>
+          <li>
+            <span className="pw-muted">Locations in use</span>
+            <strong>{formatNumber(mapState.stocked_locations)}</strong>
+          </li>
+          <li>
+            <span className="pw-muted">Active zones</span>
+            <strong>{formatNumber(mapState.active_zones)}</strong>
+          </li>
+          <li>
+            <span className="pw-muted">Open alerts</span>
+            <strong>{formatNumber(mapState.open_exceptions)}</strong>
+          </li>
+        </ul>
+      )}
     </section>
   );
 }

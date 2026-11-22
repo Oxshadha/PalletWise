@@ -34,6 +34,16 @@ export const TOKENS = [
   "--pw-color-map-pallet",
   "--pw-color-map-wall",
   "--pw-color-map-dock",
+  "--pw-color-map-truck",
+  "--pw-color-map-truck-cab",
+  "--pw-color-map-glass",
+  "--pw-color-map-tyre",
+  "--pw-color-map-forklift",
+  "--pw-color-map-steel",
+  "--pw-color-map-vest",
+  "--pw-color-map-skin",
+  "--pw-color-map-apron",
+  "--pw-color-map-yard-paint",
 ] as const;
 
 export type Token = (typeof TOKENS)[number];

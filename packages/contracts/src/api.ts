@@ -4,6 +4,145 @@
  */
 
 export interface paths {
+    "/api/admin/agent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent */
+        get: operations["get_agent_api_admin_agent_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/agent/governed-query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Governed Query
+         * @description Custom queries on or off for the organisation (ADR 0002 section 7, D5); audited.
+         */
+        put: operations["set_governed_query_api_admin_agent_governed_query_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/agent/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Agent Status
+         * @description The kill switch (FR-ADM-03): suspending stops new copilot requests, fast path included, on
+         *     the next request (the registry is read per request and per tool call).
+         */
+        put: operations["set_agent_status_api_admin_agent_status_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Audit
+         * @description The audit trail, newest first, at most 500 entries, with filters (FR-ADM-05).
+         */
+        get: operations["get_audit_api_admin_audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/audit.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Audit
+         * @description The same filtered view as CSV (FR-ADM-05: the export matches the filtered view).
+         */
+        get: operations["export_audit_api_admin_audit_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/unanswered": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Unanswered
+         * @description Declined or failed questions with their reasons and how often they were asked (FR-ADM-07).
+         */
+        get: operations["get_unanswered_api_admin_unanswered_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Usage
+         * @description Model calls by day, model and purpose. Cost is estimated: provider-reported tokens times the
+         *     configured price table (FR-ADM-06).
+         */
+        get: operations["get_usage_api_admin_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/callback": {
         parameters: {
             query?: never;
@@ -477,6 +616,78 @@ export interface components {
             /** Order No */
             order_no: string;
         };
+        /** AgentOut */
+        AgentOut: {
+            /** Daily Token Budget */
+            daily_token_budget: number;
+            /** Governed Query Enabled */
+            governed_query_enabled: boolean;
+            /** Governed Query Evaluated */
+            governed_query_evaluated: boolean;
+            /** Id */
+            id: string;
+            /** Primary Model */
+            primary_model: string;
+            /** Prompt Version */
+            prompt_version: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ACTIVE" | "SUSPENDED";
+            /** Used Tokens Today */
+            used_tokens_today: number;
+            /** Version */
+            version: string;
+        };
+        /** AuditRow */
+        AuditRow: {
+            /** Action */
+            action: string;
+            /** Actor Type */
+            actor_type: string;
+            /** Agent Id */
+            agent_id: string | null;
+            /** Agent Version */
+            agent_version: string | null;
+            /** Cost Estimated */
+            cost_estimated: number | null;
+            /** Decision */
+            decision: string | null;
+            /** Deny Reasons */
+            deny_reasons: string[] | null;
+            /** Latency Ms */
+            latency_ms: number | null;
+            /** Model */
+            model: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Outcome */
+            outcome: string;
+            /** Parameters */
+            parameters: {
+                [key: string]: unknown;
+            } | null;
+            /** Prompt Version */
+            prompt_version: string | null;
+            /** Row Count */
+            row_count: number | null;
+            /** Run Id */
+            run_id: string | null;
+            /** Scope */
+            scope: string | null;
+            /** Tool */
+            tool: string | null;
+            /** Trace Id */
+            trace_id: string;
+            /** User Role */
+            user_role: string | null;
+            /** User Subject */
+            user_subject: string | null;
+        };
         /** BinOut */
         BinOut: {
             /** Bay */
@@ -521,6 +732,8 @@ export interface components {
             bin_id: string;
             /** On Hand */
             on_hand: number;
+            /** Picked 7D */
+            picked_7d: number;
             /**
              * State
              * @enum {string}
@@ -771,6 +984,21 @@ export interface components {
              */
             rating: "HELPFUL" | "NOT_HELPFUL";
         };
+        /** GovernedIn */
+        GovernedIn: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** GovernedOut */
+        GovernedOut: {
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "changed" | "unchanged";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -817,6 +1045,8 @@ export interface components {
         };
         /** MapStateOut */
         MapStateOut: {
+            /** Active Zones */
+            active_zones: number;
             /**
              * As Of
              * Format: date-time
@@ -826,8 +1056,14 @@ export interface components {
             bins: components["schemas"]["BinStateOut"][];
             /** Data As Of */
             data_as_of: string | null;
+            /** Open Exceptions */
+            open_exceptions: number;
+            /** Stocked Locations */
+            stocked_locations: number;
             /** Time Zone */
             time_zone: string;
+            /** Total Units */
+            total_units: number;
         };
         /** MeOut */
         MeOut: {
@@ -1190,6 +1426,27 @@ export interface components {
             /** Time Zone */
             time_zone: string;
         };
+        /** StatusIn */
+        StatusIn: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ACTIVE" | "SUSPENDED";
+        };
+        /** StatusOut */
+        StatusOut: {
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "changed" | "unchanged";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ACTIVE" | "SUSPENDED";
+        };
         /** StreamFreshness */
         StreamFreshness: {
             /** Data As Of */
@@ -1221,6 +1478,41 @@ export interface components {
             label: string;
             /** Tool */
             tool: string;
+        };
+        /** UnansweredRow */
+        UnansweredRow: {
+            /**
+             * Last Asked
+             * Format: date-time
+             */
+            last_asked: string;
+            /** Question */
+            question: string;
+            /** Reasons */
+            reasons: string[];
+            /** Times */
+            times: number;
+        };
+        /** UsageRow */
+        UsageRow: {
+            /** Avg Latency Ms */
+            avg_latency_ms: number;
+            /** Calls */
+            calls: number;
+            /** Cost Estimated */
+            cost_estimated: number;
+            /** Day */
+            day: string;
+            /** Errors */
+            errors: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Model */
+            model: string;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Purpose */
+            purpose: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -1265,6 +1557,232 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_agent_api_admin_agent_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentOut"];
+                };
+            };
+        };
+    };
+    set_governed_query_api_admin_agent_governed_query_put: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GovernedIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_agent_status_api_admin_agent_status_put: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StatusIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_audit_api_admin_audit_get: {
+        parameters: {
+            query?: {
+                since?: string | null;
+                until?: string | null;
+                user?: string | null;
+                agent?: string | null;
+                tool?: string | null;
+                action?: string | null;
+                decision?: ("ALLOW" | "DENY") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_audit_api_admin_audit_csv_get: {
+        parameters: {
+            query?: {
+                since?: string | null;
+                until?: string | null;
+                user?: string | null;
+                agent?: string | null;
+                tool?: string | null;
+                action?: string | null;
+                decision?: ("ALLOW" | "DENY") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_unanswered_api_admin_unanswered_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnansweredRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_usage_api_admin_usage_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     callback_api_auth_callback_get: {
         parameters: {
             query?: {

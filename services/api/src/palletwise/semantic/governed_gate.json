@@ -1,0 +1,22 @@
+{
+  "about": "Configurations whose governed-query gate passed and were reviewed by the product owner (ADR 0002 section 7, slice-5-acceptance D3). Written by the model gate on a pass; committed after review.",
+  "passed": [
+    {
+      "fingerprint": "738f0d22615e63bbd396708de61c9caf",
+      "report": "docs/quality/eval-reports/2026-11-22-governed-accepted-model.md",
+      "decision": "accepted by the product owner, 2026-11-22 (ADR 0002 amendment 1)",
+      "measured": {
+        "correct": 0.9333,
+        "precision": 0.9655,
+        "safe": 0.9556,
+        "routing_kept": 0.9958,
+        "invalid_refused": 0.8889,
+        "original_questions_right_tool": 1.0
+      },
+      "short_of_gate": {
+        "invalid_refused": "0.889 against 0.95",
+        "latency.governed.complete_p95": "13.3 s against 12 s"
+      }
+    }
+  ]
+}

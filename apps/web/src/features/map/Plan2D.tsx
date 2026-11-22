@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type PointerEvent,
   type Ref,
   useImperativeHandle,
@@ -25,6 +26,7 @@ interface Props {
   focus: Bounds | null;
   onSelect: (binId: string) => void;
   ref?: Ref<PlanHandle>;
+  heat?: Map<string, number> | null; // pick activity 0 to 1; null when the heatmap is off
 }
 
 interface View {
@@ -63,6 +65,7 @@ export function Plan2D({
   focus,
   onSelect,
   ref,
+  heat = null,
 }: Props) {
   const site = siteBounds(layout);
   const markedZones = new Set(zoneHighlights.map((h) => h.target_id));
@@ -204,6 +207,14 @@ export function Plan2D({
             width={base.width_m * 0.92}
             height={base.depth_m * 0.92}
             className={classes.filter(Boolean).join(" ")}
+            style={
+              heat
+                ? ({
+                    "--pw-heat": `${String(Math.round(Math.max(...stack.map((b) => heat.get(b.id) ?? 0)) * 100))}%`,
+                  } as CSSProperties)
+                : undefined
+            }
+            data-heat={heat ? "" : undefined}
             onClick={() => {
               onSelect((stack.find((b) => highlightOf.has(b.id)) ?? base).id);
             }}

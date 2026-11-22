@@ -16,7 +16,6 @@ body {
   font-size: var(--pw-font-size-md);
   line-height: var(--pw-line-height-body);
   font-optical-sizing: auto;
-  font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
 }
 
@@ -31,6 +30,7 @@ h1,
 h2,
 h3 {
   margin: 0;
+  font-family: var(--pw-font-family-display);
   font-weight: var(--pw-font-weight-heading);
   line-height: var(--pw-line-height-heading);
 }

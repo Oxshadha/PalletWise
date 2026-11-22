@@ -25,10 +25,10 @@ reasons(inp) := r if {
 
 # ---------------------------------------------------------------- every row of the scope table
 
-manager_scopes := {"inventory.read", "orders.read", "exception.acknowledge", "simulation.control", "proposal.create", "proposal.approve", "proposal.reject"}
+manager_scopes := {"inventory.read", "orders.read", "query.governed", "exception.acknowledge", "simulation.control", "proposal.create", "proposal.approve", "proposal.reject"}
 
 admin_scopes := {
-	"inventory.read", "orders.read", "admin.users.read", "admin.agents.manage",
+	"inventory.read", "orders.read", "query.governed", "admin.users.read", "admin.agents.manage",
 	"admin.settings.manage", "admin.audit.read", "admin.usage.read", "simulation.control",
 }
 

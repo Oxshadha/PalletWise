@@ -1,0 +1,368 @@
+/* Admin panel core. Tokens only. */
+
+.pw-admin {
+  flex: 1;
+  min-height: 0;
+  margin: 0 var(--pw-space-8) var(--pw-space-6);
+  overflow: auto;
+}
+
+.pw-admin-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pw-space-3);
+}
+
+.pw-admin-head h2 {
+  margin: 0;
+}
+
+.pw-admin-section {
+  display: grid;
+  gap: var(--pw-space-3);
+}
+
+.pw-admin-section p {
+  margin: 0;
+}
+
+.pw-admin-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--pw-space-2) var(--pw-space-6);
+  margin: 0;
+}
+
+.pw-admin-facts dt {
+  color: var(--pw-color-text-muted);
+}
+
+.pw-admin-facts dd {
+  margin: 0;
+}
+
+.pw-admin-ok {
+  color: var(--pw-color-status-success);
+}
+
+.pw-admin-off {
+  color: var(--pw-color-status-critical);
+}
+
+.pw-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pw-space-2);
+}
+
+.pw-admin-error {
+  color: var(--pw-color-status-critical);
+}
+
+/* Tables scroll inside their frame, with the header row kept in view. */
+.pw-admin-scroll {
+  max-height: min(60vh, 36rem);
+  overflow: auto;
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-md);
+}
+
+.pw-admin-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--pw-color-surface);
+  box-shadow: inset 0 -1px 0 var(--pw-color-border);
+}
+
+/* Filters: equal fields in one row, the buttons on the fields' baseline. */
+.pw-admin-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(8rem, 1fr)) minmax(7rem, 0.7fr) auto auto;
+  align-items: end;
+  gap: var(--pw-space-2) var(--pw-space-3);
+}
+
+@media (max-width: 1099px) {
+  .pw-admin-filters {
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  }
+}
+
+.pw-admin-filters label {
+  display: grid;
+  gap: var(--pw-space-1);
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-admin-filters input,
+.pw-admin-filters select,
+.pw-admin-filters .pw-button,
+.pw-admin-filters .pw-button-quiet {
+  box-sizing: border-box;
+  height: 2.5rem;
+}
+
+.pw-admin-filters .pw-button,
+.pw-admin-filters .pw-button-quiet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pw-admin-filters input,
+.pw-admin-filters select {
+  width: 100%;
+  padding: 0 var(--pw-space-3);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-sm);
+  background: var(--pw-color-surface);
+  color: var(--pw-color-text-primary);
+  font: inherit;
+}
+
+.pw-admin-filters a {
+  text-decoration: none;
+}
+
+.pw-admin-trace {
+  font-size: var(--pw-font-size-xs);
+}
+
+/* Overview: metric tiles, chart cards. */
+.pw-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--pw-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pw-metric {
+  display: flex;
+  align-items: center;
+  gap: var(--pw-space-3);
+  padding: var(--pw-space-3) var(--pw-space-4);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-md);
+  background: var(--pw-color-surface);
+}
+
+.pw-metric-icon {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--pw-radius-sm);
+  background: color-mix(in oklab, var(--pw-color-accent) 12%, transparent);
+  color: var(--pw-color-accent-text);
+}
+
+.pw-metric-text {
+  display: grid;
+  gap: 0.125rem;
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-metric-text strong {
+  font-size: var(--pw-font-size-lg);
+  font-weight: var(--pw-font-weight-heading);
+}
+
+.pw-metric-note {
+  color: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-xs);
+}
+
+.pw-admin-cards {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) minmax(20rem, 2fr);
+  gap: var(--pw-space-3);
+}
+
+@media (max-width: 899px) {
+  .pw-admin-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pw-admin-card {
+  display: grid;
+  align-content: start;
+  gap: var(--pw-space-3);
+  padding: var(--pw-space-4);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-md);
+  background: var(--pw-color-surface);
+}
+
+.pw-admin-card h3 {
+  margin: 0;
+}
+
+.pw-donut {
+  justify-self: center;
+  width: 10rem;
+  height: 10rem;
+}
+
+.pw-donut circle {
+  fill: none;
+  stroke-width: 14;
+}
+
+.pw-donut-track {
+  stroke: color-mix(in oklab, var(--pw-color-accent) 12%, transparent);
+}
+
+.pw-donut-value {
+  stroke: var(--pw-color-accent);
+  stroke-linecap: round;
+}
+
+.pw-donut-figure {
+  fill: var(--pw-color-text-primary);
+  font-size: var(--pw-font-size-lg);
+  font-weight: var(--pw-font-weight-heading);
+}
+
+.pw-donut-label {
+  fill: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-xs);
+}
+
+/* Estimated cost per day: one series, quiet axis and grid, a tooltip per day. */
+.pw-cost-chart {
+  display: grid;
+  gap: var(--pw-space-2);
+}
+
+.pw-cost-total strong {
+  font-size: var(--pw-font-size-lg);
+}
+
+.pw-chart-frame {
+  position: relative;
+}
+
+.pw-chart-frame svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.pw-chart-grid {
+  stroke: var(--pw-color-border);
+  stroke-dasharray: 3 4;
+}
+
+.pw-chart-axis {
+  stroke: var(--pw-color-border);
+}
+
+.pw-chart-tick {
+  fill: var(--pw-color-text-muted);
+  font-size: var(--pw-font-size-xs);
+}
+
+.pw-chart-bar {
+  fill: var(--pw-color-accent);
+  opacity: 0.85;
+}
+
+.pw-chart-bar[data-active] {
+  opacity: 1;
+}
+
+.pw-chart-tooltip {
+  position: absolute;
+  top: 0;
+  display: grid;
+  gap: 0.125rem;
+  padding: var(--pw-space-2) var(--pw-space-3);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-sm);
+  background: var(--pw-color-surface);
+  box-shadow: var(--pw-shadow-popover);
+  font-size: var(--pw-font-size-xs);
+  pointer-events: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.pw-chart-note,
+.pw-donut-note {
+  font-size: var(--pw-font-size-xs);
+}
+
+.pw-donut-note {
+  text-align: center;
+}
+
+/* Copilot: its facts on the left, each control with what it does on the right. */
+.pw-copilot-grid {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) minmax(20rem, 2fr);
+  gap: var(--pw-space-6);
+  align-items: start;
+}
+
+@media (max-width: 899px) {
+  .pw-copilot-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pw-control-list {
+  display: grid;
+  gap: var(--pw-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pw-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pw-space-4);
+  padding: var(--pw-space-3) var(--pw-space-4);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-md);
+}
+
+.pw-control p {
+  margin: 0;
+}
+
+.pw-control .pw-muted {
+  margin-top: var(--pw-space-1);
+  font-size: var(--pw-font-size-sm);
+}
+
+.pw-control-title {
+  display: flex;
+  align-items: center;
+  gap: var(--pw-space-2);
+  font-weight: var(--pw-font-weight-heading);
+}
+
+.pw-control button {
+  flex: none;
+}
+
+.pw-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--pw-space-3);
+}
+
+.pw-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pw-space-1);
+}

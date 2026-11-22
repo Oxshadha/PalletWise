@@ -47,3 +47,6 @@ test-results/
 # Third-party Claude skill (Leonxlnx/taste-skill, MIT), installed locally, not vendored
 .claude/skills/design-taste-frontend/
 .taste-skill/
+
+# --- Generated per installation by scripts/setup.py ---
+infra/keycloak/themes/palletwise/login/resources/js/demo-accounts.js

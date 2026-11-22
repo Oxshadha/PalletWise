@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { type ResultEnvelope, sendFeedback } from "../../shared/api/client";
 import type { Suggestion } from "../../shared/api/runStream";
 import { formatNumber, formatSiteTime } from "../../shared/format";
+import { Badge } from "../../shared/ui/Badge";
+import { speak, speechAvailable, stopSpeaking } from "../../shared/speech/speak";
+import { RichText } from "../../shared/ui/RichText";
 import { Icon } from "../../shared/ui/Icon";
 import { type Answer, highlightCount } from "../../shared/workspace/workspace";
 
@@ -180,6 +183,16 @@ export function AnswerCard({
   const asOf = first ? (first.evidence.data_as_of ?? first.evidence.as_of) : null;
   const streaming = answer.status === "streaming";
   const shown = answer.text || answer.headline || "";
+  const [speaking, setSpeaking] = useState(false);
+  const canSpeak = speechAvailable() && answer.status === "done" && shown !== "";
+  // Stop reading when this answer leaves the screen (another answer's reading is left alone).
+  const reading = useRef(false);
+  useEffect(
+    () => () => {
+      if (reading.current) stopSpeaking();
+    },
+    [],
+  );
 
   return (
     <article className={answer.historical ? "pw-turn" : "pw-turn pw-enter"} aria-busy={streaming}>
@@ -193,13 +206,19 @@ export function AnswerCard({
         {answer.outcome && OUTCOME_LABEL[answer.outcome] && (
           <p className="pw-outcome">{OUTCOME_LABEL[answer.outcome]}</p>
         )}
+        {answer.results.some((r) => r.normalized_request["source"] === "governed_query") && (
+          // ADR 0002: a custom query's answer is never mistaken for a standard metric.
+          <p className="pw-outcome">
+            <Badge tone="info">Answered with a custom query</Badge>
+          </p>
+        )}
         <div className="pw-answer-text" aria-live="polite">
           {shown ? (
             // Keyed by its words: the headline gives way to the answer once, with one short fade,
             // and an answer equal to the headline does not re-render at all (ADR 0001 section 6).
-            <span key={shown} className={answer.headline ? "pw-swap" : undefined}>
-              {shown}
-            </span>
+            <div key={shown} className={answer.headline ? "pw-swap" : undefined}>
+              <RichText text={shown} />
+            </div>
           ) : streaming ? (
             <span className="pw-progress">
               <span className="pw-progress-dot" aria-hidden="true" />
@@ -214,14 +233,47 @@ export function AnswerCard({
             {answer.error.traceId && <p className="pw-muted">Reference: {answer.error.traceId}</p>}
           </div>
         )}
-        {locations > 0 && (
-          <button type="button" className="pw-map-link" aria-pressed={active} onClick={onShowOnMap}>
-            <Icon name="map" size={16} />
-            Show on map{" "}
-            <span className="pw-map-link-count">
-              ({locations} {locations === 1 ? "location" : "locations"})
-            </span>
-          </button>
+        {(locations > 0 || canSpeak) && (
+          <div className="pw-answer-actions">
+            {locations > 0 && (
+              <button
+                type="button"
+                className="pw-map-link"
+                aria-pressed={active}
+                onClick={onShowOnMap}
+              >
+                <Icon name="map" size={16} />
+                Show on map{" "}
+                <span className="pw-map-link-count">
+                  ({locations} {locations === 1 ? "location" : "locations"})
+                </span>
+              </button>
+            )}
+            {canSpeak && (
+              <button
+                type="button"
+                className="pw-map-link"
+                aria-pressed={speaking}
+                onClick={() => {
+                  if (speaking) {
+                    stopSpeaking();
+                    reading.current = false;
+                    setSpeaking(false);
+                  } else {
+                    reading.current = true;
+                    setSpeaking(true);
+                    speak(shown, () => {
+                      reading.current = false;
+                      setSpeaking(false);
+                    });
+                  }
+                }}
+              >
+                <Icon name={speaking ? "speak-stop" : "speak"} size={16} />
+                {speaking ? "Stop reading" : "Listen"}
+              </button>
+            )}
+          </div>
         )}
         {answer.results.map((result, i) => (
           <ResultTable key={i} result={result} />
