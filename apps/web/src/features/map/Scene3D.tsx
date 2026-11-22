@@ -439,7 +439,7 @@ function slotBase(bin: LayoutBin): number {
 }
 
 /**
- * Every location holding stock shows a wooden pallet with cartons (blue totes on pick faces).
+ * Every location holding stock shows a wooden pallet with cartons.
  * Empty locations show nothing on the shelf: the racking stays visible. While an answer is
  * shown, highlighted stock takes its severity color and the rest fades towards the floor.
  */
@@ -471,7 +471,6 @@ function Stock({ layout, onHand, highlights, colors }: Props) {
     if (!target) return;
     const dummy = new Object3D();
     const kraft = new Color(colors["--pw-color-map-carton"]);
-    const tote = new Color(colors["--pw-color-map-carton-alt"]);
     const floor = new Color(colors["--pw-color-map-floor"]);
     const focusing = highlighted.size > 0;
     stocked.forEach((bin, i) => {
@@ -481,7 +480,7 @@ function Stock({ layout, onHand, highlights, colors }: Props) {
       dummy.updateMatrix();
       target.setMatrixAt(i, dummy.matrix);
       const severity = highlighted.get(bin.id);
-      const base = bin.bin_role === "PICK" ? tote : kraft;
+      const base = kraft;
       const color = severity
         ? new Color(colors[SEVERITY_TOKEN[severity]])
         : focusing
