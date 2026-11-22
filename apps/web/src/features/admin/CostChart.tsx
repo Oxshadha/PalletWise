@@ -117,7 +117,7 @@ export function CostChart({ rows }: { rows: UsageRow[] }) {
                     d={bar(x, Math.min(y(d.cost), base - 2), barW, base)}
                   />
                 )}
-                {(i % 2 === days.length % 2 || i === days.length - 1) && (
+                {(days.length - 1 - i) % 2 === 0 && (
                   <text className="pw-chart-tick" x={x + barW / 2} y={H - 10} textAnchor="middle">
                     {label(d.day)}
                   </text>
