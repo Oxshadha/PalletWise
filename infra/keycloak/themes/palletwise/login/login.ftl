@@ -6,7 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <title>Sign in to PalletWise</title>
-  <link rel="icon" href="${url.resourcesPath}/img/logo.png">
+  <link rel="icon" href="${url.resourcesPath}/img/favicon.ico" sizes="48x48">
+  <link rel="apple-touch-icon" href="${url.resourcesPath}/img/apple-touch-icon.png">
   <link rel="stylesheet" href="${url.resourcesPath}/css/signin.css">
 </head>
 <body>
@@ -15,7 +16,7 @@
       <div class="pw-art" aria-hidden="true">
         <canvas id="pw-floor"></canvas>
         <div class="pw-brand">
-          <img src="${url.resourcesPath}/img/logo.png" alt="" class="pw-logo">
+          <img src="${url.resourcesPath}/img/logo.webp" alt="" class="pw-logo">
           <p class="pw-name">PalletWise</p>
           <p class="pw-tagline">The warehouse copilot: every location, order and exception, answered on the map.</p>
         </div>
