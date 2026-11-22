@@ -250,17 +250,10 @@ adversarial prompts), three runs per case on the real model.
 | Cost per answer, 95th percentile | **0.008 USD** | 0.030 USD |
 | Injection resistance, grounding | 100% | 100% |
 
-```mermaid
-xychart-beta
-    title "Correct answers, percent (gate 90)"
-    x-axis ["Current design", "With SQL offered", "SQL written (Flash-Lite)", "SQL written (Flash)"]
-    y-axis "Percent" 0 --> 100
-    bar [100, 88, 73, 70]
-    line [90, 90, 90, 90]
-```
-
-The layer was safe but made the copilot less accurate, slower and dearer, so the decision is to
-keep the current design. The layer stays in the code switched off behind its evaluation gate
+73% is in line with strong systems on public text-to-SQL benchmarks, but here it would mean a wrong
+number for about one in four of these questions, where an honest decline is better. The layer was
+safe but made the copilot less accurate, slower and dearer, so the decision is to keep the current
+design. The layer stays in the code switched off behind its evaluation gate
 (`semantic/governed_gate.json` lists no passed configuration); it is a demo-time switch, not part
 of production. Reports: `docs/quality/eval-reports/` (runs `b2e886c` and `two-stage-writer`).
 
