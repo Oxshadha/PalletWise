@@ -1,0 +1,47 @@
+# Production overrides for palletwise.oshadhakariyawasam.me, behind the host's nginx (TLS).
+#
+#   docker compose -f compose.yaml -f infra/compose.prod.yaml up -d --build --wait
+#
+# nginx terminates HTTPS and proxies / to the edge (127.0.0.1:8080) and /auth/ to Keycloak
+# (127.0.0.1:8180). Every container has a memory cap, so the stack shares the server safely.
+
+x-public: &public https://palletwise.oshadhakariyawasam.me
+
+services:
+  postgres:
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "work_mem=8MB", "-c", "max_connections=80",
+              "-c", "effective_cache_size=512MB", "-c", "maintenance_work_mem=64MB"]
+    mem_limit: 900m
+
+  keycloak:
+    environment:
+      KC_HOSTNAME: https://palletwise.oshadhakariyawasam.me/auth
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HTTP_MANAGEMENT_RELATIVE_PATH: /
+      KC_PROXY_HEADERS: xforwarded
+      JAVA_OPTS_KC_HEAP: -XX:InitialRAMPercentage=10 -XX:MaxRAMPercentage=60
+    mem_limit: 700m
+
+  api:
+    environment:
+      PW_PUBLIC_ORIGIN: *public
+      PW_OIDC_PUBLIC_URL: https://palletwise.oshadhakariyawasam.me/auth/realms/palletwise
+      PW_OIDC_INTERNAL_URL: http://keycloak:8080/auth/realms/palletwise
+    mem_limit: 450m
+
+  simulator:
+    mem_limit: 450m
+  simadmin:
+    mem_limit: 200m
+  worker-connector:
+    mem_limit: 250m
+  worker-evaluator:
+    mem_limit: 200m
+  worker-workflow:
+    mem_limit: 200m
+  opa:
+    mem_limit: 100m
+  web:
+    mem_limit: 64m
+  edge:
+    mem_limit: 128m
