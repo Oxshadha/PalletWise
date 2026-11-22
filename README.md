@@ -181,40 +181,58 @@ refused for it.
 
 ### Connecting a third-party WMS
 
-**Design.** PalletWise never depends on a WMS's database or API directly. Every WMS is
-translated into PalletWise's own canonical model at the edge (an anti-corruption layer), so the
-semantic layer, the copilot, the map and the inbox never change when the WMS does.
+**Design (ADR 0003).** PalletWise never depends on a WMS's database or API directly. Every WMS is
+translated into PalletWise's own canonical model at the edge, so the semantic layer, the copilot,
+the map and the inbox never change when the WMS does. It works like a protocol: one contract that
+every warehouse speaks, and one adapter per kind of source behind it.
 
-| Layer | Written per WMS? | Responsibility |
+| Layer | Per WMS | Responsibility |
 |---|---|---|
-| Adapter | Yes | Reads the WMS the way it allows (REST or OData API, webhooks, change data capture, scheduled exports) and maps its codes, units, statuses and locations to canonical records |
-| Connector contract | No | `pull(after_sequence, limit)`, `submit_task(task, idempotency_key)`, `get_task_result(key)`, `health()`; every record carries a sequence number, its type, the source system and the WMS's own id |
-| Connector worker and ingest | No | Applies records strictly in order and in batches as `pw_ingest`, through invariant-keeping database functions; idempotent on natural keys, so a replay creates nothing twice |
+| Mapping file | Yes | For a REST WMS: its endpoints, authentication, paging, and which source field becomes which canonical field, with types, code tables and unit conversions |
+| Connector (`palletwise.connectors`) | No | The `WmsConnector` contract (`pull(cursor, limit)`, `health()`), a registry of connector kinds, and the REST connector that reads any mapped API with per-stream cursors and retries that honour `Retry-After` |
+| Connector worker and ingest | No | Applies canonical records strictly in order and in batches as `pw_ingest`, through invariant-keeping database functions; idempotent on natural keys, so a replay creates nothing twice |
+
+**Plugging in a WMS with a REST API** is a mapping file. The sample `acme-wms.yaml` maps an API
+with different names, grams, cubic centimetres and short status codes onto exactly the records
+the simulator produces:
+
+```yaml
+source_system: acme-wms
+base_url: https://wms.acme.example/api/v2
+auth: { type: bearer, env: ACME_WMS_TOKEN }
+paging: { style: cursor, param: pageToken, size_param: pageSize, next: paging.nextToken }
+streams:
+  - record_type: PRODUCT
+    path: /items
+    items: results
+    id: itemId
+    occurred_at: modifiedAt
+    since_param: modifiedSince
+    fields:
+      sku: { path: itemCode, as: upper }
+      name: description
+      unit_weight_kg: { path: weightGrams, as: float, scale: 0.001 }
+      temperature_class: { path: storage, values: { amb: AMBIENT, chl: CHILLED, frz: FROZEN } }
+```
+
+```python
+from palletwise.connectors import build
+
+connector = build({"kind": "rest", "mapping": "acme-wms"})
+batch = connector.pull(cursor=None, limit=500)  # canonical records, oldest first, and a cursor
+```
 
 **Why this way.**
 - Ordered, idempotent records survive retries, restarts and replays without double counting.
-- Least privilege: the adapter holds the only WMS credentials; `pw_ingest` can write only through
-  the ingest functions.
+- Least privilege: the connector holds the only WMS credential, from its environment;
+  `pw_ingest` can write only through the ingest functions.
 - Write-back is explicit: approved tasks go back through `submit_task` with an idempotency key,
   and PalletWise treats a task as done only when its result record arrives.
+- A new kind of source (change data capture, file drops) registers as another connector kind
+  behind the same contract.
 
-**What exists today.** The contract and the worker exist; the one adapter is the simulator
-(`services/simulator`, `docs/specs/simulator.md` section 2), which reaches PalletWise only
-through this path, exactly as a real WMS would. The worker currently reads the simulator's outbox
-directly.
-
-**Next steps for production integrations** (each a planned slice with its own ADR):
-1. A `WmsConnector` plugin interface, registered by source system and configured per site, so the
-   worker runs any adapter instead of reading one outbox.
-2. Two ingestion modes: pull (the adapter polls the WMS or reads its change feed) and push (a
-   signed inbound endpoint such as `POST /api/connectors/{id}/records` with HMAC and idempotency
-   keys, for webhooks and integration platforms).
-3. Declarative mapping files per WMS (codes, units, statuses, location codes), so a common WMS
-   needs configuration rather than code.
-4. A published, versioned record schema and a conformance test suite every adapter must pass.
-5. Operations: a dead-letter queue for rejected records, periodic snapshot reconciliation to catch
-   drift, backfill, and a layout import (CSV or CAD) for 3D positions when the WMS has no
-   coordinates.
+The simulator (`services/simulator`) feeds PalletWise through this same contract, exactly as a
+real WMS does.
 
 ## Security model
 
@@ -302,6 +320,7 @@ Architecture decisions are in [`docs/adr/`](docs/adr/); slice decisions are in e
 | Reset and time controls for the Manager, on simulated sites only (Slice 4) | A demo recovers from one screen; a real site has nothing to reset |
 | One operation at a time per site (Slice 4) | A shift, a scenario step and a reset can never interleave |
 | ADR 0002: governed SQL as the last answer layer, enabled by measured results (Slice 5) | Questions beyond the tools get answered without giving the model the database |
+| ADR 0003: WMS connectors, one contract and declarative adapters | A new warehouse system is a mapping file, and everything above the connector stays the same |
 
 ## Quality
 
