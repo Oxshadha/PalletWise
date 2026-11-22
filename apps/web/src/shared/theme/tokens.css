@@ -41,7 +41,6 @@
   --pw-color-map-floor-line: #c4cfde;
   --pw-color-map-rack: #b8c5d8;
   --pw-color-map-carton: #d4ab7f;
-  --pw-color-map-carton-alt: #4f8ff0;
   /* Realistic warehouse materials: concrete, aisle paint, racking steel, pallet wood, walls, docks. */
   --pw-color-map-floor: #e9edf2;
   --pw-color-map-aisle-paint: #e8b923;
@@ -165,7 +164,6 @@
   --pw-color-map-floor-line: #2c3b5c;
   --pw-color-map-rack: #3a4b70;
   --pw-color-map-carton: #a7835d;
-  --pw-color-map-carton-alt: #3c7fe6;
   --pw-color-map-floor: #1d2a44;
   --pw-color-map-aisle-paint: #c99a12;
   --pw-color-map-upright: #4a7ad1;

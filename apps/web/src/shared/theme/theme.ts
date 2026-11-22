@@ -26,7 +26,6 @@ export const TOKENS = [
   "--pw-color-map-floor-line",
   "--pw-color-map-rack",
   "--pw-color-map-carton",
-  "--pw-color-map-carton-alt",
   "--pw-color-map-floor",
   "--pw-color-map-aisle-paint",
   "--pw-color-map-upright",
