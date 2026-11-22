@@ -1,6 +1,6 @@
 import "./admin.css";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   type AdminAgent,
@@ -20,6 +20,7 @@ import {
 } from "../../shared/api/client";
 import { formatNumber } from "../../shared/format";
 import { Badge, type BadgeTone } from "../../shared/ui/Badge";
+import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { CostChart } from "./CostChart";
 
@@ -79,8 +80,10 @@ function Failed({ message }: { message: string }) {
 
 function outcomeTone(value: string | null | undefined): BadgeTone {
   const v = (value ?? "").toUpperCase();
-  if (["OK", "ALLOW", "ANSWER", "CHANGED", "SHIFTED", "STAGED", "RESET", "RAN"].includes(v))
-    return "success";
+  // Green: passed. Blue: an answer. Violet: a change was made. Amber: declined or limited. Red: refused or failed.
+  if (["OK", "ALLOW"].includes(v)) return "success";
+  if (v === "ANSWER") return "info";
+  if (["CHANGED", "SHIFTED", "STAGED", "RESET", "RAN"].includes(v)) return "action";
   if (["DENY", "DENIED", "ERROR", "FAILED", "REFUSED"].includes(v)) return "critical";
   if (["DECLINE", "BUSY", "VALIDATION_FAILED", "RATE_LIMITED", "NO_RESULTS", "MIXED"].includes(v))
     return "warning";
@@ -282,43 +285,48 @@ function OverviewTab() {
           </ul>
         </div>
         {confirming ? (
-          <div className="pw-confirm" role="alertdialog" aria-label="Confirm">
-            <p>
-              {confirming === "status"
+          <ConfirmDialog
+            question={
+              confirming === "status"
                 ? active
                   ? "Suspend the copilot for everyone in your organisation?"
                   : "Resume the copilot?"
                 : data.governed_query_enabled
                   ? "Switch custom queries off? The copilot then answers only with its tools."
-                  : "Switch custom queries on? They run only for a configuration that passed its evaluation."}
-            </p>
-            <div className="pw-admin-actions">
-              <button
-                type="button"
-                className={
-                  confirming === "status" && active ? "pw-button pw-danger-fill" : "pw-button"
-                }
-                onClick={() =>
-                  void act(() =>
-                    confirming === "status"
-                      ? setAgentStatus(active ? "SUSPENDED" : "ACTIVE")
-                      : setGovernedQuery(!data.governed_query_enabled),
-                  )
-                }
-              >
-                Confirm
-              </button>
-              <button
-                type="button"
-                className="pw-button-quiet"
-                onClick={() => {
-                  setConfirming(null);
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+                  : "Switch custom queries on? They run only for a configuration that passed its evaluation."
+            }
+            onCancel={() => {
+              setConfirming(null);
+            }}
+            actions={
+              <>
+                <button
+                  type="button"
+                  className={
+                    confirming === "status" && active ? "pw-button pw-danger-fill" : "pw-button"
+                  }
+                  onClick={() =>
+                    void act(() =>
+                      confirming === "status"
+                        ? setAgentStatus(active ? "SUSPENDED" : "ACTIVE")
+                        : setGovernedQuery(!data.governed_query_enabled),
+                    )
+                  }
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  className="pw-button-quiet"
+                  onClick={() => {
+                    setConfirming(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </>
+            }
+          />
         ) : null}
         {problem && <Failed message={problem} />}
       </section>
@@ -457,50 +465,70 @@ function UnansweredTab() {
 
 const PAGE_SIZE = 25;
 
-const FILTERS = [
-  { key: "user", label: "User" },
-  { key: "agent", label: "Agent" },
-  { key: "tool", label: "Tool" },
-  { key: "action", label: "Action" },
-] as const;
+type AuditGroup = AuditRow & { count: number };
+
+/** The audit stores the sign-in id; people read the role ("warehouse_manager" becomes "Warehouse manager"). */
+function roleLabel(role: string | null | undefined): string | null {
+  if (!role) return null;
+  const words = role.replaceAll("_", " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** Consecutive identical events (the same who, what and result) show once with a count. */
+function groupAudit(rows: AuditRow[]): AuditGroup[] {
+  const groups: AuditGroup[] = [];
+  const key = (r: AuditRow) =>
+    [
+      r.actor_type,
+      r.user_subject,
+      r.agent_id,
+      r.agent_version,
+      r.action,
+      r.tool,
+      r.decision,
+      r.outcome,
+    ].join("|");
+  for (const r of rows) {
+    const last = groups.at(-1);
+    if (last && key(last) === key(r)) last.count += 1;
+    else groups.push({ ...r, count: 1 });
+  }
+  return groups;
+}
+
+/** 1 2 3 … 9 10: the first and last page, the current one and its neighbours. */
+function pageItems(current: number, pages: number): (number | null)[] {
+  const wanted = new Set([0, pages - 1, current - 1, current, current + 1]);
+  const items: (number | null)[] = [];
+  let previous = -1;
+  for (const n of [...wanted].filter((n) => n >= 0 && n < pages).sort((a, b) => a - b)) {
+    if (n - previous > 1) items.push(null);
+    items.push(n);
+    previous = n;
+  }
+  return items;
+}
 
 function AuditTab() {
-  const [draft, setDraft] = useState<Record<string, string>>({});
   const [applied, setApplied] = useState<Record<string, string>>({});
   const load = useCallback((signal: AbortSignal) => fetchAudit(applied, signal), [applied]);
   const { data, error } = useLoad<AuditRow[]>(load);
   const query = auditQuery(applied);
   const [page, setPage] = useState(0);
-  const pages = Math.max(1, Math.ceil((data?.length ?? 0) / PAGE_SIZE));
+  const grouped = useMemo(() => groupAudit(data ?? []), [data]);
+  const pages = Math.max(1, Math.ceil(grouped.length / PAGE_SIZE));
   const current = Math.min(page, pages - 1);
-  const rows = (data ?? []).slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
+  const rows = grouped.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
   return (
     <div className="pw-admin-section">
-      <form
-        className="pw-admin-filters"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setApplied({ ...draft });
-          setPage(0);
-        }}
-      >
-        {FILTERS.map((f) => (
-          <label key={f.key}>
-            <span>{f.label}</span>
-            <input
-              value={draft[f.key] ?? ""}
-              onChange={(event) => {
-                setDraft({ ...draft, [f.key]: event.target.value });
-              }}
-            />
-          </label>
-        ))}
+      <div className="pw-admin-toolbar">
         <label>
           <span>Decision</span>
           <select
-            value={draft["decision"] ?? ""}
+            value={applied["decision"] ?? ""}
             onChange={(event) => {
-              setDraft({ ...draft, decision: event.target.value });
+              setApplied(event.target.value ? { decision: event.target.value } : {});
+              setPage(0);
             }}
           >
             <option value="">Any</option>
@@ -508,27 +536,23 @@ function AuditTab() {
             <option value="DENY">Denied</option>
           </select>
         </label>
-        <button type="submit" className="pw-button">
-          Apply
-        </button>
         <a className="pw-button-quiet" href={`/api/admin/audit.csv${query ? `?${query}` : ""}`}>
           Export CSV
         </a>
-      </form>
+      </div>
       {error && <Failed message={error} />}
       {data && (
         <>
-          <p className="pw-muted" role="status">
-            {data.length === 0
-              ? "No entries match these filters."
-              : `Entries ${String(current * PAGE_SIZE + 1)} to ${String(current * PAGE_SIZE + rows.length)} of ${String(data.length)}, newest first.${data.length === 500 ? " The newest 500 are shown; narrow the filters to see older ones." : ""}`}
-          </p>
+          {data.length === 0 && (
+            <p className="pw-muted" role="status">
+              No entries match these filters.
+            </p>
+          )}
           <div className="pw-admin-scroll">
             <table className="pw-table">
               <thead>
                 <tr>
                   <th scope="col">Time</th>
-                  <th scope="col">Actor</th>
                   <th scope="col">User</th>
                   <th scope="col">Agent</th>
                   <th scope="col">Action</th>
@@ -542,17 +566,18 @@ function AuditTab() {
                 {rows.map((r) => (
                   <tr key={`${r.trace_id}-${r.occurred_at}-${r.action}-${r.tool ?? ""}`}>
                     <td>{when(r.occurred_at)}</td>
-                    <td>{r.actor_type.toLowerCase()}</td>
-                    <td>
-                      {r.user_subject ?? ""}
-                      {r.user_role ? ` (${r.user_role})` : ""}
+                    <td title={r.user_subject ?? undefined}>
+                      {roleLabel(r.user_role) ?? r.user_subject?.slice(0, 8) ?? ""}
                     </td>
                     <td>
                       {r.agent_id
                         ? `${r.agent_id}${r.agent_version ? ` ${r.agent_version}` : ""}`
                         : ""}
                     </td>
-                    <td>{r.action}</td>
+                    <td>
+                      {r.action}
+                      {r.count > 1 && <span className="pw-muted"> ×{r.count}</span>}
+                    </td>
                     <td>{r.tool ?? ""}</td>
                     <td>
                       {r.decision && (
@@ -574,26 +599,45 @@ function AuditTab() {
             <nav className="pw-pager" aria-label="Audit log pages">
               <button
                 type="button"
-                className="pw-button-quiet"
+                className="pw-page"
+                aria-label="Previous page"
                 disabled={current === 0}
                 onClick={() => {
                   setPage(current - 1);
                 }}
               >
-                Previous
+                <Icon name="chevron-left" size={16} />
               </button>
-              <span className="pw-muted">
-                Page {current + 1} of {pages}
-              </span>
+              {pageItems(current, pages).map((n, i) =>
+                n === null ? (
+                  <span key={`gap-${String(i)}`} className="pw-pager-gap" aria-hidden="true">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={n}
+                    type="button"
+                    className="pw-page"
+                    aria-label={`Page ${String(n + 1)}`}
+                    aria-current={n === current ? "page" : undefined}
+                    onClick={() => {
+                      setPage(n);
+                    }}
+                  >
+                    {n + 1}
+                  </button>
+                ),
+              )}
               <button
                 type="button"
-                className="pw-button-quiet"
+                className="pw-page"
+                aria-label="Next page"
                 disabled={current >= pages - 1}
                 onClick={() => {
                   setPage(current + 1);
                 }}
               >
-                Next
+                <Icon name="chevron-right" size={16} />
               </button>
             </nav>
           )}

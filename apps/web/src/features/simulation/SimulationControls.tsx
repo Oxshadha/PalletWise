@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { ShiftBy } from "../../shared/api/client";
 import { formatSiteTime, isoToSiteLocal, siteLocalToIso } from "../../shared/format";
+import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { Icon } from "../../shared/ui/Icon";
 import { useWorkspace } from "../../shared/workspace/WorkspaceContext";
 import { DemoPanel, type DemoSetup, storeStep } from "./DemoPanel";
@@ -249,31 +250,31 @@ export function SimulationControls({ onAsked }: { onAsked: () => void }) {
       )}
 
       {pending && (
-        <div
-          className="pw-confirm"
-          role="alertdialog"
-          aria-label="Confirm"
-          aria-describedby="pw-confirm-text"
-        >
-          <p id="pw-confirm-text">{pending.question}</p>
-          <div className="pw-timebar-actions">
-            <ConfirmButton
-              pending={pending}
-              onDone={() => {
-                setPending(null);
-              }}
-            />
-            <button
-              type="button"
-              className="pw-button-quiet"
-              onClick={() => {
-                setPending(null);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        <ConfirmDialog
+          question={pending.question}
+          onCancel={() => {
+            setPending(null);
+          }}
+          actions={
+            <>
+              <ConfirmButton
+                pending={pending}
+                onDone={() => {
+                  setPending(null);
+                }}
+              />
+              <button
+                type="button"
+                className="pw-button-quiet"
+                onClick={() => {
+                  setPending(null);
+                }}
+              >
+                Cancel
+              </button>
+            </>
+          }
+        />
       )}
 
       {operation && (

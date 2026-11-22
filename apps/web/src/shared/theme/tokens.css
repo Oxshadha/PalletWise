@@ -27,6 +27,12 @@
   --pw-color-glass: rgb(255 255 255 / 0.72);
   --pw-color-glass-border: rgb(9 42 102 / 0.07);
   --pw-color-canvas-glow: rgb(8 117 237 / 0.06);
+  --pw-color-overlay: rgb(9 42 102 / 0.4);
+  --pw-color-text-soft: color-mix(
+    in srgb,
+    var(--pw-color-text-primary) 78%,
+    var(--pw-color-surface)
+  );
   --pw-color-panel-strong: #0b2a66;
   --pw-color-text-on-strong: #f4f7fc;
   /* Isometric warehouse model. */
@@ -68,6 +74,7 @@
   --pw-color-status-warning: #b45309;
   --pw-color-status-critical: #c62828;
   --pw-color-status-success: #15803d;
+  --pw-color-status-action: #5b30d6;
 
   /* ---- Typography: light display type for titles and numbers, quiet small labels */
   --pw-font-family:
@@ -111,6 +118,9 @@
   --pw-radius-lg: 1.5rem;
   --pw-radius-pill: 999px;
   --pw-shadow-card: 0 1px 1px rgb(9 42 102 / 0.03), 0 12px 40px rgb(9 42 102 / 0.07);
+  --pw-shadow-raised:
+    0 1px 0 rgb(255 255 255) inset, 0 0 0 1px rgb(9 42 102 / 0.1), 0 3px 8px rgb(9 42 102 / 0.2);
+  --pw-shadow-recess: inset 0 2px 5px rgb(9 42 102 / 0.1);
   --pw-color-scroll-shade: rgb(9 42 102 / 0.14); /* edge of a table that scrolls further */
   --pw-shadow-popover: 0 16px 48px rgb(9 42 102 / 0.16);
   --pw-blur-glass: 18px;
@@ -142,6 +152,12 @@
   --pw-color-glass: rgb(17 28 50 / 0.72);
   --pw-color-glass-border: rgb(255 255 255 / 0.08);
   --pw-color-canvas-glow: rgb(8 117 237 / 0.12);
+  --pw-color-overlay: rgb(2 6 16 / 0.65);
+  --pw-color-text-soft: color-mix(
+    in srgb,
+    var(--pw-color-text-primary) 78%,
+    var(--pw-color-surface)
+  );
   --pw-color-panel-strong: #0e2f6e;
   --pw-color-text-on-strong: #f4f7fc;
   --pw-color-map-slab: #1a2742;
@@ -179,8 +195,13 @@
   --pw-color-status-warning: #f59e0b;
   --pw-color-status-critical: #f87171;
   --pw-color-status-success: #4ade80;
+  --pw-color-status-action: #a78bfa;
 
   --pw-shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
+  --pw-shadow-raised:
+    0 1px 0 rgb(255 255 255 / 0.12) inset, 0 0 0 1px rgb(255 255 255 / 0.1),
+    0 3px 10px rgb(0 0 0 / 0.55);
+  --pw-shadow-recess: inset 0 2px 6px rgb(0 0 0 / 0.5);
   --pw-color-scroll-shade: rgb(0 0 0 / 0.55);
   --pw-shadow-popover: 0 12px 32px rgb(0 0 0 / 0.45);
   --pw-logo: url("/brand/logo-dark.webp");

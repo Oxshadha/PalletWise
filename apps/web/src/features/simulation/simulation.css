@@ -35,8 +35,7 @@
 }
 
 .pw-timebar-progress,
-.pw-timebar-error,
-.pw-confirm p {
+.pw-timebar-error {
   margin: 0;
   font-size: var(--pw-font-size-sm);
 }
@@ -47,15 +46,6 @@
 
 .pw-timebar-error {
   color: var(--pw-color-status-critical);
-}
-
-.pw-confirm {
-  display: grid;
-  gap: var(--pw-space-2);
-  padding: var(--pw-space-3);
-  border-left: 4px solid var(--pw-color-status-warning);
-  border-radius: var(--pw-radius-sm);
-  background: var(--pw-color-surface);
 }
 
 .pw-timebar-picker {
