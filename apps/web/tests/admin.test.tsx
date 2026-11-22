@@ -23,6 +23,7 @@ const audit: AuditRow[] = [
     occurred_at: "2026-11-21T10:00:00Z",
     actor_type: "AGENT",
     user_subject: "manager",
+    user_name: "Warehouse Manager",
     user_role: "warehouse_manager",
     agent_id: "copilot",
     agent_version: "1",

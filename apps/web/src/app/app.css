@@ -98,7 +98,8 @@
   z-index: 3;
   display: grid;
   gap: var(--pw-space-2);
-  width: 19rem;
+  width: min(19rem, calc(100vw - 2rem));
+  box-sizing: border-box;
   margin-top: var(--pw-space-2);
   padding: var(--pw-space-4);
   border: 1px solid var(--pw-color-glass-border);
@@ -113,6 +114,12 @@
 
 .pw-profile-name {
   font-weight: var(--pw-font-weight-heading);
+}
+
+.pw-signout {
+  width: 100%;
+  justify-content: flex-start;
+  color: var(--pw-color-signout-text);
 }
 
 /* The site title, with the folded time controls as a pill on the right; opened, the time bar
@@ -398,7 +405,9 @@ body.pw-resizing {
 /* Theme choice in the profile menu: three equal options, each with its icon. */
 .pw-profile-menu .pw-segmented {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .pw-profile-menu .pw-segmented button {

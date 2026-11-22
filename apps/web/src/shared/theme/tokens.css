@@ -74,6 +74,7 @@
   --pw-color-status-warning: #b45309;
   --pw-color-status-critical: #c62828;
   --pw-color-status-success: #15803d;
+  --pw-color-signout-text: #d66a6a;
 
   /* ---- Typography: light display type for titles and numbers, quiet small labels */
   --pw-font-family:
@@ -194,11 +195,12 @@
   --pw-color-status-warning: #f59e0b;
   --pw-color-status-critical: #f87171;
   --pw-color-status-success: #4ade80;
+  --pw-color-signout-text: #f87171;
 
   --pw-shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
   --pw-shadow-raised:
-    0 1px 0 rgb(255 255 255 / 0.12) inset, 0 0 0 1px rgb(255 255 255 / 0.1),
-    0 3px 10px rgb(0 0 0 / 0.55);
+    0 1px 0 rgb(255 255 255 / 0.08) inset, 0 0 0 1px rgb(255 255 255 / 0.06),
+    0 2px 8px rgb(0 0 0 / 0.32);
   --pw-shadow-recess: inset 0 2px 6px rgb(0 0 0 / 0.5);
   --pw-color-scroll-shade: rgb(0 0 0 / 0.55);
   --pw-shadow-popover: 0 12px 32px rgb(0 0 0 / 0.45);
