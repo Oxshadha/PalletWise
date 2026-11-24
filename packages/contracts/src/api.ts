@@ -102,6 +102,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Feedback
+         * @description Answer ratings with their comments, newest first (FR-COP-14): a "not helpful" answer is a
+         *     candidate for the evaluation set. Conversations stay private: only feedback rows are read.
+         */
+        get: operations["get_feedback_api_admin_feedback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Settings
+         * @description The site's settings in effect, what each affects, and the recent versions (FR-ADM-04).
+         */
+        get: operations["get_settings_api_admin_settings_get"];
+        /**
+         * Save Settings
+         * @description Saves the settings as a new version (FR-ADM-04), audited. Every number that depends on them
+         *     uses the new version from the next request, and the exception engine re-evaluates open
+         *     exceptions on its next cycle (its evaluation key includes the settings version).
+         */
+        put: operations["save_settings_api_admin_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/unanswered": {
         parameters: {
             query?: never;
@@ -986,6 +1033,38 @@ export interface components {
              */
             rating: "HELPFUL" | "NOT_HELPFUL";
         };
+        /** FeedbackOut */
+        FeedbackOut: {
+            /** Helpful */
+            helpful: number;
+            /** Not Helpful */
+            not_helpful: number;
+            /** Rows */
+            rows: components["schemas"]["FeedbackRow"][];
+        };
+        /** FeedbackRow */
+        FeedbackRow: {
+            /** Comment */
+            comment: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Outcome */
+            outcome: string | null;
+            /** Question */
+            question: string | null;
+            /**
+             * Rating
+             * @enum {string}
+             */
+            rating: "HELPFUL" | "NOT_HELPFUL";
+            /** Tools */
+            tools: string[];
+            /** Trace Id */
+            trace_id: string;
+        };
         /** GovernedIn */
         GovernedIn: {
             /** Enabled */
@@ -1337,6 +1416,99 @@ export interface components {
              */
             match: "exact" | "prefix" | "name";
             suggestion: components["schemas"]["SuggestionOut"];
+        };
+        /** SettingField */
+        SettingField: {
+            /** Affects */
+            affects: string;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "rules" | "impact";
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Step */
+            step: number;
+            /** Unit */
+            unit: string;
+        };
+        /** SettingsIn */
+        SettingsIn: {
+            /**
+             * Expected Version
+             * @description The version the editor started from
+             */
+            expected_version: number;
+            /** Note */
+            note?: string | null;
+            values: components["schemas"]["SettingsValues"];
+        };
+        /** SettingsOut */
+        SettingsOut: {
+            /** Fields */
+            fields: components["schemas"]["SettingField"][];
+            /** History */
+            history: components["schemas"]["SettingsVersionOut"][];
+            values: components["schemas"]["SettingsValues"];
+            /** Version No */
+            version_no: number;
+        };
+        /** SettingsSaved */
+        SettingsSaved: {
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "changed" | "unchanged";
+            /** Version No */
+            version_no: number;
+        };
+        /**
+         * SettingsValues
+         * @description Settings schema version 2 (migration 0022). The database CHECK (pw.settings_valid) is the
+         *     final validator; these bounds match it, and are tighter where it has none, so a refusal is a
+         *     clear 422 rather than a database error.
+         */
+        SettingsValues: {
+            /** Capacity Threshold Pct */
+            capacity_threshold_pct: number;
+            /** Dead Stock Days */
+            dead_stock_days: number;
+            /** Impact Hours Cap */
+            impact_hours_cap: number;
+            /** Impact Lines Cap */
+            impact_lines_cap: number;
+            /** Impact Value Cap */
+            impact_value_cap: number;
+            /** Impact Weight Lines */
+            impact_weight_lines: number;
+            /** Impact Weight Urgency */
+            impact_weight_urgency: number;
+            /** Impact Weight Value */
+            impact_weight_value: number;
+            /** Slow In Prime Days */
+            slow_in_prime_days: number;
+            /** Stockout Horizon Hours */
+            stockout_horizon_hours: number;
+            /** Trailing Window Operating Days */
+            trailing_window_operating_days: number;
+        };
+        /** SettingsVersionOut */
+        SettingsVersionOut: {
+            /** Note */
+            note: string | null;
+            /**
+             * Saved At
+             * Format: date-time
+             */
+            saved_at: string;
+            /** Saved By */
+            saved_by: string;
+            /** Version No */
+            version_no: number;
         };
         /**
          * Severity
@@ -1711,6 +1883,100 @@ export interface operations {
                 content: {
                     "text/csv": unknown;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_feedback_api_admin_feedback_get: {
+        parameters: {
+            query?: {
+                days?: number;
+                rating?: ("HELPFUL" | "NOT_HELPFUL") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_settings_api_admin_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsOut"];
+                };
+            };
+        };
+    };
+    save_settings_api_admin_settings_put: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsSaved"];
+                };
+            };
+            /** @description VERSION_CONFLICT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

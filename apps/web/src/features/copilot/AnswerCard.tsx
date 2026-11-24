@@ -154,6 +154,9 @@ function Feedback({ siteId, runId }: { siteId: string; runId: string }) {
               setComment(e.target.value);
             }}
           />
+          <p className="pw-muted">
+            Your question and comment are sent to your administrator to improve the copilot.
+          </p>
           <button type="submit" className="pw-button">
             Send feedback
           </button>

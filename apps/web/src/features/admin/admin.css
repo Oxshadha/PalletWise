@@ -406,3 +406,49 @@
   flex-wrap: wrap;
   gap: var(--pw-space-1);
 }
+
+/* Site settings (FR-ADM-04): one row per setting, with what it affects under it. */
+.pw-settings {
+  display: grid;
+  gap: var(--pw-space-3);
+}
+
+.pw-settings-group {
+  margin: 0;
+  min-width: 0;
+}
+
+.pw-settings-group legend {
+  padding: 0 var(--pw-space-1);
+  font-weight: 600;
+}
+
+.pw-setting {
+  display: grid;
+  gap: var(--pw-space-1);
+}
+
+.pw-setting p {
+  margin: 0;
+}
+
+.pw-setting-input {
+  display: flex;
+  align-items: center;
+  gap: var(--pw-space-2);
+}
+
+.pw-setting-input input,
+.pw-admin-toolbar input {
+  width: 9rem;
+  padding: var(--pw-space-1) var(--pw-space-2);
+  border: 1px solid var(--pw-color-border);
+  border-radius: var(--pw-radius-sm);
+  background: var(--pw-color-surface);
+  color: var(--pw-color-text-primary);
+  font: inherit;
+}
+
+.pw-admin-toolbar input {
+  width: 18rem;
+}
