@@ -82,6 +82,94 @@ def unanswered(tenant: UUID, since: datetime, admin: str) -> list[dict[str, Any]
     )
 
 
+def feedback(tenant: UUID, since: datetime, rating: str | None, admin: str) -> list[dict[str, Any]]:
+    """Answer ratings, newest first (FR-COP-14), with the tools each rated run used and its outcome
+    from the audit trail. Read as the Admin: the admin read role sees feedback rows and their granted
+    columns only (migration 0034), never the conversation; a "not helpful" rating carries the question
+    its user sent for review."""
+    return _rows(
+        tenant,
+        """
+        WITH f AS (
+          SELECT run_id, rating, comment, question, trace_id, created_at
+            FROM pw.run_feedback
+           WHERE created_at >= %s AND (%s::text IS NULL OR rating = %s::text)
+           ORDER BY created_at DESC LIMIT 200
+        ), a AS (
+          SELECT run_id,
+                 array_agg(DISTINCT tool) FILTER (WHERE action = 'tool.call' AND tool IS NOT NULL) AS tools,
+                 max(outcome) FILTER (WHERE action = 'copilot.run') AS outcome
+            FROM pw.audit_event
+           WHERE run_id IN (SELECT run_id FROM f)
+           GROUP BY run_id
+        )
+        SELECT f.created_at, f.rating, f.comment, f.question, f.trace_id,
+               coalesce(a.tools, '{}') AS tools, a.outcome
+          FROM f LEFT JOIN a USING (run_id)
+         ORDER BY f.created_at DESC
+        """,
+        (since, rating, rating),
+        subject=admin,
+    )
+
+
+def feedback_counts(tenant: UUID, since: datetime, admin: str) -> dict[str, int]:
+    """How many answers were rated helpful and not helpful since a time."""
+    rows = _rows(
+        tenant,
+        "SELECT rating, count(*) AS n FROM pw.run_feedback WHERE created_at >= %s GROUP BY rating",
+        (since,),
+        subject=admin,
+    )
+    return {str(r["rating"]): int(r["n"]) for r in rows}
+
+
+def settings_versions(tenant: UUID, site: UUID) -> list[dict[str, Any]]:
+    """A site's settings, newest version first (the first is in effect), with who saved each."""
+    return _rows(
+        tenant,
+        """
+        SELECT s.version_no, s.schema_version, s."values", s.created_by, d.display_name AS created_by_name,
+               s.created_at, s.note
+          FROM pw.settings_version s
+          LEFT JOIN pw.user_directory d ON d.tenant_id = s.tenant_id AND d.subject = s.created_by
+         WHERE s.site_id = %s
+         ORDER BY s.version_no DESC LIMIT 10
+        """,
+        (site,),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class SettingsChange:
+    outcome: str  # changed, unchanged, conflict, not_found
+    version_no: int | None
+    before: dict[str, Any] | None
+
+
+def save_settings(
+    pool: Pool,
+    tenant: UUID,
+    site: UUID,
+    expected_version: int,
+    values: dict[str, Any],
+    created_by: str,
+    note: str | None,
+    audit_entry: Callable[[SettingsChange], AuditEntry],
+) -> SettingsChange:
+    """A new settings version (FR-ADM-04) and its audit entry in one transaction, as pw_app through
+    pw.save_site_settings(), which refuses a stale edit. Every attempt is audited with its outcome."""
+    with pool.connection() as conn, tenant_transaction(conn, tenant):
+        row = conn.execute(
+            "SELECT outcome, version_no, before_values FROM pw.save_site_settings(%s, %s, %s, %s, %s)",
+            (site, expected_version, Jsonb(values), created_by, note),
+        ).fetchone()
+        assert row is not None
+        change = SettingsChange(row[0], row[1], row[2])
+        conn.execute("SELECT pw.append_audit(%s, %s)", (tenant, Jsonb(audit_entry(change).as_json())))
+    return change
+
+
 @dataclass(frozen=True, slots=True)
 class AuditFilter:
     since: datetime | None = None

@@ -29,6 +29,12 @@ export type AdminAgent = Schemas["AgentOut"];
 export type UsageRow = Schemas["UsageRow"];
 export type UnansweredRow = Schemas["UnansweredRow"];
 export type AuditRow = Schemas["AuditRow"];
+export type Feedback = Schemas["FeedbackOut"];
+export type FeedbackRow = Schemas["FeedbackRow"];
+export type SiteSettings = Schemas["SettingsOut"];
+export type SettingField = Schemas["SettingField"];
+export type SettingsValues = Schemas["SettingsValues"];
+export type SettingsSaved = Schemas["SettingsSaved"];
 
 /** Thrown when the session is missing or has ended; the shell sends the user to sign in. */
 export class SignedOut extends Error {}
@@ -242,3 +248,34 @@ export function auditQuery(filters: Record<string, string>): string {
 
 export const fetchAudit = (filters: Record<string, string>, signal?: AbortSignal) =>
   getJson<AuditRow[]>(`/api/admin/audit?${auditQuery(filters)}`, signal);
+
+/** Answer ratings and comments (FR-COP-14); a rating filter, or every rating. */
+export const fetchFeedback = (
+  days: number,
+  rating: "HELPFUL" | "NOT_HELPFUL" | null,
+  signal?: AbortSignal,
+) =>
+  getJson<Feedback>(
+    `/api/admin/feedback?days=${String(days)}${rating ? `&rating=${rating}` : ""}`,
+    signal,
+  );
+
+/** The site's settings in effect, what each affects, and recent versions (FR-ADM-04). */
+export const fetchSettings = (signal?: AbortSignal) =>
+  getJson<SiteSettings>("/api/admin/settings", signal);
+
+/** Saves the settings as a new version; refused with VERSION_CONFLICT when someone saved first. */
+export async function saveSettings(
+  expectedVersion: number,
+  values: SettingsValues,
+  note: string | null,
+): Promise<SettingsSaved> {
+  const response = await fetch("/api/admin/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...once() },
+    body: JSON.stringify({ expected_version: expectedVersion, values, note }),
+  });
+  if (response.status === 401) throw new SignedOut();
+  if (!response.ok) throw await problemFrom(response);
+  return (await response.json()) as SettingsSaved;
+}

@@ -1,5 +1,6 @@
-"""Admin panel core (FR-ADM-03, 05, 06, 07): the copilot's status and kill switch, usage and cost,
-unanswered questions, and the audit trail with CSV export.
+"""Admin panel core (FR-ADM-03, 04, 05, 06, 07; FR-COP-14): the copilot's status and kill switch,
+usage and cost, unanswered questions, answer feedback, site settings, and the audit trail with CSV
+export.
 
 Tenant-wide views. The policy decides on a site, so each request is decided for the first site of
 the Admin's session (an Admin of a tenant with no site has nothing to administer here). Scopes:
@@ -16,7 +17,7 @@ from typing import Annotated, Any, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Header, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from palletwise import clock
 from palletwise.api.problems import problem
@@ -201,6 +202,214 @@ async def get_unanswered(
         admin_repo.unanswered, principal.tenant, _since(days), principal.identity.subject
     )
     return [UnansweredRow(**r) for r in rows]
+
+
+# ---------------------------------------------------------------- answer feedback (FR-COP-14)
+
+
+class FeedbackRow(BaseModel):
+    created_at: datetime
+    rating: Literal["HELPFUL", "NOT_HELPFUL"]
+    comment: str | None
+    question: str | None  # only for "not helpful": the user sent it for review
+    tools: list[str]  # from the audit trail
+    outcome: str | None
+    trace_id: str
+
+
+class FeedbackOut(BaseModel):
+    helpful: int
+    not_helpful: int
+    rows: list[FeedbackRow]
+
+
+@router.get("/feedback", response_model=FeedbackOut)
+async def get_feedback(
+    principal: CurrentPrincipal,
+    reads: Reads,
+    days: Annotated[int, Query(ge=1, le=90)] = 30,
+    rating: Literal["HELPFUL", "NOT_HELPFUL"] | None = None,
+) -> Any:
+    """Answer ratings with their comments, newest first (FR-COP-14): a "not helpful" answer is a
+    candidate for the evaluation set. Conversations stay private: only feedback rows are read."""
+    if (refused := await authorize(principal, "admin.feedback.read", "admin.usage.read", reads)) is not None:
+        return refused
+    since, admin = _since(days), principal.identity.subject
+    rows = await asyncio.to_thread(admin_repo.feedback, principal.tenant, since, rating, admin)
+    counts = await asyncio.to_thread(admin_repo.feedback_counts, principal.tenant, since, admin)
+    return FeedbackOut(
+        helpful=counts.get("HELPFUL", 0),
+        not_helpful=counts.get("NOT_HELPFUL", 0),
+        rows=[FeedbackRow(**r) for r in rows],
+    )
+
+
+# ---------------------------------------------------------------- site settings (FR-ADM-04)
+
+
+class SettingsValues(BaseModel):
+    """Settings schema version 2 (migration 0022). The database CHECK (pw.settings_valid) is the
+    final validator; these bounds match it, and are tighter where it has none, so a refusal is a
+    clear 422 rather than a database error."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dead_stock_days: int = Field(ge=1, le=365)
+    slow_in_prime_days: int = Field(ge=1, le=365)
+    capacity_threshold_pct: float = Field(gt=0, le=100)
+    stockout_horizon_hours: int = Field(ge=1, le=168)
+    trailing_window_operating_days: int = Field(ge=1, le=365)
+    impact_lines_cap: float = Field(gt=0, le=10_000)
+    impact_hours_cap: float = Field(gt=0, le=8_760)
+    impact_value_cap: float = Field(gt=0, le=1_000_000_000_000)
+    impact_weight_lines: float = Field(ge=0, le=100)
+    impact_weight_urgency: float = Field(ge=0, le=100)
+    impact_weight_value: float = Field(ge=0, le=100)
+
+    @model_validator(mode="after")
+    def some_weight(self) -> "SettingsValues":
+        if self.impact_weight_lines + self.impact_weight_urgency + self.impact_weight_value <= 0:
+            raise ValueError("at least one impact weight must be more than 0")
+        return self
+
+    def stored(self) -> dict[str, int | float]:
+        """As stored: whole numbers as integers, so "24" never becomes "24.0" in the history."""
+        return {k: int(v) if float(v).is_integer() else v for k, v in self.model_dump().items()}
+
+
+class SettingField(BaseModel):
+    key: str
+    group: Literal["rules", "impact"]
+    label: str
+    affects: str  # FR-ADM-04: each setting shows what it affects
+    unit: str
+    step: float
+
+
+SETTING_FIELDS: tuple[SettingField, ...] = (
+    SettingField(key="dead_stock_days", group="rules", label="Dead-stock period", unit="days", step=1,
+                 affects="Dead stock: products with stock not picked for longer than this."),
+    SettingField(key="slow_in_prime_days", group="rules", label="Slow mover period", unit="days", step=1,
+                 affects="Slow movers in the fast-pick zone: products not picked for longer than this."),
+    SettingField(key="capacity_threshold_pct", group="rules", label="Capacity threshold", unit="%", step=1,
+                 affects="Capacity hotspots: zones at or above this utilization."),
+    SettingField(key="stockout_horizon_hours", group="rules", label="Stockout horizon", unit="hours", step=1,
+                 affects="Stockout risk: open order lines due within this many hours."),
+    SettingField(key="trailing_window_operating_days", group="rules", label="Demand window",
+                 unit="operating days", step=1,
+                 affects="Average daily demand and days of cover use this many operating days."),
+    SettingField(key="impact_lines_cap", group="impact", label="Order lines cap", unit="lines", step=1,
+                 affects="Impact score: this many affected order lines counts as full impact."),
+    SettingField(key="impact_hours_cap", group="impact", label="Urgency window", unit="hours", step=1,
+                 affects="Impact score: a deadline further away than this adds no urgency."),
+    SettingField(key="impact_value_cap", group="impact", label="Value cap", unit="LKR", step=1000,
+                 affects="Impact score: this value at risk counts as full impact (logarithmic)."),
+    SettingField(key="impact_weight_lines", group="impact", label="Weight: order lines", unit="", step=0.5,
+                 affects="How much affected order lines count in the inbox ranking."),
+    SettingField(key="impact_weight_urgency", group="impact", label="Weight: urgency", unit="", step=0.5,
+                 affects="How much a near deadline counts in the inbox ranking."),
+    SettingField(key="impact_weight_value", group="impact", label="Weight: value", unit="", step=0.5,
+                 affects="How much the value at risk counts in the inbox ranking."),
+)  # fmt: skip
+
+
+class SettingsVersionOut(BaseModel):
+    version_no: int
+    saved_at: datetime
+    saved_by: str
+    note: str | None
+
+
+class SettingsOut(BaseModel):
+    version_no: int
+    values: SettingsValues
+    fields: list[SettingField]
+    history: list[SettingsVersionOut]
+
+
+class SettingsIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1, description="The version the editor started from")
+    values: SettingsValues
+    note: str | None = Field(default=None, max_length=200)
+
+
+class SettingsSaved(BaseModel):
+    outcome: Literal["changed", "unchanged"]
+    version_no: int
+
+
+def _saved_by(row: dict[str, Any]) -> str:
+    if row["created_by"] == "system":
+        return "System"
+    return str(row["created_by_name"] or row["created_by"])
+
+
+@router.get("/settings", response_model=SettingsOut)
+async def get_settings(principal: CurrentPrincipal, reads: Reads) -> Any:
+    """The site's settings in effect, what each affects, and the recent versions (FR-ADM-04)."""
+    refused = await authorize(principal, "admin.settings.read", "admin.settings.manage", reads)
+    if refused is not None:
+        return refused
+    versions = await asyncio.to_thread(
+        admin_repo.settings_versions, principal.tenant, principal.identity.sites[0]
+    )
+    if not versions:
+        return problem(404, "NOT_FOUND", "Not found.", current_trace_id())
+    current = versions[0]
+    return SettingsOut(
+        version_no=current["version_no"],
+        values=SettingsValues.model_validate(current["values"]),
+        fields=list(SETTING_FIELDS),
+        history=[
+            SettingsVersionOut(version_no=v["version_no"], saved_at=v["created_at"], saved_by=_saved_by(v),
+                               note=v["note"])
+            for v in versions
+        ],
+    )  # fmt: skip
+
+
+@router.put("/settings", response_model=SettingsSaved, responses={409: {"description": "VERSION_CONFLICT"}})
+async def save_settings(
+    body: SettingsIn,
+    principal: CurrentPrincipal,
+    reads: Reads,
+    idempotency_key: Annotated[str, Header(pattern=IDEMPOTENCY_KEY)],
+) -> Any:
+    """Saves the settings as a new version (FR-ADM-04), audited. Every number that depends on them
+    uses the new version from the next request, and the exception engine re-evaluates open
+    exceptions on its next cycle (its evaluation key includes the settings version)."""
+    refused = await authorize(principal, "admin.settings.change", "admin.settings.manage", reads)
+    if refused is not None:
+        return refused
+    identity, trace_id, site = principal.identity, current_trace_id(), principal.identity.sites[0]
+    values = body.values.stored()
+
+    def entry(change: admin_repo.SettingsChange) -> AuditEntry:
+        before = change.before or {}
+        changed = {k: [before.get(k), v] for k, v in values.items() if before.get(k) != v}
+        return AuditEntry(
+            actor_type="USER", action="settings.change", outcome=change.outcome.upper(), trace_id=trace_id,
+            site_id=site, user_subject=identity.subject, user_role=identity.role,
+            scope="admin.settings.manage", decision="ALLOW",
+            parameters={"expected_version": body.expected_version, "version_no": change.version_no,
+                        "changed": changed, "note": body.note, "idempotency_key": idempotency_key},
+        )  # fmt: skip
+
+    change = await asyncio.to_thread(
+        admin_repo.save_settings, reads.app_pool, principal.tenant, site, body.expected_version, values,
+        identity.subject, body.note, entry,
+    )  # fmt: skip
+    if change.outcome == "not_found":
+        return problem(404, "NOT_FOUND", "Not found.", trace_id)
+    if change.outcome == "conflict":
+        return problem(
+            409, "VERSION_CONFLICT",
+            f"Someone else changed the settings (now version {change.version_no}). Reload and try again.",
+            trace_id,
+        )  # fmt: skip
+    return SettingsSaved(outcome=change.outcome, version_no=change.version_no or 0)  # pyright: ignore[reportArgumentType]
 
 
 class AuditRow(BaseModel):

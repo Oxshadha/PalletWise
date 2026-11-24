@@ -7,14 +7,20 @@ import {
   ApiProblem,
   type AuditRow,
   auditQuery,
+  type Feedback,
   fetchAdminAgent,
   fetchAudit,
+  fetchFeedback,
+  fetchSettings,
   fetchUnanswered,
   fetchUsage,
+  saveSettings,
   setAgentStatus,
   setGovernedQuery,
+  type SettingsValues,
   SignedOut,
   signIn,
+  type SiteSettings,
   type UnansweredRow,
   type UsageRow,
 } from "../../shared/api/client";
@@ -23,13 +29,16 @@ import { Badge, type BadgeTone } from "../../shared/ui/Badge";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { CostChart } from "./CostChart";
+import { evalCaseDraft } from "./evalCase";
 
-type Tab = "overview" | "usage" | "unanswered" | "audit";
+type Tab = "overview" | "usage" | "unanswered" | "feedback" | "settings" | "audit";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "usage", label: "Usage and cost" },
   { id: "unanswered", label: "Unanswered questions" },
+  { id: "feedback", label: "Answer feedback" },
+  { id: "settings", label: "Settings" },
   { id: "audit", label: "Audit log" },
 ];
 
@@ -561,6 +570,349 @@ function UnansweredTab() {
   );
 }
 
+type RatingFilter = "NOT_HELPFUL" | "HELPFUL" | "";
+
+/** Answer ratings (FR-COP-14): "not helpful" answers are candidates for the evaluation set. */
+function FeedbackTab() {
+  const [rating, setRating] = useState<RatingFilter>("NOT_HELPFUL");
+  const load = useCallback(
+    (signal: AbortSignal) => fetchFeedback(30, rating || null, signal),
+    [rating],
+  );
+  const { data, error } = useLoad<Feedback>(load);
+  const paging = usePaging(data?.rows ?? []);
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = (text: string, trace: string) => {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(trace);
+    });
+  };
+  return (
+    <div className="pw-admin-section pw-admin-fill">
+      <ul className="pw-metrics">
+        <Metric
+          icon="thumbs-up"
+          label="Helpful, 30 days"
+          value={formatNumber(data?.helpful ?? 0)}
+        />
+        <Metric
+          icon="thumbs-down"
+          label="Not helpful, 30 days"
+          value={formatNumber(data?.not_helpful ?? 0)}
+        />
+      </ul>
+      <div className="pw-admin-toolbar">
+        <label>
+          <span>Rating</span>
+          <select
+            value={rating}
+            onChange={(event) => {
+              setRating(event.target.value as RatingFilter);
+              paging.setPage(0);
+            }}
+          >
+            <option value="NOT_HELPFUL">Not helpful</option>
+            <option value="HELPFUL">Helpful</option>
+            <option value="">Any</option>
+          </select>
+        </label>
+      </div>
+      <p className="pw-muted">
+        A user who rates an answer not helpful sends its question and comment for review; a helpful
+        rating shares nothing else. The tools come from the audit log. Copy a case to add it to the
+        evaluation set after completing its gold answer.
+      </p>
+      {error && <Failed message={error} />}
+      {data && data.rows.length === 0 && (
+        <p className="pw-muted" role="status">
+          No ratings like this in the last 30 days.
+        </p>
+      )}
+      {data && data.rows.length > 0 && (
+        <>
+          <div className="pw-admin-scroll">
+            <table className="pw-table">
+              <thead>
+                <tr>
+                  <th scope="col">Time</th>
+                  <th scope="col">Rating</th>
+                  <th scope="col">Question</th>
+                  <th scope="col">Comment</th>
+                  <th scope="col">Tools</th>
+                  <th scope="col">Outcome</th>
+                  <th scope="col">Trace</th>
+                  <th scope="col">
+                    <span className="pw-visually-hidden">Evaluation case</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {paging.rows.map((r) => (
+                  <tr key={r.trace_id}>
+                    <td>{when(r.created_at)}</td>
+                    <td>
+                      <Badge tone={r.rating === "HELPFUL" ? "success" : "warning"}>
+                        {r.rating === "HELPFUL" ? "helpful" : "not helpful"}
+                      </Badge>
+                    </td>
+                    <td>{r.question ?? ""}</td>
+                    <td>{r.comment ?? ""}</td>
+                    <td>{r.tools.join(", ")}</td>
+                    <td>
+                      {r.outcome && (
+                        <Badge tone={outcomeTone(r.outcome)}>
+                          {r.outcome.toLowerCase().replaceAll("_", " ")}
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="pw-admin-trace">{r.trace_id.slice(0, 12)}</td>
+                    <td>
+                      {r.rating === "NOT_HELPFUL" && r.question && (
+                        <button
+                          type="button"
+                          className="pw-button-quiet"
+                          onClick={() => {
+                            copy(evalCaseDraft(r), r.trace_id);
+                          }}
+                        >
+                          {copied === r.trace_id ? "Copied" : "Copy as evaluation case"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pager
+            current={paging.current}
+            pages={paging.pages}
+            label="Feedback pages"
+            onPage={paging.setPage}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+type Draft = Record<keyof SettingsValues, string>;
+
+function draftOf(values: SettingsValues): Draft {
+  return Object.fromEntries(Object.entries(values).map(([k, v]) => [k, String(v)])) as Draft;
+}
+
+/** The draft as numbers, or null while any field is not a number. */
+function parsed(draft: Draft): SettingsValues | null {
+  const out: Record<string, number> = {};
+  for (const [key, text] of Object.entries(draft)) {
+    const value = Number(text);
+    if (text.trim() === "" || !Number.isFinite(value)) return null;
+    out[key] = value;
+  }
+  return out as unknown as SettingsValues;
+}
+
+/** Site settings (FR-ADM-04): versioned, audited; each shows what it affects. */
+function SettingsTab() {
+  const { data, error, reload } = useLoad<SiteSettings>(fetchSettings);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  if (error) return <Failed message={error} />;
+  if (!data) return <p className="pw-muted">Loading.</p>;
+  // Keyed by version: a saved or reloaded version starts the form again from its values.
+  return (
+    <SettingsForm
+      key={data.version_no}
+      data={data}
+      message={message}
+      onMessage={setMessage}
+      onSaved={reload}
+    />
+  );
+}
+
+function SettingsForm({
+  data,
+  message,
+  onMessage: setMessage,
+  onSaved: reload,
+}: {
+  data: SiteSettings;
+  message: { ok: boolean; text: string } | null;
+  onMessage: (message: { ok: boolean; text: string } | null) => void;
+  onSaved: () => void;
+}) {
+  const [draft, setDraft] = useState<Draft>(() => draftOf(data.values));
+  const [note, setNote] = useState("");
+  const [confirming, setConfirming] = useState(false);
+
+  const values = parsed(draft);
+  const changed = values !== null && JSON.stringify(values) !== JSON.stringify(data.values);
+  const save = async () => {
+    setConfirming(false);
+    if (!values) return;
+    try {
+      const saved = await saveSettings(data.version_no, values, note.trim() || null);
+      setMessage({
+        ok: true,
+        text:
+          saved.outcome === "changed"
+            ? `Saved as version ${String(saved.version_no)}. Open exceptions are re-ranked on the next evaluation cycle.`
+            : "Nothing changed.",
+      });
+      setNote("");
+      reload();
+    } catch (e: unknown) {
+      setMessage({
+        ok: false,
+        text: e instanceof ApiProblem ? e.message : "The settings could not be saved.",
+      });
+    }
+  };
+  const groups: { id: "rules" | "impact"; title: string }[] = [
+    { id: "rules", title: "Exception rules" },
+    { id: "impact", title: "Inbox ranking (impact score)" },
+  ];
+
+  return (
+    <div className="pw-admin-section pw-admin-fill">
+      <p className="pw-muted">
+        Version {data.version_no} is in effect. Saving creates a new version; earlier versions and
+        scores stay in the history, and every change is in the audit log.
+      </p>
+      <form
+        className="pw-settings"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setConfirming(true);
+        }}
+      >
+        <div className="pw-admin-cards">
+          {groups.map((group) => (
+            <fieldset key={group.id} className="pw-admin-card pw-settings-group">
+              <legend>{group.title}</legend>
+              {data.fields
+                .filter((f) => f.group === group.id)
+                .map((f) => {
+                  const key = f.key as keyof SettingsValues;
+                  return (
+                    <div key={f.key} className="pw-setting">
+                      <label htmlFor={`setting-${f.key}`}>{f.label}</label>
+                      <span className="pw-setting-input">
+                        <input
+                          id={`setting-${f.key}`}
+                          type="number"
+                          inputMode="decimal"
+                          step={f.step}
+                          value={draft[key]}
+                          aria-describedby={`setting-${f.key}-affects`}
+                          onChange={(event) => {
+                            setDraft({ ...draft, [key]: event.target.value });
+                            setMessage(null);
+                          }}
+                        />
+                        {f.unit && <span className="pw-muted">{f.unit}</span>}
+                      </span>
+                      <p id={`setting-${f.key}-affects`} className="pw-muted">
+                        {f.affects}
+                      </p>
+                    </div>
+                  );
+                })}
+            </fieldset>
+          ))}
+        </div>
+        <div className="pw-admin-toolbar">
+          <label>
+            <span>Note</span>
+            <input
+              type="text"
+              maxLength={200}
+              value={note}
+              placeholder="Why this change"
+              onChange={(event) => {
+                setNote(event.target.value);
+              }}
+            />
+          </label>
+          <button type="submit" className="pw-button" disabled={!changed || confirming}>
+            Save settings
+          </button>
+          <button
+            type="button"
+            className="pw-button-quiet"
+            disabled={!changed}
+            onClick={() => {
+              setDraft(draftOf(data.values));
+              setMessage(null);
+            }}
+          >
+            Discard changes
+          </button>
+        </div>
+        {values === null && <Failed message="Every setting needs a number." />}
+      </form>
+      {confirming && (
+        <ConfirmDialog
+          question={`Save these settings as version ${String(data.version_no + 1)}? Answers use them from the next question, and open exceptions are re-ranked on the next evaluation cycle.`}
+          onCancel={() => {
+            setConfirming(false);
+          }}
+          actions={
+            <>
+              <button type="button" className="pw-button" onClick={() => void save()}>
+                Confirm
+              </button>
+              <button
+                type="button"
+                className="pw-button-quiet"
+                onClick={() => {
+                  setConfirming(false);
+                }}
+              >
+                Cancel
+              </button>
+            </>
+          }
+        />
+      )}
+      {message &&
+        (message.ok ? (
+          <p className="pw-muted" role="status">
+            {message.text}
+          </p>
+        ) : (
+          <Failed message={message.text} />
+        ))}
+      <section className="pw-admin-card" aria-labelledby="pw-settings-history">
+        <h3 id="pw-settings-history">Recent versions</h3>
+        <table className="pw-table">
+          <thead>
+            <tr>
+              <th scope="col" className="pw-num">
+                Version
+              </th>
+              <th scope="col">Saved</th>
+              <th scope="col">By</th>
+              <th scope="col">Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.history.map((v) => (
+              <tr key={v.version_no}>
+                <td className="pw-num">{v.version_no}</td>
+                <td>{when(v.saved_at)}</td>
+                <td>{v.saved_by}</td>
+                <td>{v.note ?? ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  );
+}
+
 type AuditGroup = AuditRow & { count: number };
 
 /** The audit stores the sign-in id; people read the role ("warehouse_manager" becomes "Warehouse manager"). */
@@ -686,7 +1038,7 @@ function AuditTab() {
   );
 }
 
-/** The admin panel core (FR-ADM-03, 05, 06, 07), for the Admin only. */
+/** The admin panel (FR-ADM-03 to 07, FR-COP-14), for the Admin only. */
 export function AdminPanel() {
   const [tab, setTab] = useState<Tab>("overview");
   return (
@@ -714,6 +1066,8 @@ export function AdminPanel() {
         {tab === "overview" && <OverviewTab />}
         {tab === "usage" && <UsageTab />}
         {tab === "unanswered" && <UnansweredTab />}
+        {tab === "feedback" && <FeedbackTab />}
+        {tab === "settings" && <SettingsTab />}
         {tab === "audit" && <AuditTab />}
       </div>
     </main>

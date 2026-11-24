@@ -151,8 +151,10 @@ through the same provider interface, after its own evaluation run.
    then a week. The inbox, the map and the brief change live, with no reload. **Reset** returns to
    the seed.
 5. Sign in as **Admin** and open **Admin**: the copilot's status and kill switch, usage and
-   estimated cost, unanswered questions, and the audit log of every tool call with the agent's
-   identity (CSV export).
+   estimated cost, unanswered questions, answer feedback (thumbs down with the question and comment
+   the user sent for review, the tools used, and a copy-as-evaluation-case button), the site's
+   settings (thresholds and inbox ranking weights, versioned and audited), and the audit log of
+   every tool call with the agent's identity (CSV export).
 
 ## How a question becomes highlighted locations
 

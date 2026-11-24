@@ -251,21 +251,28 @@ class ConversationStore:
         return ConversationSummary(*head), [RunRecord(**r) for r in runs]
 
     def add_feedback(self, owner: Owner, run_id: UUID, rating: str, comment: str | None) -> bool:
-        """One rating per run; repeating it replaces the earlier one. False for an unknown run."""
+        """One rating per run; repeating it replaces the earlier one. False for an unknown run.
+
+        A "not helpful" rating is sent for review (FR-COP-14): the form tells the user, and the
+        question is copied onto the feedback so the Admin can read it without access to the
+        conversation (migration 0034). A "helpful" rating carries no question."""
         with self._session(owner) as conn:
             run = conn.execute(
-                "SELECT trace_id FROM pw.copilot_run WHERE id = %s AND site_id = %s", (run_id, owner.site)
+                "SELECT trace_id, question FROM pw.copilot_run WHERE id = %s AND site_id = %s",
+                (run_id, owner.site),
             ).fetchone()
             if run is None:
                 return False
+            question = run[1] if rating == "NOT_HELPFUL" else None
             conn.execute(
                 """
-                INSERT INTO pw.run_feedback (run_id, tenant_id, user_subject, rating, comment, trace_id)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO pw.run_feedback (run_id, tenant_id, user_subject, rating, comment, trace_id,
+                                             question)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (run_id) DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment,
-                                                   created_at = now()
+                                                   question = EXCLUDED.question, created_at = now()
                 """,
-                (run_id, owner.tenant, owner.subject, rating, comment, run[0]),
+                (run_id, owner.tenant, owner.subject, rating, comment, run[0], question),
             )
         return True
 

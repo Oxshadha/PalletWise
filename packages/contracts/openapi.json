@@ -1092,6 +1092,104 @@
         "title": "FeedbackIn",
         "type": "object"
       },
+      "FeedbackOut": {
+        "properties": {
+          "helpful": {
+            "title": "Helpful",
+            "type": "integer"
+          },
+          "not_helpful": {
+            "title": "Not Helpful",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "helpful",
+          "not_helpful",
+          "rows"
+        ],
+        "title": "FeedbackOut",
+        "type": "object"
+      },
+      "FeedbackRow": {
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "rating": {
+            "enum": [
+              "HELPFUL",
+              "NOT_HELPFUL"
+            ],
+            "title": "Rating",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "created_at",
+          "rating",
+          "comment",
+          "question",
+          "tools",
+          "outcome",
+          "trace_id"
+        ],
+        "title": "FeedbackRow",
+        "type": "object"
+      },
       "GovernedIn": {
         "properties": {
           "enabled": {
@@ -1990,6 +2088,258 @@
           "suggestion"
         ],
         "title": "SearchResultOut",
+        "type": "object"
+      },
+      "SettingField": {
+        "properties": {
+          "affects": {
+            "title": "Affects",
+            "type": "string"
+          },
+          "group": {
+            "enum": [
+              "rules",
+              "impact"
+            ],
+            "title": "Group",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "step": {
+            "title": "Step",
+            "type": "number"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "group",
+          "label",
+          "affects",
+          "unit",
+          "step"
+        ],
+        "title": "SettingField",
+        "type": "object"
+      },
+      "SettingsIn": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "description": "The version the editor started from",
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "values": {
+            "$ref": "#/components/schemas/SettingsValues"
+          }
+        },
+        "required": [
+          "expected_version",
+          "values"
+        ],
+        "title": "SettingsIn",
+        "type": "object"
+      },
+      "SettingsOut": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SettingField"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsVersionOut"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "values": {
+            "$ref": "#/components/schemas/SettingsValues"
+          },
+          "version_no": {
+            "title": "Version No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version_no",
+          "values",
+          "fields",
+          "history"
+        ],
+        "title": "SettingsOut",
+        "type": "object"
+      },
+      "SettingsSaved": {
+        "properties": {
+          "outcome": {
+            "enum": [
+              "changed",
+              "unchanged"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "version_no": {
+            "title": "Version No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "outcome",
+          "version_no"
+        ],
+        "title": "SettingsSaved",
+        "type": "object"
+      },
+      "SettingsValues": {
+        "additionalProperties": false,
+        "description": "Settings schema version 2 (migration 0022). The database CHECK (pw.settings_valid) is the\nfinal validator; these bounds match it, and are tighter where it has none, so a refusal is a\nclear 422 rather than a database error.",
+        "properties": {
+          "capacity_threshold_pct": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100.0,
+            "title": "Capacity Threshold Pct",
+            "type": "number"
+          },
+          "dead_stock_days": {
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Dead Stock Days",
+            "type": "integer"
+          },
+          "impact_hours_cap": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 8760.0,
+            "title": "Impact Hours Cap",
+            "type": "number"
+          },
+          "impact_lines_cap": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000.0,
+            "title": "Impact Lines Cap",
+            "type": "number"
+          },
+          "impact_value_cap": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000000000.0,
+            "title": "Impact Value Cap",
+            "type": "number"
+          },
+          "impact_weight_lines": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Impact Weight Lines",
+            "type": "number"
+          },
+          "impact_weight_urgency": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Impact Weight Urgency",
+            "type": "number"
+          },
+          "impact_weight_value": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Impact Weight Value",
+            "type": "number"
+          },
+          "slow_in_prime_days": {
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Slow In Prime Days",
+            "type": "integer"
+          },
+          "stockout_horizon_hours": {
+            "maximum": 168.0,
+            "minimum": 1.0,
+            "title": "Stockout Horizon Hours",
+            "type": "integer"
+          },
+          "trailing_window_operating_days": {
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Trailing Window Operating Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dead_stock_days",
+          "slow_in_prime_days",
+          "capacity_threshold_pct",
+          "stockout_horizon_hours",
+          "trailing_window_operating_days",
+          "impact_lines_cap",
+          "impact_hours_cap",
+          "impact_value_cap",
+          "impact_weight_lines",
+          "impact_weight_urgency",
+          "impact_weight_value"
+        ],
+        "title": "SettingsValues",
+        "type": "object"
+      },
+      "SettingsVersionOut": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "saved_at": {
+            "format": "date-time",
+            "title": "Saved At",
+            "type": "string"
+          },
+          "saved_by": {
+            "title": "Saved By",
+            "type": "string"
+          },
+          "version_no": {
+            "title": "Version No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version_no",
+          "saved_at",
+          "saved_by",
+          "note"
+        ],
+        "title": "SettingsVersionOut",
         "type": "object"
       },
       "Severity": {
@@ -3016,6 +3366,149 @@
           }
         },
         "summary": "Export Audit",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/feedback": {
+      "get": {
+        "description": "Answer ratings with their comments, newest first (FR-COP-14): a \"not helpful\" answer is a\ncandidate for the evaluation set. Conversations stay private: only feedback rows are read.",
+        "operationId": "get_feedback_api_admin_feedback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "rating",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "HELPFUL",
+                    "NOT_HELPFUL"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rating"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Feedback",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/settings": {
+      "get": {
+        "description": "The site's settings in effect, what each affects, and the recent versions (FR-ADM-04).",
+        "operationId": "get_settings_api_admin_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Settings",
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "description": "Saves the settings as a new version (FR-ADM-04), audited. Every number that depends on them\nuses the new version from the next request, and the exception engine re-evaluates open\nexceptions on its next cycle (its evaluation key includes the settings version).",
+        "operationId": "save_settings_api_admin_settings_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{8,128}$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaved"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "VERSION_CONFLICT"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Settings",
         "tags": [
           "admin"
         ]

@@ -126,3 +126,125 @@ def test_the_admin_read_role_never_sees_answers_or_answered_runs(connect_as: Any
         admin.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
         admin.execute("SELECT set_config('app.user_subject', 'admin-with-no-runs', true)")
         admin.execute("SELECT answer_text FROM pw.copilot_run")
+
+
+# ---------------------------------------------------------------- answer feedback (FR-COP-14)
+
+
+def rate(e: Env, question: str, rating: str, comment: str | None = None) -> str:
+    _, headers, _ = e.ask(question)
+    run_id = str(headers["x-run-id"])
+    response = e.client.post(
+        f"/api/copilot/runs/{run_id}/feedback",
+        params={"site_id": str(e.site.site)},
+        json={"rating": rating, **({"comment": comment} if comment else {})},
+        headers={"Origin": ORIGIN},
+    )
+    assert response.status_code == 204, response.text
+    return str(headers["x-trace-id"])
+
+
+def test_feedback_reaches_the_admin_without_opening_conversations(env: Env, connect_as: Any) -> None:
+    import psycopg
+
+    env.sign_in(subject="manager-feedback")
+    bad = rate(env, "Where is SKU-102 stored?", "NOT_HELPFUL", "wrong bin")
+    good = rate(env, "Which items are running low on stock?", "HELPFUL")
+
+    assert env.client.get("/api/admin/feedback").status_code == 403  # the Manager has no admin scope
+    env.sign_in(subject="admin-feedback", role="admin")
+    view = env.client.get("/api/admin/feedback")
+    assert view.status_code == 200, view.text
+    body = view.json()
+    assert body["helpful"] >= 1 and body["not_helpful"] >= 1
+    rows = {r["trace_id"]: r for r in body["rows"]}
+    # "Not helpful" carries the question its user sent for review, and the tools from the audit.
+    assert rows[bad]["question"] == "Where is SKU-102 stored?" and rows[bad]["comment"] == "wrong bin"
+    assert rows[bad]["tools"] == ["find_product_locations"] and rows[bad]["outcome"] == "ANSWER"
+    # "Helpful" carries no question: nothing of the conversation is shared.
+    assert rows[good]["question"] is None and rows[good]["rating"] == "HELPFUL"
+    only_bad = env.client.get("/api/admin/feedback?rating=NOT_HELPFUL").json()["rows"]
+    assert only_bad and all(r["rating"] == "NOT_HELPFUL" for r in only_bad)
+
+    # The admin read role reads feedback rows of its tenant only, never who gave them or the answers.
+    admin = connect_as("pw_admin_read")
+    with admin.transaction():
+        admin.execute("SELECT set_config('app.tenant_id', %s, true)", (str(uuid4()),))
+        admin.execute("SELECT set_config('app.user_subject', 'admin-feedback', true)")
+        assert admin.execute("SELECT count(*) FROM pw.run_feedback").fetchone() == (0,)
+    with pytest.raises(psycopg.errors.InsufficientPrivilege), admin.transaction():
+        admin.execute("SELECT set_config('app.tenant_id', %s, true)", (str(env.site.tenant),))
+        admin.execute("SELECT set_config('app.user_subject', 'admin-feedback', true)")
+        admin.execute("SELECT user_subject FROM pw.run_feedback")
+
+
+# ---------------------------------------------------------------- site settings (FR-ADM-04)
+
+
+def put_settings(e: Env, expected: int, values: dict[str, Any], note: str | None = None) -> Any:
+    return e.client.put(
+        "/api/admin/settings",
+        json={"expected_version": expected, "values": values, "note": note},
+        headers={"Origin": ORIGIN, "Idempotency-Key": uuid4().hex},
+    )
+
+
+def test_settings_are_versioned_audited_and_refuse_stale_or_invalid_edits(env: Env) -> None:
+    env.sign_in(subject="manager-settings")
+    assert env.client.get("/api/admin/settings").status_code == 403
+    assert put_settings(env, 1, {}).status_code in (403, 422)
+
+    env.sign_in(subject="admin-settings", role="admin")
+    current = env.client.get("/api/admin/settings")
+    assert current.status_code == 200, current.text
+    start = current.json()
+    version, original = start["version_no"], start["values"]
+    assert {f["key"] for f in start["fields"]} == set(original) and all(f["affects"] for f in start["fields"])
+    try:
+        changed = {**original, "dead_stock_days": 45}
+        saved = put_settings(env, version, changed, note="longer dead-stock period")
+        assert saved.status_code == 200 and saved.json() == {"outcome": "changed", "version_no": version + 1}
+        after = env.client.get("/api/admin/settings").json()
+        assert after["values"]["dead_stock_days"] == 45 and after["version_no"] == version + 1
+        assert after["history"][0]["note"] == "longer dead-stock period"
+        assert after["history"][1]["version_no"] == version  # the earlier version stays as history
+
+        # The same values again: no new version. A stale editor: refused with the current version.
+        assert put_settings(env, version + 1, changed).json() == {
+            "outcome": "unchanged",
+            "version_no": version + 1,
+        }
+        stale = put_settings(env, version, {**original, "dead_stock_days": 60})
+        assert stale.status_code == 409 and stale.json()["code"] == "VERSION_CONFLICT"
+
+        # Invalid values never reach the database: out of range, no weight, unknown key.
+        assert put_settings(env, version + 1, {**changed, "dead_stock_days": 0}).status_code == 422
+        no_weight = {
+            **changed,
+            "impact_weight_lines": 0,
+            "impact_weight_urgency": 0,
+            "impact_weight_value": 0,
+        }
+        assert put_settings(env, version + 1, no_weight).status_code == 422
+        assert put_settings(env, version + 1, {**changed, "festival_uplift": 5}).status_code == 422
+
+        trail = env.client.get("/api/admin/audit?action=settings.change").json()
+        assert [r["outcome"] for r in trail[:3]] == ["CONFLICT", "UNCHANGED", "CHANGED"]
+        assert trail[2]["parameters"]["changed"] == {"dead_stock_days": [original["dead_stock_days"], 45]}
+        assert all(r["user_subject"] == "admin-settings" for r in trail[:3])
+    finally:
+        latest = env.client.get("/api/admin/settings").json()
+        if latest["values"] != original:
+            restored = put_settings(env, latest["version_no"], original, note="restored by the test")
+            assert restored.json()["outcome"] == "changed"
+
+
+def test_the_settings_fields_match_the_database_validator(env: Env) -> None:
+    """One list of fields, the model's keys and the database defaults agree (no drift)."""
+    from palletwise.api.admin import SETTING_FIELDS, SettingsValues
+
+    defaults = env.db.execute("SELECT pw.default_settings()").fetchone()
+    assert defaults is not None
+    keys = set(defaults[0])
+    assert {f.key for f in SETTING_FIELDS} == set(SettingsValues.model_fields) == keys
+    SettingsValues.model_validate(defaults[0])  # the defaults pass the API's bounds
