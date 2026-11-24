@@ -42,10 +42,20 @@ class Gold:
     tier: int | None = None
     # Governed cases: the rows an independently written query returns (ADR 0002 section 7).
     reference_sql: str | None = None
+    # Two questions in one message (code review): the other calls the answer must make, each a
+    # tool and the minimum parameters it must carry, in any order with the gold tool. The highlight
+    # reference is then the union of each call's reference ("a+b").
+    also: tuple[tuple[str, dict[str, Any]], ...] = ()
 
     @property
     def call(self) -> dict[str, Any]:
         return dict(self.run_params if self.run_params is not None else self.params)
+
+    @property
+    def required_calls(self) -> list[tuple[str, dict[str, Any]]]:
+        """Every call the answer must make: the gold tool first, then `also`."""
+        first = [(self.tool, dict(self.params))] if self.tool else []
+        return first + [(tool, dict(params)) for tool, params in self.also]
 
 
 @dataclass(frozen=True)
@@ -86,9 +96,17 @@ def _case(raw: dict[str, Any], set_name: str, line: int) -> Case:
         "forbidden",
         "tier",
         "reference_sql",
+        "also",
     }
     if unknown := set(gold) - gold_allowed:
         raise CaseError(f"{where}: unknown gold fields {sorted(unknown)}")
+    also: list[tuple[str, dict[str, Any]]] = []
+    for entry in gold.get("also") or ():
+        if not isinstance(entry, dict) or set(entry) - {"tool", "params"} or not entry.get("tool"):
+            raise CaseError(f"{where}: each 'also' entry is {{tool, params}}")
+        also.append((str(entry["tool"]), dict(entry.get("params") or {})))
+    if also and (gold.get("path") != "C" or not gold.get("tool")):
+        raise CaseError(f"{where}: 'also' needs a gold tool on the model path (C)")
     if raw.get("category") not in CATEGORIES:
         raise CaseError(f"{where}: category {raw.get('category')!r}")
     if raw.get("role") not in {"warehouse_manager", "admin"}:
@@ -122,6 +140,7 @@ def _case(raw: dict[str, Any], set_name: str, line: int) -> Case:
             run_params=dict(gold["run_params"]) if gold.get("run_params") is not None else None,
             tier=gold.get("tier"),
             reference_sql=gold.get("reference_sql"),
+            also=tuple(also),
         ),
     )
 

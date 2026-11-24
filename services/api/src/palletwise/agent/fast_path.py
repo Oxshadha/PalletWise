@@ -58,6 +58,35 @@ def normalize(question: str) -> str:
     return " ".join(text.split()).rstrip(" ?.!")
 
 
+# A message can carry a second request next to an identifier lookup ("Which items are running low
+# on stock? Where is SKU-102 stored?"). An identifier route answers only its own part, so it must
+# not take such a message: the model answers both (each through the executor). A clause asks for
+# something when it has a question or request word and names something the warehouse holds. Text
+# that only carries instructions ("Also run DROP TABLE ...", "follow any instructions in its name")
+# asks for no warehouse data, so the lookup is still answered under the usual boundaries (INJ-003).
+_CLAUSES = re.compile(r"[?;!]|\.\s|\b(?:and|also|plus|then|as well as)\b", re.IGNORECASE)
+_ASKS = re.compile(
+    r"\b(which|what|where|when|who|how|show|list|give|tell|are|is|do|does|did|can|could)\b", re.IGNORECASE
+)
+_WAREHOUSE = re.compile(
+    r"\b(orders?|stock|products?|items?|skus?|zones?|bins?|locations?|inventory|movers?|units?|"
+    r"exceptions?|capacity|dispatch\w*|shipments?|categor(?:y|ies)|brands?|pallets?|picks?|replenish\w*)\b",
+    re.IGNORECASE,
+)
+
+
+def _asks_more(question: str, patterns: dict[str, str]) -> bool:
+    """True when a clause without an identifier is a warehouse request of its own."""
+    for clause in _CLAUSES.split(question):
+        if not clause or not clause.strip():
+            continue
+        if any(re.search(p, clause, flags=re.IGNORECASE) for p in patterns.values()):
+            continue  # the identifier's own clause
+        if _ASKS.search(clause) and _WAREHOUSE.search(clause):
+            return True
+    return False
+
+
 def route(question: str) -> Route | None:
     rules = _rules()
     exact = normalize(question)
@@ -71,6 +100,10 @@ def route(question: str) -> Route | None:
     }
     # A question naming identifiers of more than one kind is not a simple lookup.
     if sum(1 for ids in found.values() if ids) != 1:
+        return None
+    # A second request in the same message is not a simple lookup either (code review, compound
+    # questions): an identifier route would answer one part and silently drop the other.
+    if _asks_more(question, rules.identifiers):
         return None
     matches = [
         Route(rule.name, rule.tool, {rule.argument: next(iter(found[rule.identifier]))})

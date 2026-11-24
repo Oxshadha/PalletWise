@@ -461,6 +461,48 @@ def text(value: str) -> ModelResponse:
     return ModelResponse(parts=[TextPart(value)])
 
 
+# ---------------------------------------------------------------- two questions in one message
+
+LOCATIONS = "SKU-102 is stored in 2 locations"
+CONTENTS = "A8-01-02 holds 1 product."
+TWO_QUESTIONS = "Where is SKU-102 stored, and what is in bin A8-01-02?"
+
+
+def test_a_rejected_answer_to_two_questions_falls_back_to_both_templates() -> None:
+    model = scripted(
+        call("find_product_locations", sku="SKU-102"),
+        call("get_bin_contents", bin_code="A8-01-02"),
+        text("It has 99 units."),  # not grounded, then the same again on the retry
+    )
+    events, state, gateway, _ = run(TWO_QUESTIONS, FakeProvider(gemini_flash=model))
+    answer = text_of(events)
+    assert [name for name, _ in gateway.calls] == ["find_product_locations", "get_bin_contents"]
+    assert answer.startswith(LOCATIONS) and CONTENTS in answer  # both questions, in the order asked
+    assert state.text_source == "template" and state.outcome == "ANSWER"
+
+
+def test_wording_that_answers_only_one_of_two_questions_is_replaced() -> None:
+    # The key facts of both results must be in the text: here the bin's (its code) is missing.
+    config = RuntimeConfig(headline_first=True)
+    model = scripted(
+        call("find_product_locations", sku="SKU-102"),
+        call("get_bin_contents", bin_code="A8-01-02"),
+        text("SKU-102 is stored in 2 locations."),  # grounded, but says nothing of the bin
+    )
+    events, state, _, _ = run(TWO_QUESTIONS, FakeProvider(gemini_flash=model), config=config)
+    assert CONTENTS in text_of(events) and state.text_source == "template"
+
+
+def test_a_tool_called_again_is_described_once_by_its_newest_result() -> None:
+    model = scripted(
+        call("find_product_locations", sku="SKU-102"),
+        call("find_product_locations", sku="SKU-102"),
+        text("It has 99 units."),
+    )
+    events, _, _, _ = run("Which bins hold the mouse?", FakeProvider(gemini_flash=model))
+    assert text_of(events).count(LOCATIONS) == 1
+
+
 def test_a_failed_call_and_the_next_call_have_different_ids() -> None:
     model = scripted(
         call("find_product_locations", sku="bad"),

@@ -94,3 +94,52 @@ def test_model_gate_without_credentials_reports_pending(
     data = json.loads(report.read_text())
     assert data["status"].startswith("pending")
     assert data["cases"] == []
+
+
+# ---------------------------------------------------------------- two questions in one message
+
+
+def _compound_cases() -> list[object]:
+    operations, _ = load_set("operations")
+    return [c for c in operations if c.gold.also]
+
+
+def test_compound_cases_require_every_call_and_union_highlights() -> None:
+    cases = _compound_cases()
+    assert len(cases) >= 5
+    for case in cases:
+        calls = case.gold.required_calls  # type: ignore[attr-defined]
+        assert len(calls) >= 2 and calls[0][0] == case.gold.tool  # type: ignore[attr-defined]
+        assert case.gold.path == "C" and case.gold.tier == 3  # type: ignore[attr-defined]
+
+
+def test_compound_questions_are_never_routed() -> None:
+    from evals.runner import TOOL_NAMES
+    from palletwise.agent.runtime import choose_route
+
+    for case in _compound_cases():
+        route, tier = choose_route(case.question, None, None, TOOL_NAMES, semantic=True)  # type: ignore[attr-defined]
+        assert route is None and tier == 3, case.question  # type: ignore[attr-defined]
+
+
+def test_compound_calls_match_in_either_order() -> None:
+    from evals.runner import compound_ok
+
+    required = [("get_low_stock", {}), ("find_product_locations", {"sku": "SKU-102"})]
+    both = [("find_product_locations", {"sku": "SKU-102"}), ("get_low_stock", {})]
+    assert compound_ok(required, both) == (True, True)
+    assert compound_ok(required, both[:1]) == (False, False)  # the second question was dropped
+    wrong_sku = [("get_low_stock", {}), ("find_product_locations", {"sku": "SKU-104"})]
+    assert compound_ok(required, wrong_sku) == (True, False)
+
+
+def test_also_is_only_for_model_path_cases_with_a_gold_tool() -> None:
+    raw = {
+        "id": "X-1", "question": "q", "category": "DATA", "role": "warehouse_manager",
+        "gold": {"path": "A", "tool": "get_low_stock", "outcome": "ANSWER",
+                 "also": [{"tool": "get_zone_summary"}]},
+    }  # fmt: skip
+    with pytest.raises(CaseError):
+        _case(raw, "test", 1)
+    raw["gold"]["path"] = "C"  # type: ignore[index]
+    assert _case(raw, "test", 1).gold.also == (("get_zone_summary", {}),)

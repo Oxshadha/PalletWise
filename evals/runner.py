@@ -302,6 +302,30 @@ def _follow_up_working_set(
     return _working_set_of(first.gold.tool, call.output) if call.outcome is Outcome.OK else None
 
 
+def _compound_calls(env: EvalEnv, executor: Any, case: Case) -> list[Check]:
+    """Every call of a compound case through the real executor: each must answer, and together
+    their highlights must equal the golden union."""
+    checks: list[Check] = []
+    envelopes: list[dict[str, Any]] = []
+    outcomes: list[str] = []
+    for tool, params in case.gold.required_calls:
+        call = executor.execute(_run_context(env, case.role), tool, params)
+        if call.outcome is not Outcome.OK:
+            checks.append(Check("tool", False, f"{tool}: {call.outcome.value}: {call.message}"))
+            continue
+        envelopes.append(call.output.model_dump(mode="json"))
+        outcomes.append(CARD_OUTCOMES[call.output.status])
+    outcome = "ANSWER" if "ANSWER" in outcomes else (outcomes[-1] if outcomes else None)
+    checks.append(Check("outcome", outcome == case.gold.outcome, f"{outcome} (gold {case.gold.outcome})"))
+    if case.gold.highlights_ref:
+        golden = read_golden(env, case.gold.highlights_ref)
+        fresh = run_reference(env.reader, env.tenant, env.site, case.gold.highlights_ref)
+        checks.append(Check("golden-current", golden == fresh, f"golden {golden}, reference {fresh}"))
+        got = highlight_codes(env, envelopes)
+        checks.append(Check("highlights", got == golden, f"got {got}, gold {golden}"))
+    return checks
+
+
 def _deterministic_case(
     env: EvalEnv, executor: Any, api: Any, case: Case, by_id: dict[str, Case], config: RuntimeConfig
 ) -> CaseResult:
@@ -314,7 +338,11 @@ def _deterministic_case(
     route, tier = choose_route(
         case.question, None, case.page_context, TOOL_NAMES, semantic=config.semantic_router
     )
-    if gold.path in ("A", "B") and route is None and gold.tier == 2:
+    if gold.also:
+        # Two questions in one message: a route answers one of them, so any route is a misroute.
+        checks.append(Check("routing", route is None, "model path" if route is None else f"tier {tier} to "
+                            f"{route}: misrouted, a second question would be dropped"))  # fmt: skip
+    elif gold.path in ("A", "B") and route is None and gold.tier == 2:
         checks.append(Check("routing", True, "abstained: the model chooses (tier 3)"))
     elif gold.path in ("A", "B"):
         ok = (
@@ -343,7 +371,9 @@ def _deterministic_case(
         )
 
     # 2. The gold tool with the gold parameters through the real executor (policy, audit, tracing).
-    if gold.tool:
+    if gold.also:
+        checks.extend(_compound_calls(env, executor, case))
+    elif gold.tool:
         working_set = _follow_up_working_set(env, executor, case, by_id)
         call = executor.execute(_run_context(env, case.role, working_set), gold.tool, gold.call)
         if call.outcome is not Outcome.OK:
@@ -504,6 +534,30 @@ def compare(
     return [(n, sorted(results[n], key=lambda r: order[r.case])) for n in names]
 
 
+def _calls_made(trace: RunTrace) -> list[tuple[str, dict[str, Any]]]:
+    """Every completed tool call of a run with its normalized arguments, provenance removed."""
+    made: list[tuple[str, dict[str, Any]]] = []
+    for event in trace.of("TOOL_CALL_END"):
+        arguments = dict(event.get("arguments") or {})
+        for key in ("tool", "resolved_product", "working_set_from"):
+            arguments.pop(key, None)
+        made.append((event["tool"], arguments))
+    return made
+
+
+def compound_ok(
+    required: list[tuple[str, dict[str, Any]]], made: list[tuple[str, dict[str, Any]]]
+) -> tuple[bool, bool]:
+    """(every required tool was called, every required call carried its parameters), in any order:
+    two questions can be answered in either order."""
+    tools_ok = all(any(m == tool for m, _ in made) for tool, _ in required)
+    params_ok = all(
+        any(m == tool and params_match(params, arguments, tool_fields(tool)) for m, arguments in made)
+        for tool, params in required
+    )
+    return tools_ok, params_ok
+
+
 def _first_data_tool(trace: RunTrace) -> tuple[str | None, dict[str, Any]]:
     for event in trace.of("TOOL_CALL_END"):
         return event["tool"], dict(event.get("arguments") or {})
@@ -564,6 +618,8 @@ def _score_run(env: EvalEnv, case: Case, trace: RunTrace, number: int) -> dict[s
         if gold.reference_sql
         else None
     )
+    # Two questions in one message: every required call, in either order (code review).
+    compound = compound_ok(gold.required_calls, _calls_made(trace)) if gold.also else None
     record = {
         "run": number,
         "path": trace.path,
@@ -574,9 +630,15 @@ def _score_run(env: EvalEnv, case: Case, trace: RunTrace, number: int) -> dict[s
         "tool": tool,
         "params": arguments,
         # A governed answer may follow a refused first attempt: any governed call counts.
-        "tool_ok": used_governed if gold.tool == "run_governed_query" else tool == gold.tool,
-        "params_ok": gold.tool in (None, "run_governed_query")
-        or (tool == gold.tool and params_match(gold.params, arguments, allowed)),
+        "tool_ok": compound[0]
+        if compound
+        else (used_governed if gold.tool == "run_governed_query" else tool == gold.tool),
+        "params_ok": compound[1]
+        if compound
+        else (
+            gold.tool in (None, "run_governed_query")
+            or (tool == gold.tool and params_match(gold.params, arguments, allowed))
+        ),
         "gold_tool": gold.tool,
         "governed_used": used_governed,
         "governed_answered": bool(governed and governed[-1].get("rows")),

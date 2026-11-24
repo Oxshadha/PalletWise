@@ -1,0 +1,21 @@
+{
+ "ref": "get_top_movers:5+get_zone_summary",
+ "dataset_version": "sim-v1-seed42-14d",
+ "locations": [
+  "A1-01-01",
+  "A1-01-02",
+  "A1-01-03",
+  "A1-01-04",
+  "A1-02-01",
+  "B1-01-02",
+  "B1-02-02",
+  "B1-04-02",
+  "B1-05-03",
+  "C-F01",
+  "C-F02",
+  "C-F03",
+  "zone:A",
+  "zone:B",
+  "zone:C"
+ ]
+}
