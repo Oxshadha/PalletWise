@@ -403,6 +403,8 @@ def run_reference(conn: psycopg.Connection, tenant: UUID, site: UUID, ref: str) 
     """Gold location codes for a reference such as "find_product_locations:SKU-102" or "none"."""
     if ref == "none":
         return []
+    if "+" in ref:  # a compound question: the union of each part's locations
+        return sorted({code for part in ref.split("+") for code in run_reference(conn, tenant, site, part)})
     name, _, argument = ref.partition(":")
     query = REFERENCES.get(name)
     if query is None or (not argument and name not in NO_ARGUMENT):

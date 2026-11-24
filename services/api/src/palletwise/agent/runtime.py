@@ -589,6 +589,29 @@ def card_outcome(result: ResultEnvelope) -> CardOutcome:
     return CARD_OUTCOMES[result.status]
 
 
+def answered_results(results: Sequence[tuple[str, ResultEnvelope]]) -> list[tuple[str, ResultEnvelope]]:
+    """What the answer text must cover: the latest result of each tool, in the order the tools were
+    first called. Two questions in one message are answered by two tools, so a template answer and
+    the key-facts check cover both, not only the last (code review, compound questions). A tool
+    called again (a refined query) is covered once, by its newest result."""
+    latest: dict[str, ResultEnvelope] = {}
+    for tool, result in results:
+        latest[tool] = result  # a repeated tool keeps its first position, with the newest result
+    return list(latest.items())
+
+
+def combined_template(answered: Sequence[tuple[str, ResultEnvelope]]) -> str:
+    """The template answer of every answered result, one after another."""
+    return " ".join(templates.template_answer(tool, result) for tool, result in answered)
+
+
+def combined_outcome(answered: Sequence[tuple[str, ResultEnvelope]]) -> CardOutcome:
+    """An answer when any result answered; otherwise the outcome of the last one."""
+    outcomes: list[CardOutcome] = [card_outcome(result) for _, result in answered]
+    answer: CardOutcome = "ANSWER"
+    return answer if answer in outcomes else outcomes[-1]
+
+
 # ---------------------------------------------------------------- the runtime
 
 
@@ -674,9 +697,10 @@ class CopilotRuntime:
                     # (grounded, every key fact) instead of discarding it with an error.
                     log.info("run timed out after its result; answering with the template")
                     tool, result = last
+                    answered = answered_results(state.results)
                     await self._finish(
-                        state, events, queue, templates.template_answer(tool, result),
-                        card_outcome(result), tool, result, source="template",
+                        state, events, queue, combined_template(answered),
+                        combined_outcome(answered), tool, result, source="template",
                     )  # fmt: skip
                 else:
                     await fail("TIMEOUT", "The answer took too long. Please try again.")
@@ -925,21 +949,25 @@ class CopilotRuntime:
             text = ""
 
         last = state.results[-1] if state.results else None
+        # Every question of the message that a tool answered (one tool per question), not only the
+        # last: the key facts of each must be in the text, and a fallback describes each.
+        answered = answered_results(state.results)
         if text and self._echoes_instructions(text, request.question):
             text = ""
-        if text and last is not None and self._drops_key_facts(last[0], last[1], text):
+        if text and any(self._drops_key_facts(tool, result, text) for tool, result in answered):
             text = ""
         if text and last is not None:
             await self._finish(
-                state, events, queue, text, card_outcome(last[1]), last[0], last[1], source="model"
+                state, events, queue, text, combined_outcome(answered), last[0], last[1], source="model"
             )
-        elif last is not None:  # no usable model text: the template of the last result
-            fallback = templates.template_answer(last[0], last[1])
+        elif last is not None:  # no usable model text: the template of every answered result
+            fallback = combined_template(answered)
             if state.budget_exhausted:
                 fallback = f"{fallback} {BUDGET_TEXT}"
             await self._finish(
-                state, events, queue, fallback, card_outcome(last[1]), last[0], last[1], source="template"
-            )
+                state, events, queue, fallback, combined_outcome(answered), last[0], last[1],
+                source="template",
+            )  # fmt: skip
         elif failed and all(f.outcome is Outcome.DENIED for f in failed):
             await self._finish(state, events, queue, "You do not have permission for that request.", "DENIED",
                                None, None)  # fmt: skip
